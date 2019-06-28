@@ -46,7 +46,6 @@ namespace aarcweb
                 app.UseHsts();
             }
 
-            loggerFactory.AddLog4Net();
             app.UseHttpsRedirection();
             app.UseStaticFiles();
             app.UseCookiePolicy();
