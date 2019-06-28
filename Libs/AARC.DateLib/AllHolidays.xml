@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<Holidays>
+	<Holiday name="New Year's Day">
+		<Month>1</Month>
+		<Day>1</Day>
+	</Holiday>
+	<Holiday name="Martin Luther King's Birthday">
+		<Month>1</Month>
+		<DayOfWeek>1</DayOfWeek>
+		<WeekOfMonth>3</WeekOfMonth>
+	</Holiday>
+	<Holiday name="Inauguration Day">
+		<Month>1</Month>
+		<Day>20</Day>
+		<EveryXYears>4</EveryXYears>
+		<StartYear>1940</StartYear>
+	</Holiday>
+	<Holiday name="President's Day">
+		<Month>2</Month>
+		<DayOfWeek>1</DayOfWeek>
+		<WeekOfMonth>3</WeekOfMonth>
+	</Holiday>
+	<Holiday name="Groundhog Day">
+		<Month>2</Month>
+		<Day>2</Day>
+	</Holiday>
+	<Holiday name="Lincoln's Birthday (Traditional)">
+		<Month>2</Month>
+		<Day>12</Day>
+	</Holiday>
+	<Holiday name="Valentine's Day">
+		<Month>2</Month>
+		<Day>14</Day>
+	</Holiday>
+	<Holiday name="Washington's Birthday (Traditional)">
+		<Month>2</Month>
+		<Day>22</Day>
+	</Holiday>
+	<Holiday name="St. Patrick's Day">
+		<Month>3</Month>
+		<Day>17</Day>
+	</Holiday>
+	<Holiday name="Easter">
+		<Easter />
+	</Holiday>
+	<Holiday name="Good Friday">
+		<DaysAfterHoliday Holiday="Easter">
+			<Days>-2</Days>
+		</DaysAfterHoliday>
+	</Holiday>
+	<Holiday name="Ash Wednesday">
+		<DaysAfterHoliday Holiday="Good Friday">
+			<Days>-44</Days>
+		</DaysAfterHoliday>
+	</Holiday>
+	<Holiday name="April Fool's Day">
+		<Month>4</Month>
+		<Day>1</Day>
+	</Holiday>
+	<Holiday name="Administrative Assistants' Day">
+		<LastFullWeekOfMonth>
+			<Month>4</Month>
+			<DayOfWeek>3</DayOfWeek>
+		</LastFullWeekOfMonth>
+	</Holiday>
+	<Holiday name="Daylight Savings Time Ends">
+		<Month>4</Month>
+		<DayOfWeek>0</DayOfWeek>
+		<WeekOfMonth>1</WeekOfMonth>
+	</Holiday>
+	<Holiday name="Earth Day">
+		<Month>4</Month>
+		<Day>22</Day>
+	</Holiday>
+	<Holiday name="Tax Day">
+		<WeekdayOnOrAfter>
+			<Month>4</Month>
+			<Day>15</Day>
+		</WeekdayOnOrAfter>
+	</Holiday>
+	<Holiday name="Mothers' Day">
+		<Month>5</Month>
+		<DayOfWeek>0</DayOfWeek>
+		<WeekOfMonth>2</WeekOfMonth>
+	</Holiday>	
+
+	<Holiday name="Armed Forces Day">
+		<Month>5</Month>
+		<DayOfWeek>6</DayOfWeek>
+		<WeekOfMonth>3</WeekOfMonth>
+	</Holiday>
+	<Holiday name="Memorial Day">
+		<Month>5</Month>
+		<DayOfWeek>1</DayOfWeek>
+		<WeekOfMonth>5</WeekOfMonth>
+	</Holiday>
+	<Holiday name="Flag Day">
+		<Month>6</Month>
+		<Day>14</Day>
+	</Holiday>	
+	<Holiday name="Fathers' Day">
+		<Month>6</Month>
+		<DayOfWeek>0</DayOfWeek>
+		<WeekOfMonth>3</WeekOfMonth>
+	</Holiday>
+
+	<Holiday name="Parents' Day">
+		<Month>7</Month>
+		<DayOfWeek>0</DayOfWeek>
+		<WeekOfMonth>4</WeekOfMonth>
+	</Holiday>
+	
+
+	<Holiday name="Independence Day">
+		<Month>7</Month>
+		<Day>4</Day>
+	</Holiday>
+	<Holiday name="Labor Day">
+		<Month>9</Month>
+		<DayOfWeek>1</DayOfWeek>
+		<WeekOfMonth>1</WeekOfMonth>
+	</Holiday>
+	<Holiday name="Grandparents' Day">
+		<DaysAfterHoliday Holiday="Labor Day">
+			<Days>6</Days>
+		</DaysAfterHoliday>
+	</Holiday>
+
+	<Holiday name="United Nations Day">
+		<Month>10</Month>
+		<Day>24</Day>
+	</Holiday>
+
+	<Holiday name="Halloween">
+		<Month>10</Month>
+		<Day>31</Day>
+	</Holiday>
+	
+	<Holiday name="Daylight Savings Time Begins">
+		<Month>10</Month>
+		<DayOfWeek>0</DayOfWeek>
+		<WeekOfMonth>5</WeekOfMonth>
+	</Holiday>
+
+	<Holiday name="Columbus Day">
+		<Month>10</Month>
+		<DayOfWeek>1</DayOfWeek>
+		<WeekOfMonth>2</WeekOfMonth>
+	</Holiday>
+	<Holiday name="Election Day">
+		<DayOfWeekOnOrAfter>
+			<DayOfWeek>2</DayOfWeek>
+			<Month>11</Month>
+			<Day>2</Day>
+		</DayOfWeekOnOrAfter>
+	</Holiday>
+	<Holiday name="Veterans Day">
+		<Month>11</Month>
+		<Day>11</Day>
+	</Holiday>
+	<Holiday name="Christmas Day">
+		<Month>12</Month>
+		<Day>25</Day>
+	</Holiday>
+
+
+
+</Holidays>
+
+
