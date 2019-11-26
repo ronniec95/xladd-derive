@@ -1,0 +1,29 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AARC.Service.Hosted", "Apps\AARC.Service.Hosted\AARC.Service.Hosted.csproj", "{B5A2BD0A-8041-4592-BCCF-67646D84C28D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AARC.Mesh", "Libs\AARC.Mesh\AARC.Mesh.csproj", "{45E5D3F1-AAA9-4F3F-8081-9BD62F6962FD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AARC.Graph.Test", "UT\AARC.Graph.Test\AARC.Graph.Test.csproj", "{60D4F2C0-BB62-4A9F-922D-4013166FF34B}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B5A2BD0A-8041-4592-BCCF-67646D84C28D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B5A2BD0A-8041-4592-BCCF-67646D84C28D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B5A2BD0A-8041-4592-BCCF-67646D84C28D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B5A2BD0A-8041-4592-BCCF-67646D84C28D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{45E5D3F1-AAA9-4F3F-8081-9BD62F6962FD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{45E5D3F1-AAA9-4F3F-8081-9BD62F6962FD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{45E5D3F1-AAA9-4F3F-8081-9BD62F6962FD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{45E5D3F1-AAA9-4F3F-8081-9BD62F6962FD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{60D4F2C0-BB62-4A9F-922D-4013166FF34B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{60D4F2C0-BB62-4A9F-922D-4013166FF34B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{60D4F2C0-BB62-4A9F-922D-4013166FF34B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{60D4F2C0-BB62-4A9F-922D-4013166FF34B}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
