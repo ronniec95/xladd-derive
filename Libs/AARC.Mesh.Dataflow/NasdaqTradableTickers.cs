@@ -39,7 +39,7 @@ namespace AARC.Mesh.Dataflow
             foreach (var observable in _observerables)
                 observable.Subscribe((tickers) =>
                 {
-                    _logger.LogInformation($"Received an update request {string.Join("","", tickers)}");
+                    _logger.LogInformation($"Received an update request {string.Join("", tickers)}");
                     // Should update by Ticker
                     _tickers.Union(tickers);
                     Update();

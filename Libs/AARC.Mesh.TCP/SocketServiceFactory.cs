@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Net.Sockets;
 using AARC.Mesh.Interface;
-using AARC.Mesh.Model;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -10,7 +9,7 @@ namespace AARC.Mesh.TCP
     public class SocketServiceFactory : IMeshQueueServiceFactory
     {
         protected readonly IServiceProvider _serviceProvider;
-        private Uri _serviceHost;
+        private Uri _url;
 
         public SocketServiceFactory(IServiceProvider serviceProvider)
         {
@@ -21,7 +20,7 @@ namespace AARC.Mesh.TCP
         /// Using _serviceHost details to create connection
         /// </summary>
         /// <returns></returns>
-        public IMeshChannelService Create() => Create(_serviceHost);
+        public IMeshChannelService Create() => Create(_url);
 
 
         /// <summary>
@@ -31,16 +30,15 @@ namespace AARC.Mesh.TCP
         /// <returns></returns>
         public IMeshChannelService Create(string servicedetails)
         {
-            _serviceHost = new Uri(servicedetails);
+            _url = new Uri(servicedetails);
 
-            return Create(_serviceHost);
+            return Create(_url);
         }
 
         /// <summary>
         /// Creates a new SocketServices and reset _serviceHost details and starts ReadAsync
         /// </summary>
-        /// <param name="host">Host name or IP address</param>
-        /// <param name="port">Port No.</param>
+        /// <param name="url">Host name or IP address</param>
         /// <returns></returns>
         public SocketTransport Create(Uri url)
         {
