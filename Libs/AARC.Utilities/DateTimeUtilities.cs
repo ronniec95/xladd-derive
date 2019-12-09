@@ -2,7 +2,7 @@
 
 namespace AARC.Utilities
 {
-    public class DateTimeUtilities
+    public static class DateTimeUtilities
     {
         public static DateTime UnixTimeStampToDateTime(double unixTimeStamp)
         {
@@ -27,6 +27,8 @@ namespace AARC.Utilities
         {
             return ((uint)date.Year) * 10000U + (uint)(date.Month) * 100U + (uint)date.Day;
         }
+
+        public static uint ToUYYYYMMDD(this DateTime date) =>((uint)date.Year) * 10000U + (uint)(date.Month) * 100U + (uint)date.Day;
 
         public static DateTime ToDate(ulong d)
         {

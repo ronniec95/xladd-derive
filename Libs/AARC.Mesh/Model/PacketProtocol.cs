@@ -1,4 +1,4 @@
-﻿namespace AARC.Mesh.TCP
+﻿namespace AARC.Mesh.Model
 {
     using System;
     // Original source: https://blog.stephencleary.com/2009/04/sample-code-length-prefix-message.html

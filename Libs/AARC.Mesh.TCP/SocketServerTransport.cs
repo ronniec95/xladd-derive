@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -14,34 +15,34 @@ namespace AARC.Mesh.TCP
     /// A socket server that creates socketservice classes when client services connect.
     /// </summary>
     /// <typeparam name="T"></typeparam>
-    public class MeshSocketServer<T> : IMeshTransport<T> where T: IMeshMessage,new()
+    public class SocketServerTransport<T> : ObserverablePattern<T>, IMeshTransport<T>, IPublisher<byte[]> where T: IMeshMessage,new()
     {
         private readonly CancellationTokenSource _localCancelSource;
         private readonly CancellationToken _localct;
 
         private readonly ManualResetEvent _listenAcceptEvent;
 
-        private readonly ConcurrentDictionary<string, SocketService> _connectedRoutes;
+        private readonly ConcurrentDictionary<string, IMeshChannelService> _meshServices;
 
         private readonly ILogger _logger;
 
-        private readonly SocketServiceFactory _socketServiceFactory;
+        private readonly IMeshQueueServiceFactory _qServiceFactory;
 
         public int MonitorPeriod { get; set; }
 
-        public Action<T> Subscribe { get; set; }
+        //public Action<T> Subscribe { get; set; }
 
-        private ServiceHost _serviceHost;
+        private Uri _url;
 
-        public string TransportId { get { return _serviceHost?.ToString(); } }
+        public string TransportId { get { return _url?.ToString(); } }
 
-        public MeshSocketServer(ILogger<MeshSocketServer<T>> logger, SocketServiceFactory socketServiceFactory)
+        public SocketServerTransport(ILogger<SocketServerTransport<T>> logger, IMeshQueueServiceFactory qServiceFactory)
         {
             _localCancelSource = new CancellationTokenSource();
             _listenAcceptEvent = new ManualResetEvent(false);
             _logger = logger;
-            _socketServiceFactory = socketServiceFactory;
-            _connectedRoutes = new ConcurrentDictionary<string, SocketService>();
+            _qServiceFactory = qServiceFactory;
+            _meshServices = new ConcurrentDictionary<string, IMeshChannelService>();
             MonitorPeriod = 15000;
             _localct = _localCancelSource.Token;
         }
@@ -57,40 +58,43 @@ namespace AARC.Mesh.TCP
             });
         }
 
-
-        public void ServiceConnect(string serverDetails, CancellationToken cancellationToken)
+        /// <summary>
+        /// Look up to see if we have a mesh service with the service details.
+        /// If not create one. servicedetails should be enough to create
+        /// </summary>
+        /// <param name="servicedetails"></param>
+        /// <param name="cancellationToken"></param>
+        public void ServiceConnect(string servicedetails, CancellationToken cancellationToken)
         {
-            var details = serverDetails.Split(':');
-            var address = details?[0];
-            var port = int.Parse(details?[1]);
+            if (_meshServices.ContainsKey(servicedetails))
+            {
+                var service = _meshServices[servicedetails];
+                if (service.ConnectionAlive())
+                    return;
 
-            if (_connectedRoutes.ContainsKey(serverDetails))
-            {
-                var service = _connectedRoutes[serverDetails];
-                if (!service.ConnectionAlive())
-                {
-                    service.ManageConnection(address, port, true);
-                }
+                if (_meshServices.TryRemove(servicedetails, out service))
+                    service.Dispose();
             }
-            else
-            {
-                var service = _socketServiceFactory.Create();
-                service.ManageConnection(address, port);
-                _connectedRoutes[serverDetails] = service;
-            }
+
+            _logger.LogInformation($"Creating a connecting to {servicedetails}");
+            var qss = _qServiceFactory.Create(servicedetails);
+            _meshServices[servicedetails] = qss;
+
         }
 
         public void Listen(int port, CancellationToken cancellationToken)
         {
-            _serviceHost = new ServiceHost { HostName = Dns.GetHostName(), Port = port };
-            var ipAddress = SocketHelper.GetLocalHost();
+
+            _url = SocketHelper.GetHostNameUrl(port);
+
+            var ipAddress = SocketHelper.GetHostIPAddress(_url.Host);
             var localEndPoint = new IPEndPoint(IPAddress.Any, port);
             try
             {
                 using (var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_localct, cancellationToken))
                 {
                     var listener = new Socket(ipAddress.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-                    _logger?.LogDebug("Created Listener");
+                    _logger?.LogDebug($"Created Listener on {port}");
                     // Bind the socket to the local endpoint and   
                     // listen for incoming connections.  
                     listener.Bind(localEndPoint);
@@ -118,24 +122,11 @@ namespace AARC.Mesh.TCP
         }
 
         /// <summary>
-        /// Publish Message to service connected under transportId key
+        /// When a new connection is made the socket is passed to the servicefactory
+        /// to create a meshservice and added to the _meshServices list for
+        /// full DUPLEX comms
         /// </summary>
-        /// <param name="transportId">server ip and port</param>
-        /// <param name="message"></param>
-        public void Publisher(string transportId, T message)
-        {
-            if (_connectedRoutes.ContainsKey(transportId))
-            {
-                var bytes = message.Encode();
-                if (!_connectedRoutes[transportId].Send(bytes))
-                    _logger?.LogWarning($"[transportId] Sending Failed");
-            }
-            else
-            {
-                _logger.LogInformation($"{transportId}: NO ROUTES available");
-            }
-        }
-
+        /// <param name="ar"></param>
         private void NewConnectionCallback(IAsyncResult ar)
         {
             // Signal the main thread to continue.  
@@ -145,42 +136,25 @@ namespace AARC.Mesh.TCP
             var socket = listener.EndAccept(ar);
 
             // Create the state object.  
-            var service = _socketServiceFactory.Create(socket);
-            service.NewMessageBytes += ProcessNewBytes;
+            var service = _qServiceFactory.Create(socket);
+            //service.NewMessageBytes += ProcessNewBytes;
             socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
-            _logger?.LogInformation($"[{service.TransportId}]: New Connection");
-            service.ReadAsync();
+            _logger?.LogInformation($"[{service.ServiceDetails}]: New Connection");
+           service.Subscribe(this);
         }
-
-
-        /// <summary>
-        /// We receive a MeshMesage in bytes.
-        /// We should initially get a MessageMessage to Register this service
-        /// Action = Register, PayLoad = array of methods actions
-        /// </summary>
-        /// <param name="bytes"></param>
-        private void ProcessNewBytes(string socketDetails, byte[] bytes)
-        {
-            var message = new T();
-            message.Decode(bytes);
-            // ToDo - How to check the message was decoded
- //           if (message =)
-                Subscribe?.Invoke(message);
-        }
-
 
         /// <summary>
         /// Check if service is a live and drop if not
         /// </summary>
-        /// <param name="socketService">connected to a network service</param>
-        protected bool DropClosedConnections(SocketService socketService)
+        /// <param name="qService">connected to a network service</param>
+        protected bool DropClosedConnections(IMeshChannelService qService)
         {
             try
             {
                 // Is socket still connected
-                if (!socketService.ConnectionAlive())
+                if (!qService.ConnectionAlive())
                 {
-                    socketService.Shutdown();
+                    qService.Dispose();
                     return true;
                 }
             }
@@ -191,7 +165,7 @@ namespace AARC.Mesh.TCP
             return false;
         }
 
-        protected void ShutdownConnection(SocketService socketService)
+        protected void ShutdownConnection(SocketTransport socketService)
         {
             if (socketService != null)
                 socketService.Shutdown();
@@ -203,19 +177,19 @@ namespace AARC.Mesh.TCP
             {
                 while (!_localct.IsCancellationRequested)
                 {
-                    _logger?.LogDebug($"MSS MonitoringSockets connections[{_connectedRoutes.Count}]");
-                    foreach (var kvp in _connectedRoutes)
+                    _logger?.LogDebug($"MSS MonitoringSockets connections[{_meshServices.Count}]");
+                    foreach (var kvp in _meshServices)
                     {
                         var service = kvp.Value;
                         if (DropClosedConnections(service))
                         {
-                            SocketService ss;
-                            if (_connectedRoutes.TryRemove(kvp.Key, out ss))
+                            IMeshChannelService ss;
+                            if (_meshServices.TryRemove(kvp.Key, out ss))
                             {
-                                _logger?.LogInformation($"MSS dropped connections[{ss.TransportId}]");
+                                _logger?.LogInformation($"MSS dropped connections[{ss.ServiceDetails}]");
                             }
                             else
-                                _logger?.LogInformation($"MSS failed to drop [{service.TransportId}]");
+                                _logger?.LogInformation($"MSS failed to drop [{service.ServiceDetails}]");
                         }
 
                     }
@@ -224,6 +198,37 @@ namespace AARC.Mesh.TCP
                 }
             });
         }
+
+        public void OnCompleted()
+        {
+            throw new NotImplementedException();
+        }
+
+        public void OnError(Exception error)
+        {
+            throw new NotImplementedException();
+        }
+
+        public void OnNext(T value)
+        {
+            var bytes = value.Encode();
+            foreach (var transportId in value.Routes)
+                if (_meshServices.ContainsKey(transportId))
+                    _meshServices[transportId].OnPublish(bytes);
+                else
+                    _logger.LogInformation($"{transportId}: NO ROUTES available");
+        }
+
+        #region Subscriber
+        public List<IPublisher<byte[]>> _publishers = new List<IPublisher<byte[]>>();
+
+        public IDisposable Subscribe(IPublisher<byte[]> publisher)
+        {
+            if (!_publishers.Contains(publisher))
+                _publishers.Add(publisher);
+            return new Unsubscriber<IPublisher<byte[]>>(_publishers, publisher);
+        }
+        #endregion
 
         #region IDisposable Support
         private bool disposedValue = false; // To detect redundant calls
@@ -258,6 +263,14 @@ namespace AARC.Mesh.TCP
             Dispose(true);
             // TODO: uncomment the following line if the finalizer is overridden above.
             // GC.SuppressFinalize(this);
+        }
+
+        public void OnPublish(byte[] value)
+        {
+            var m = new T();
+            m.Decode(value);
+            foreach (var observer in _observers)
+                observer.OnNext(m);
         }
         #endregion
     }

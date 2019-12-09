@@ -1,16 +1,15 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using AARC.Mesh.Interface;
 
 namespace AARC.Mesh.Model
 {
 
-    public class MeshNetQueue<T> : INetQueueObservable<T> where T: class
+    public class MeshNetChannel<T> : INetQueueObservable<T> where T: class
     {
         private List<IObserver<T>> observers;
 
-        public MeshNetQueue()
+        public MeshNetChannel()
         {
             observers = new List<IObserver<T>>();
         }

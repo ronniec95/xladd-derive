@@ -16,9 +16,9 @@ namespace AARC.Mesh.Model
         public string Service { get; set; }
         public string QueueName { get; set; }
         public string PayLoad { get; set; }
-        public bool Split { get; set; }
-        public bool Monitor { get; set; }
         public bool IsValid() => !string.IsNullOrWhiteSpace(Service) && !string.IsNullOrWhiteSpace(QueueName) && XId > 0;
+        public IEnumerable<string> Routes { get; set; }
+
         public byte[] Serialize()
         {
 #if OBS
@@ -45,6 +45,8 @@ namespace AARC.Mesh.Model
 
     public partial class MeshMessage : IMeshMessage
     {
+        public override string ToString() => Service;
+
         public byte[] Encode()
         {
             var bytes = new List<byte>();
@@ -133,9 +135,6 @@ namespace AARC.Mesh.Model
                         _logger?.LogWarning($"Missing Queue Name");
                     else
                         _logger?.LogInformation($"Action {message.QueueName} OK");
-
-                    _logger?.LogInformation($"Split {message.Split} OK");
-                    _logger?.LogInformation($"Monitor {message.Monitor} OK");
 
                     _logger?.LogInformation($"PayLoad {message.PayLoad}");
                 }

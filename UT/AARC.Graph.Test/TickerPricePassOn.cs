@@ -1,25 +1,19 @@
 ﻿using System;
+using System.Collections.Generic;
+using AARC.Mesh;
 using AARC.Mesh.Interface;
 using AARC.Mesh.Model;
 
 namespace AARC.Graph.Test
 {
-    public class TickerPricePassOn : MeshQueueMarshal
+    public class TickerPricePassOn : IMeshReactor<MeshMessage>
     {
         public TickerPricePassOn()
         {
-            InputQueueNames = new string[] { "setticker" };
-            OutputQueueNames = new string[] { "getticker" };
         }
 
-        public override void OnError(Exception error)
-        {
-            throw new NotImplementedException();
-        }
+        public string Name => throw new NotImplementedException();
 
-        public override void OnNext(MeshMessage item)
-        {
-            throw new NotImplementedException();
-        }
+        public IList<IRouteRegister<MeshMessage>> Queues => throw new NotImplementedException();
     }
 }

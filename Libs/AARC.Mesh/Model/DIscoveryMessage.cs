@@ -6,12 +6,13 @@ namespace AARC.Mesh.Model
 {
     public partial class DiscoveryMessage : IMeshMessage
     {
-        public enum DiscoveryStates { Connect = 0, Register = 1, GetInputQs = 2, GetOutputQs = 3, Error = 666 };
+        public enum DiscoveryStates { Connect = 0, Register = 1, GetInputQs = 2, GetOutputQs = 3, Error = 255 };
 
         public DiscoveryStates State { get; set; }
         public int Port { get; set; }
         public string HostServer { get; set; }
         public string Payload { get; set; }
+        public IEnumerable<string> Routes => throw new NotImplementedException();
     }
 
     public partial class DiscoveryMessage : IMeshMessage

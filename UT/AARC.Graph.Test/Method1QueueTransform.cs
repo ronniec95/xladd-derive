@@ -3,6 +3,7 @@ using AARC.Mesh.Interface;
 using AARC.Mesh.Model;
 using AARC.Mesh;
 using System;
+using System.Collections.Generic;
 
 namespace AARC.Graph.Test
 {
@@ -10,20 +11,23 @@ namespace AARC.Graph.Test
     /// Example wrapper class for a simple Method of multiplication based on the subscription of two independently supplied subscriptions.
     /// </summary>
     /// <typeparam name="T">Using T to help with the Serialization/Deserialization - work in progrees</typeparam>
-    public class Method1QueueTransform : MeshQueueMarshal
+    public class Method1QueueTransform : IMeshReactor<MeshMessage>
     {
         private ConcurrentDictionary<string, double> lastprice;
         private ConcurrentDictionary<string, double> lastrandom;
+
+        public string Name => throw new NotImplementedException();
+
+        public IList<IRouteRegister<MeshMessage>> Queues => throw new NotImplementedException();
 
         public Method1QueueTransform()
         {
             lastprice = new ConcurrentDictionary<string, double>();
             lastrandom = new ConcurrentDictionary<string, double>();
-            InputQueueNames = new string[] { GraphMethod1.newcloseprice.ToString(), GraphMethod1.newrandom.ToString() };
-            OutputQueueNames = new string[] { GraphMethod1.method1.ToString() };
+            //InputQueueNames = new string[] { GraphMethod1.newcloseprice.ToString(), GraphMethod1.newrandom.ToString() };
+            //OutputQueueNames = new string[] { GraphMethod1.method1.ToString() };
         }
-
-        public override void OnNext(MeshMessage item)
+        public  void OnNext(MeshMessage item)
         {
             try
             {
@@ -65,7 +69,7 @@ namespace AARC.Graph.Test
             {
                 var tp = new TickerPrice { Ticker = n, Price = Method1(v, lastrandom[n]) };
                 var message = new MeshMessage { GraphId = graphid, XId = xid, PayLoad = tp.Serialize() };
-                PostOutputQueue?.Invoke(GraphMethod1.method1.ToString(), message);
+                //PostOutputQueue?.Invoke(GraphMethod1.method1.ToString(), message);
             }
         }
 
@@ -81,7 +85,7 @@ namespace AARC.Graph.Test
             {
                 var tp = new TickerPrice { Ticker = n, Price = Method1(lastprice[n], v) };
                 var message = new MeshMessage { GraphId = graphid, XId = xid, PayLoad = tp.Serialize() };
-                PostOutputQueue?.Invoke(GraphMethod1.method1.ToString(), message);
+                //PostOutputQueue?.Invoke(GraphMethod1.method1.ToString(), message);
             }
         }
 
@@ -93,9 +97,5 @@ namespace AARC.Graph.Test
         /// <returns></returns>
         public double Method1(double price, double random) => price * random;
 
-        public override void OnError(Exception error)
-        {
-            throw new NotImplementedException();
-        }
     }
 }

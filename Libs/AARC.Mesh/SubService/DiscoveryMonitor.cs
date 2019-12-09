@@ -1,42 +1,41 @@
 ﻿using System;
+using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using AARC.Mesh.Interface;
-using AARC.Mesh.TCP;
-using System.Net;
-using AARC.Mesh.Model;
 
 namespace AARC.Mesh.SubService
 {
-    public class DiscoveryMonitor<T> : IDisposable where T : IMeshMessage, new()
+    public class DiscoveryMonitor<T> : IPublisher<byte[]>, IDisposable where T : IMeshMessage, new()
     {
         private readonly CancellationTokenSource _localCancelSource;
         private readonly ILogger _logger;
-        private readonly SocketServiceFactory _socketServiceFactory;
+        private readonly IMeshQueueServiceFactory _qServiceFactory;
 
-        private SocketService _discoveryService;
+        private IMeshChannelService _discoveryService;
 
         public Action<T> DiscoveryReceive { get; set; }
 
         public Action<T, string> DiscoverySend { get; set; }
 
-        public DiscoveryMonitor(ILogger<DiscoveryMonitor<T>> logger, SocketServiceFactory socketServiceFactory)
+        public DiscoveryMonitor(ILogger<DiscoveryMonitor<T>> logger, IMeshQueueServiceFactory qServiceFactory)
         {
             _localCancelSource = new CancellationTokenSource();
             _logger = logger;
-            _socketServiceFactory = socketServiceFactory;
+            _qServiceFactory = qServiceFactory;
         }
 
-        public async Task StartListeningServices(ServiceHost serviceHost, CancellationToken cancellationToken)
+        public async Task StartListeningServices(string serviceDetails, CancellationToken cancellationToken)
         {
             await Task.Factory.StartNew(() =>
             {
-                _logger?.LogInformation($"Looking for Discovery Service {serviceHost}");
+                _logger?.LogInformation($"Looking for Discovery Service");
 
                 var delay = 1000;
 
+                var serviceUrl = $"tcp://{Dns.GetHostName()}";
                 using (var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_localCancelSource.Token, cancellationToken))
                     do
                     {
@@ -44,30 +43,34 @@ namespace AARC.Mesh.SubService
                         {
                             if (_discoveryService == null)
                             {
-                                _discoveryService = _socketServiceFactory.Create();
-                                _discoveryService.ManageConnection(serviceHost.HostName, serviceHost.Port, false);
-                                _discoveryService.ReadAsync();
-                                _discoveryService.NewMessageBytes += ProcessDiscoveryServiceMessage;
+                                _discoveryService = _qServiceFactory.Create(serviceDetails);
+                                _discoveryService.Subscribe(this);
                             }
 
-                            if (!_discoveryService.Connected)
+                            if (_discoveryService.Connected)
+                            {
+                                var message = new T();
+                                DiscoverySend.Invoke(message, serviceUrl);
+
+                                var obytes = message.Encode();
+                                _discoveryService.OnPublish(obytes);
+                                _logger?.LogDebug($"DS Tx {obytes.Length}");
+                            }
+                            else
                             {
                                 // Bad state shutdown services
-                                _discoveryService.Shutdown();
                                 _discoveryService.Dispose();
                                 _discoveryService = null;
                             }
-                            else //(_discoveryService.Connected)
-                                RegisterDiscoveryService();
                         }
                         catch (SocketException se)
                         {
-                            _logger.LogError("DS Connection error", se);
+                            _logger.LogError(se, $"DS Connection Error: {se.Message}");
                             delay = 1000;
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogError("DS General error", ex);
+                            _logger.LogError(ex, "DS General error");
                             delay = 1000;
                         }
                         finally
@@ -79,22 +82,12 @@ namespace AARC.Mesh.SubService
             }, cancellationToken);
         }
 
-        private void ProcessDiscoveryServiceMessage(string arg1, byte[] bytes)
+        public void OnPublish(byte[] ibytes)
         {
+            _logger?.LogDebug($"DS Rx {ibytes.Length}");
             var message = new T();
-            message.Decode(bytes);
+            message.Decode(ibytes);
             DiscoveryReceive?.Invoke(message);
-        }
-
-        public void RegisterDiscoveryService()
-        {
-            var message = new T();
-            DiscoverySend.Invoke(message, Dns.GetHostName());
-            
-            var bytes = message.Encode();
-            _logger?.LogDebug($"DS Tx {bytes.Length}");
-            //var bytes = System.Text.Encoding.ASCII.GetBytes(json);
-            _discoveryService.Send(bytes);
         }
 
         #region IDisposable Support

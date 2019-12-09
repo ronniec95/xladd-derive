@@ -1,4 +1,6 @@
-﻿using System.Globalization;
+﻿using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -6,6 +8,9 @@ using AARC.Mesh.Interface;
 using AARC.Mesh.Model;
 using AARC.Mesh.SubService;
 using AARC.Mesh.TCP;
+using AARC.Model.Interfaces;
+using AARC.Repository.Interfaces;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -26,11 +31,12 @@ namespace AARC.Service.Hosted
             var p = args.Where(a => a.StartsWith(@"port")).SelectMany(a => a.Split('=')).LastOrDefault();
             var qService = PascalCase($"{t}_{p}");
             log4net.GlobalContext.Properties["LogFileName"] = $"{qService}Service";
+
             var hostBuilder = new HostBuilder()
                 .UseConsoleLifetime()
                 .ConfigureAppConfiguration((hostingContext, config) =>
                 {
-                    config.AddJsonFile("appsettings.json", optional: true);
+                    config.AddJsonFile("appsettings.json", optional: false);
                     config.AddEnvironmentVariables();
 
                     if (args != null)
@@ -38,19 +44,31 @@ namespace AARC.Service.Hosted
                 })
                 .ConfigureServices((hostContext, services) =>
                 {
+                    // DiscoveryMonitor connects remotely? Needs Host/Port  
+                    // MeshSocketServer allows remote and internal connections
                     services.AddOptions();
-                    services.AddSingleton<ServiceHostNameFactory>();
-                    services.AddSingleton<DiscoveryServiceStateMachine<MeshMessage>>();
-                    services.AddSingleton<DiscoveryMonitor<DiscoveryMessage>>();
-                    services.AddSingleton<IMeshTransport<MeshMessage>, MeshSocketServer<MeshMessage>>();
-                    services.AddSingleton<SocketServiceFactory>();
-                    services.AddSingleton<MeshServiceManager>();
+
+                    MeshServiceConfig.Server(services);
+                    SocketServiceConfig.Transport(services);
+                    
+                    services.AddDbContext<AARC.RDS.AARCContext>
+                    (options =>
+                        options.UseSqlServer(hostContext.Configuration.GetConnectionString("DefaultConnection")
+                    ));
+
+                    // Add our Market Data Repository
+                    services.AddScoped<IMarketDataRepository, Repository.EF.MarketDataRepository>();
+                    // Might be worth doing this as a factory with type and suppliying name for more configurability
+                    services.AddSingleton<IMeshObservable<IList<string>>>(new MeshObservable<IList<string>>("nasdaqtestin"));
+                    services.AddSingleton<IMeshObserver<IDictionary<string, IAarcPrice>>>(new MeshObserver<IDictionary<string, IAarcPrice>>("nasdaqtestout") );
+                    services.AddSingleton<IMeshReactor<MeshMessage> ,Mesh.Dataflow.NasdaqTradableTickers>();
+
                     services.AddHostedService<MeshHostedService>();
                 })
-                .ConfigureLogging((hostContex, configlogging) =>
+                .ConfigureLogging((hostContex, logging) =>
                 {
-                    //configlogging.AddDebug();
-                    configlogging.AddLog4Net();
+                    logging.AddLog4Net();
+                    logging.SetMinimumLevel(LogLevel.Debug);
                 });
             await hostBuilder.RunConsoleAsync();
         }

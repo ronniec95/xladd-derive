@@ -1,24 +1,27 @@
-﻿
-using System;
+﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 using AARC.Mesh.SubService;
-using AARC.Mesh.Model;
 using AARC.Mesh.Interface;
+using AARC.Mesh.Model;
+using System.Collections.Generic;
+using AARC.Model.Interfaces;
 
-namespace AARC.Service.Hosted
+namespace AARC.Mesh.Client
 {
-    public class MeshHostedService : IHostedService, IDisposable
+    public class MeshClient : IDisposable
     {
-        private readonly ILogger<MeshHostedService> _logger;
+        private readonly ILogger<MeshClient> _logger;
         private readonly MeshServiceManager _msm;
         private readonly Uri _discoveryAddress;
+        private MeshObservable<IDictionary<string, IAarcPrice>> nasdaqTP;
 
-        public MeshHostedService(ILogger<MeshHostedService> logger, MeshServiceManager meshServiceManager, IMeshReactor<MeshMessage> queueClient, IConfiguration configuration)
+        public MeshClient(ILogger<MeshClient> logger, MeshServiceManager meshServiceManager, IConfiguration configuration)
         {
+
             _msm = meshServiceManager;
             _discoveryAddress = new Uri(configuration.GetValue<string>("ds", "tcp://localhost:9999"));
 
@@ -26,8 +29,8 @@ namespace AARC.Service.Hosted
             // Todo: Bit of a hack as DS should supply port
             _msm.ListeningPort = configuration.GetValue<Int32>("port", 0);
 
-            foreach (var route in queueClient.Queues)
-                _msm.RegisterChannels(route);
+            nasdaqTP = new MeshObservable<IDictionary<string, IAarcPrice>>("nasdaqtestout");
+            _msm.RegisterChannels(nasdaqTP);
         }
 
         /// <summary>
@@ -38,18 +41,14 @@ namespace AARC.Service.Hosted
         public Task StartAsync(CancellationToken cancellationToken)
         {
             _logger?.LogInformation($"Starting {this.GetType().Name}");
-
-            // Connect to Discovery Service
             var t1 = _msm.StartDiscoveryServices(_discoveryAddress.ToString(), cancellationToken);
-            //return t1;
-            // Listen for subscibers for output Qs
-            var t2 = _msm.StartListeningServices(cancellationToken);
+            return t1;
 
-            //return Task.WhenAll(t1, t2);
+            //return t2;
             // Connect to publishers of the data we want
-            var t3 = _msm.StartPublisherConnections(cancellationToken);
+            //var t3 = _msm.StartPublisherConnections(cancellationToken);
 
-            return Task.WhenAll(t1, t2, t3);
+            //return Task.WhenAll(t1, t2, t3);
         }
 
         public Task StopAsync(CancellationToken cancellationToken)
@@ -59,6 +58,7 @@ namespace AARC.Service.Hosted
 
         #region IDisposable Support
         private bool disposedValue = false; // To detect redundant calls
+
 
         protected virtual void Dispose(bool disposing)
         {

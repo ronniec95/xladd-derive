@@ -2,8 +2,6 @@
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
-using System.Runtime.InteropServices;
-using AARC.Mesh.Model;
 
 namespace AARC.Mesh.TCP
 {
@@ -77,7 +75,8 @@ namespace AARC.Mesh.TCP
         public static string TransportId(this Socket socket)
         {
             var endpoint = (IPEndPoint)(socket?.RemoteEndPoint);
-            return $"{endpoint?.Address}:{endpoint.Port}";
+            var url = CreateUrl(endpoint.Address.ToString(), endpoint.Port);
+            return url.AbsoluteUri;
         }
 
         public static void DoGetHostAddresses(string hostname)
@@ -92,14 +91,18 @@ namespace AARC.Mesh.TCP
             }
         }
 
-        public static ServiceHost GetLocalServiceHost()
+        public static Uri GetHostNameUrl(int? port = null) => CreateUrl(Dns.GetHostName(), port);
+
+        public static Uri CreateUrl(string hostname, int? port = null, string scheme = "tcp")
         {
-            return new ServiceHost
-            {
-                HostName = GetLocalHost()?.AddressFamily.ToString() 
-            };
+            var builder = new UriBuilder { Scheme = scheme, Host = hostname };
+            if (port.HasValue)
+                builder.Port = port.Value;
+
+            return builder.Uri;
         }
-        public static ServiceHost GetServiceHost(this Socket socket)
+
+        public static Uri GetServiceHost(this Socket socket)
         {
             var endpoint = (IPEndPoint)(socket?.RemoteEndPoint);
 
@@ -110,11 +113,7 @@ namespace AARC.Mesh.TCP
 #else
             var hostname = endpoint?.Address.ToString() ?? "127.0.0.1";
 #endif
-            return new ServiceHost
-            {
-                HostName = hostname,
-                Port = endpoint?.Port ?? 0
-            };
+            return CreateUrl(hostname);
         }
     }
 }

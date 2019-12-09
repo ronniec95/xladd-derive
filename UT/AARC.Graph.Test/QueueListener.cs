@@ -4,23 +4,24 @@ using AARC.Mesh.Model;
 using Microsoft.Extensions.Logging;
 using System.Reactive.Linq;
 using System.Collections.Generic;
+using AARC.Mesh;
 
 namespace AARC.Graph.Test
 {
-    public class QueueListener : MeshQueueMarshal, IObserver<IList<MeshMessage>>
+    public class QueueListener : IMeshReactor<MeshMessage>
     {
-        private ILogger _logger;
+        public string Name => throw new NotImplementedException();
+
+        public IList<IRouteRegister<MeshMessage>> Queues => throw new NotImplementedException();
+    }
+    /*
+    private ILogger _logger;
+
         public QueueListener(string[] queues, ILogger logger = null)
         {
-            InputQueueNames = queues;
-            OutputQueueNames = new string[] { };
             _logger = logger;
         }
 
-        public override void OnError(Exception error)
-        {
-            throw new NotImplementedException();
-        }
 
         public override void Subscribe(IObservable<MeshMessage> provider)
         {
@@ -81,5 +82,5 @@ namespace AARC.Graph.Test
                 OnNext(item);
             }
         }
-    }
+    }*/
 }

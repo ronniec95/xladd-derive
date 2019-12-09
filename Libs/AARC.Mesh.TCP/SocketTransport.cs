@@ -8,13 +8,17 @@ using Microsoft.Extensions.Logging;
 
 namespace AARC.Mesh.TCP
 {
+    using AARC.Mesh.Interface;
     using AARC.Mesh.Model;
+
     /// <summary>
     /// An asynchronous client socket does not suspend the application while waiting for network operations to complete.
     /// Instead, it uses the standard .NET Framework asynchronous programming model to process the network connection on one thread while the application continues to run on the original thread.
     /// Asynchronous sockets are appropriate for applications that make heavy use of the network or that cannot wait for network operations to complete before continuing.
+    /// IObservable to PacketProtcol for socket inputs
+    /// IObserver 
     /// </summary>
-    public class SocketService : IDisposable
+    public class SocketTransport : SubscriberPattern<byte[]>, IMeshChannelService
     {
         // Size of receive buffer.  
         public const int BufferSize = 1024;
@@ -25,7 +29,7 @@ namespace AARC.Mesh.TCP
         // Client  socket.  
         protected Socket _socket { get; private set; }
 
-        public ServiceHost TransportId;
+        public Uri Url;
 
         // Receive buffer.  
         private readonly byte[] _rawReceiveBuffer;
@@ -35,26 +39,34 @@ namespace AARC.Mesh.TCP
         /// <summary>
         /// Action Delegate for New Message
         /// </summary>
-        public Action<string, byte[]> NewMessageBytes { get; set; }
+        //public Action<string, byte[]> NewMessageBytes { get; set; }
 
-        public SocketService(ILogger logger = null)
+        public string ServiceDetails { get { return Url.ToString(); } }
+
+        public SocketTransport(ILogger logger = null)
         {
             _logger = logger;
             _localCancelSource = new CancellationTokenSource();
             _rawReceiveBuffer = new byte[BufferSize];
             _byteBlocks = new BufferBlock<byte[]>();
+            Url = SocketHelper.GetHostNameUrl();
+
             _packetizer = new PacketProtocol(PacketSize);
-            _packetizer.MessageArrived += PacketNewMessageBytes;
-            TransportId = new ServiceHost();
-            TransportId.HostName = Dns.GetHostName();
+
+            // Pass the assembled bytes message to the IMeshObservers (subscriber)
+            _packetizer.MessageArrived += (bytes) =>
+            {
+                foreach (var observer in _publishers)
+                    observer.OnPublish(bytes);
+            };
         }
 
-        public SocketService(IServiceProvider serviceProvider) : this(serviceProvider.GetService<ILogger<SocketService>>()) { }
+        //public SocketTransport(IServiceProvider serviceProvider) : this(serviceProvider.GetService<ILogger<SocketTransport>>()) { }
 
-        public SocketService(Socket socket, ILogger logger = null) : this(logger)
+        public SocketTransport(Socket socket, ILogger logger = null) : this(logger)
         {
             _socket = socket;
-            TransportId = socket?.GetServiceHost();
+            Url = socket?.GetServiceHost();
         }
 
         /// <summary>
@@ -64,24 +76,24 @@ namespace AARC.Mesh.TCP
         /// <param name="serverAddress"></param>
         /// <param name="port"></param>
         /// <param name="reconnect"></param>
-        public void ManageConnection(string serverAddress, int port, bool reconnect = false)
+        public void ManageConnection(Uri url, bool reconnect = false)
         {
             if (_socket == null)
             {
-                _logger?.LogInformation($"[{serverAddress}:{port}] Connecting");
-                _socket = Connect(serverAddress, port);
+                _logger?.LogInformation($"[{url}] Connecting");
+                _socket = Connect(url);
                 _localCancelSource = new CancellationTokenSource();
             }
 
             if (!_socket.Connected && reconnect)
             {
-                _logger?.LogInformation($"[{serverAddress}:{port}] Reconnecting");
+                _logger?.LogInformation($"[{url}] Reconnecting");
                 _socket?.Dispose();
-                _socket = Connect(serverAddress, port);
+                _socket = Connect(url);
             }
             if (_socket.Connected)
             {
-                TransportId = new ServiceHost { HostName = serverAddress, Port = port };
+                Url = new Uri(url.AbsoluteUri);
             }
         }
 
@@ -106,8 +118,7 @@ namespace AARC.Mesh.TCP
                     var s = (Socket)ar.AsyncState;
                     s.EndConnect(ar);
                     s.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
-                    _logger?.LogInformation($"[{s.TransportId()}]: Connected");
-                    
+                    _logger?.LogInformation($"[{s.TransportId()}]: Connected");                  
                 }
                 catch (SocketException se)
                 {
@@ -126,63 +137,31 @@ namespace AARC.Mesh.TCP
             return worksocket;
         }
 
-/*        void SetKeepAlive(bool on, uint keepAliveTime, uint keepAliveInterval)
-        {
-            int size = Marshal.SizeOf(new uint());
-
-            var inOptionValues = new byte[size * 3];
-
-            BitConverter.GetBytes((uint)(on ? 1 : 0)).CopyTo(inOptionValues, 0);
-            BitConverter.GetBytes((uint)time).CopyTo(inOptionValues, size);
-            BitConverter.GetBytes((uint)interval).CopyTo(inOptionValues, size * 2);
-
-            socket.IOControl(IOControlCode.KeepAliveValues, inOptionValues, null);
-        }*/
+        protected Socket Connect(Uri url) =>Connect(url.Host, url.Port);
 
         public bool Connected {  get { return _socket?.Connected ?? false;  } }
         public byte[] Receive(CancellationToken token) => _byteBlocks.Receive(token);
 
+        //private void PacketNewMessageBytes(byte[] bytes) => NewMessageBytes?.Invoke(TransportId.ToString(), bytes);
+
         /// <summary>
-        /// Send bytes Wrapped on socket if connected.
+        /// We read message packets from the connected subscriber and forward them to MeshSocketServer to
+        /// decode them.
         /// </summary>
-        /// <param name="byteData">Message inbytes</param>
-        /// <returns>true for send and false if there was an error</returns>
-        public bool Send(byte[] byteData)
-        {
-            try
-            {
-                var message = PacketProtocol.WrapMessage(byteData);
-                if (_socket?.Connected ?? false)
-                {
-                    _socket?.BeginSend(message, 0, message.Length, 0, new AsyncCallback(SendCallback), _socket);
-                    return true;
-                }
-                _logger?.LogWarning($"[{TransportId}] Send failed - socket not connected");
-            }
-            catch(Exception ex)
-            {
-                _logger.LogWarning(ex, "Send error");
-            }
-            return false;
-        }
-
-        private void PacketNewMessageBytes(byte[] bytes) => NewMessageBytes?.Invoke(TransportId.ToString(), bytes);
-
-
         public void ReadAsync()
         {
             if (!_localCancelSource?.IsCancellationRequested ?? false)
             {
-                var result = _socket?.BeginReceive(_rawReceiveBuffer, 0, SocketService.BufferSize, 0, new AsyncCallback(ReadCallback), this);
+                var result = _socket?.BeginReceive(_rawReceiveBuffer, 0, SocketTransport.BufferSize, 0, new AsyncCallback(ReadCallback), this);
             }
-            else _logger?.LogInformation($"[{TransportId}]: ReadAsync cancelled");
+            else _logger?.LogInformation($"[{Url}]: ReadAsync cancelled");
         }
 
         public void Shutdown()
         {
             // ToDo : Cancellation token
             _localCancelSource.Cancel();
-            _logger?.LogInformation($"[{TransportId}]: Closing Socket");
+            _logger?.LogInformation($"[{Url}]: Closing Socket");
             if (_socket?.Connected ?? false)
             {
                 _socket?.Shutdown(SocketShutdown.Both);
@@ -200,7 +179,7 @@ namespace AARC.Mesh.TCP
         {
             try
             {
-                var service = (SocketService)ar.AsyncState;
+                var service = (SocketTransport)ar.AsyncState;
                 var handler = service._socket;
 
                 // Read data from the client socket.   
@@ -243,6 +222,40 @@ namespace AARC.Mesh.TCP
 
         public bool ConnectionAlive() => !(_socket.Poll(5000, SelectMode.SelectRead) && _socket.Available == 0);
 
+        #region IObserver Support
+        public void OnCompleted()
+        {
+            Dispose();
+        }
+
+        public void OnError(Exception error)
+        {
+            _logger.LogError(error, "Send error");
+        }
+
+        /// <summary>
+        /// value is a message encoded in bytes that needs to be wrapped in a length
+        /// and sent to the listener on the socket
+        /// </summary>
+        /// <param name="value"></param>
+        public void OnPublish(byte[] value)
+        {
+            try
+            {
+                var message = PacketProtocol.WrapMessage(value);
+                if (_socket?.Connected ?? false)
+                {
+                    _socket?.BeginSend(message, 0, message.Length, 0, new AsyncCallback(SendCallback), _socket);
+                }
+                else OnError(new SocketException((int)SocketError.NotConnected));
+            }
+            catch (Exception ex)
+            {
+                OnError(ex);
+            }
+        }
+        #endregion
+
         #region IDisposable Support
         private bool disposedValue = false; // To detect redundant calls
 
@@ -252,7 +265,7 @@ namespace AARC.Mesh.TCP
             {
                 if (disposing)
                 {
-                    _localCancelSource.Cancel();
+                    Shutdown();
                 }
 
                 // TODO: free unmanaged resources (unmanaged objects) and override a finalizer below.
@@ -277,6 +290,7 @@ namespace AARC.Mesh.TCP
             // TODO: uncomment the following line if the finalizer is overridden above.
             // GC.SuppressFinalize(this);
         }
+
         #endregion
     }
 }

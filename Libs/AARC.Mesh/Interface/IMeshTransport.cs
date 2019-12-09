@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using AARC.Mesh.Model;
@@ -7,12 +8,13 @@ namespace AARC.Mesh.Interface
 {
     public interface IMeshMessage
     {
+        IEnumerable<string> Routes { get; }
         byte[] Encode();
 
         IMeshMessage Decode(byte[] bytes);
     }
 
-    public interface IMeshTransport<T> : IDisposable where T: IMeshMessage
+    public interface IMeshTransport<T> : IObservable<T>, IObserver<T>, IDisposable where T: IMeshMessage
     {
         /// <summary>
         /// A unique id to identify this service for connected services
@@ -22,14 +24,14 @@ namespace AARC.Mesh.Interface
         /// <summary>
         /// Subscribe to incoming service messages
         /// </summary>
-        Action<T> Subscribe { get; set; }
+//        Action<T> Subscribe { get; set; }
 
         /// <summary>
         /// Publish out going messages to connected services
         /// </summary>
         /// <param name="transportId"></param>
         /// <param name="message"></param>
-        void Publisher(string transportId, T message);
+//        void Publisher(string transportId, T message);
 
         /// <summary>
         /// Cancel transport and shutdonw

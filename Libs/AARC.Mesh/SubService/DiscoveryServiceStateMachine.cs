@@ -6,11 +6,14 @@ using Newtonsoft.Json;
 
 namespace AARC.Mesh.SubService
 {
+    using System.Threading;
     using AARC.Mesh.Model;
     using static AARC.Mesh.Model.DiscoveryMessage;
 
     public class DiscoveryServiceStateMachine<T>
     {
+        public readonly ManualResetEvent RegistrationComplete;
+
         /// <summary>
         /// Queue interested MS will connect via this port supplied by DS.
         /// </summary>
@@ -18,56 +21,57 @@ namespace AARC.Mesh.SubService
         /// <summary>
         /// Service named input Qs
         /// </summary>
-        public MeshDictionary<T> inputQs { get; private set; }
+        public MeshDictionary<T> inputChannels { get; private set; }
         /// <summary>
         /// Service named output Qs
         /// </summary>
-        public MeshDictionary<T> outputQs { get; private set; }
+        public MeshDictionary<T> outputChannels { get; private set; }
 
-        public ConcurrentDictionary<string, HashSet<string>> InputQsRoutes { get; private set; }
-        public ConcurrentDictionary<string, HashSet<string>> OutputQsRoutes { get; private set; }
+        public ConcurrentDictionary<string, HashSet<string>> InputChannelRoutes { get; private set; }
+        public ConcurrentDictionary<string, HashSet<string>> OutputChannelRoutes { get; private set; }
 
         protected DiscoveryStates _state = DiscoveryStates.Register;
 
         public DiscoveryServiceStateMachine()
         {
-            inputQs = new MeshDictionary<T>();
-            outputQs = new MeshDictionary<T>();
-            InputQsRoutes = new ConcurrentDictionary<string, HashSet<string>>();
-            OutputQsRoutes = new ConcurrentDictionary<string, HashSet<string>>();
+            RegistrationComplete = new ManualResetEvent(false);
+            inputChannels = new MeshDictionary<T>();
+            outputChannels = new MeshDictionary<T>();
+            InputChannelRoutes = new ConcurrentDictionary<string, HashSet<string>>();
+            OutputChannelRoutes = new ConcurrentDictionary<string, HashSet<string>>();
         }
 
         /// <summary>
         /// Returns the list of enpoints availble for 
         /// </summary>
-        /// <param name="queue"></param>
+        /// <param name="channel"></param>
         /// <returns></returns>
-        public IEnumerable<string> InputQueueRoute(string queue)
-            => InputQsRoutes.Where(kv => string.Equals(kv.Key, queue, StringComparison.OrdinalIgnoreCase)).Select(kv => kv.Value).FirstOrDefault();
+        public IEnumerable<string> FindInputChannelRoutes(string channel)
+            => InputChannelRoutes.Where(kv => string.Equals(kv.Key, channel, StringComparison.OrdinalIgnoreCase)).Select(kv => kv.Value).FirstOrDefault();
 
-        public IEnumerable<string> OutputQueueRoute(string action)
-            => OutputQsRoutes.Where(kv => string.Equals(kv.Key, action, StringComparison.OrdinalIgnoreCase)).Select(kv => kv.Value).FirstOrDefault();
+        public IEnumerable<string> FindOutputChannelRoutes(string channel)
+            => OutputChannelRoutes.Where(kv => string.Equals(kv.Key, channel, StringComparison.OrdinalIgnoreCase)).Select(kv => kv.Value).FirstOrDefault();
 
 
         public bool RegisteredInputSource(string action, string endpoint)
-            => InputQsRoutes.Where(iq => string.Equals(iq.Key, action, StringComparison.OrdinalIgnoreCase)).Where(kvp => kvp.Value.Contains(endpoint)).Any();
+            => InputChannelRoutes.Where(iq => string.Equals(iq.Key, action, StringComparison.OrdinalIgnoreCase)).Where(kvp => kvp.Value.Contains(endpoint)).Any();
 
-        public IEnumerable<string> RoutableInputQs() => OutputQsRoutes.Keys.Intersect(inputQs.Keys);
-        public IEnumerable<string> RoutableOutputQs() => InputQsRoutes.Keys.Intersect(outputQs.Keys);
+        public IEnumerable<string> RoutableInputChannels() => OutputChannelRoutes.Keys.Intersect(inputChannels.Keys);
+        public IEnumerable<string> RoutableOutputChannels() => InputChannelRoutes.Keys.Intersect(outputChannels.Keys);
 
-        public IEnumerable<string> RoutableInputQEndpoints() => OutputQsRoutes.Keys.Intersect(inputQs.Keys).Select(key => OutputQsRoutes[key].ToList()).SelectMany(t => t).Distinct();
+        public IEnumerable<string> RoutableInputChannelEndpoints() => OutputChannelRoutes.Keys.Intersect(inputChannels.Keys).Select(key => OutputChannelRoutes[key].ToList()).SelectMany(t => t).Distinct();
 
-        public IEnumerable<string> RoutableOutputQEndpoints() => outputQs.Keys.Intersect(InputQsRoutes.Keys).Select(key => InputQsRoutes[key].ToList()).SelectMany(t => t).Distinct();
+        public IEnumerable<string> RoutableOutputChannelEndpoints() => outputChannels.Keys.Intersect(InputChannelRoutes.Keys).Select(key => InputChannelRoutes[key].ToList()).SelectMany(t => t).Distinct();
 
         public IEnumerable<Tuple<string, IEnumerable<string>>> OutputQRoutes =>
-            RoutableOutputQs()
-                .Select(r => new { r, l = InputQueueRoute(r) })
+            RoutableOutputChannels()
+                .Select(r => new { r, l = FindInputChannelRoutes(r) })
                 .Where(r => r.l != null && r.l.Any())
                 .Select(r => new Tuple<string, IEnumerable<string>> (r.r,  r.l ));
 
         public IEnumerable<Tuple<string, IEnumerable<string>>> InputQRoutes =>
-            RoutableInputQs()
-                .Select(r => new { r, l = OutputQueueRoute(r) })
+            RoutableInputChannels()
+                .Select(r => new { r, l = FindOutputChannelRoutes(r) })
                 .Where(r => r.l != null && r.l.Any())
                 .Select(r => new Tuple<string, IEnumerable<string>>(r.r, r.l));
 
@@ -91,13 +95,14 @@ namespace AARC.Mesh.SubService
                         break;
                     case DiscoveryStates.GetInputQs:
                         var iq = JsonConvert.DeserializeObject<ConcurrentDictionary<string, HashSet<string>>>(message.Payload);
-                        MeshUtilities.Merge(InputQsRoutes, iq);
+                        MeshUtilities.Merge(InputChannelRoutes, iq);
                         _state = DiscoveryStates.GetOutputQs;
                         break;
                     case DiscoveryStates.GetOutputQs:
                         var oq = JsonConvert.DeserializeObject<ConcurrentDictionary<string, HashSet<string>>>(message.Payload);
-                        MeshUtilities.Merge(OutputQsRoutes, oq);
-                        _state = DiscoveryStates.Register;
+                        MeshUtilities.Merge(OutputChannelRoutes, oq);
+                        _state = DiscoveryStates.GetInputQs;
+                        RegistrationComplete.Set();
                         break;
                     default:
                         _state = DiscoveryStates.Connect;
@@ -123,7 +128,7 @@ namespace AARC.Mesh.SubService
                     break;
                 case DiscoveryStates.GetInputQs:
 #if NETSTANDARD2_0
-                    message.Payload = inputQs.Keys.Any() ? string.Join(",", inputQs.Keys) : string.Empty;
+                    message.Payload = inputChannels.Keys.Any() ? string.Join(",", inputChannels.Keys) : null;
 #endif
 #if NETSTANDARD2_1 // Targets .netcore 3.0
                     message.PayLoad = inputQs.Keys.Any() ? string.Join(',',inputQs.Keys) : string.Empty;
@@ -131,7 +136,7 @@ namespace AARC.Mesh.SubService
                     break;
                 case DiscoveryStates.GetOutputQs:
 #if NETSTANDARD2_0
-                    message.Payload = outputQs.Keys.Any() ? string.Join(",", outputQs.Keys) : string.Empty;
+                    message.Payload = outputChannels.Keys.Any() ? string.Join(",", outputChannels.Keys) : null;
 #endif
 #if NETSTANDARD2_1 // Targets .netcore 3.0
                     message.PayLoad =  outputQs.Keys.Any() ? string.Join(',', outputQs.Keys) : string.Empty;
