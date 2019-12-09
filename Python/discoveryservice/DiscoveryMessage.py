@@ -35,7 +35,7 @@ class DiscoveryMessage:
         byteMessage += len(message.HostServer).to_bytes(1, byteorder = 'little')
         byteMessage += message.HostServer.encode()
         # Length of PayLoad
-        if message.PayLoad is None:
+        if not message.PayLoad:
             zerolen = 0
             byteMessage += zerolen.to_bytes(8, byteorder = 'little')
         else:

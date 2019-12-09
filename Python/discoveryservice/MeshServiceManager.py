@@ -23,6 +23,7 @@ class MeshServiceManager:
         self.inputQs = dict()
         self.outputQs = dict()
         self._servers = dict()
+        self._usedPorts = set()
         self.currentPort = 6000
 
     def RegisterInputs(self, ipaddress: str, inputs: list):
@@ -39,34 +40,61 @@ class MeshServiceManager:
             else:
                 self.outputQs[q] = { ipaddress }
 
-    def Process(self,client_address: str, m: DiscoveryMessage):
+    def Unregister(self, routes: dict, transportId: str):
+        kvp = list(routes.items())
+        for key,val in kvp:
+            if transportId in val:
+                val.remove(transportId)
+            if not val:
+                del routes[key]
+            
+    def Disconnect(self, clienttag: str):
+        try:
+            logging.info("Disconnecting %s %s" % (clienttag, self._servers))
+            logging.info("Disconnecting %s %s" % (self.inputQs, self.outputQs))
+            if clienttag in self._servers:
+                transportId = self._servers[clienttag]
+                self.Unregister(self.inputQs, transportId)
+                self.Unregister(self.outputQs, transportId)
+                del self._servers[clienttag]
+            logging.info("Disconnected %s %s" % (clienttag, self._servers))
+            logging.info("Disconnected %s %s" % (self.inputQs, self.outputQs))
+        except Exception as e:
+            logging.error ("ER Disconnecting from MSM routes: %r" % e)
+            logging.exception(e)
+
+    def Process(self, clienttag: str, m: DiscoveryMessage):
         try:
             state = DiscoveryStates(m.State)
-            self._servers[m.HostServer] = datetime.now()
             if state == DiscoveryStates.Register:
                 if m.Port == 0:
-                    self.currentPort += 1
-                    return DiscoveryMessage(m.State, self.currentPort, m.HostServer, None)
+                    while self.currentPort in self._usedPorts:
+                        self.currentPort += 1
+                    m = DiscoveryMessage(m.State, self.currentPort, m.HostServer, None)
                 else:
-                    return DiscoveryMessage(m.State, m.Port, m.HostServer, None)
+                    m = DiscoveryMessage(m.State, m.Port, m.HostServer, None)
+                self._servers[clienttag] = m.HostServer + ':' + str(m.Port)
+                if not m.Port in self._usedPorts:
+                    self._usedPorts.add(m.Port)
+                return m
             elif state == DiscoveryStates.GetInputQs:
                 if m.PayLoad:
                     qs = m.PayLoad.split(',')
                     transportId = m.HostServer + ':' + str(m.Port)
                     self.RegisterInputs(transportId, qs)
-                    payload = self.InputQPayload()
-                    return DiscoveryMessage(m.State, m.Port, m.HostServer, payload)
+                payload = self.InputQPayload()
+                return DiscoveryMessage(m.State, m.Port, m.HostServer, payload)
             elif state == DiscoveryStates.GetOutputQs:
                 if m.PayLoad:
                     qs = m.PayLoad.split(',')
                     transportId = m.HostServer + ':' + str(m.Port)
                     self.RegisterOutputs(transportId, qs)
-                    payload = self.OutputQPayload()
-                    return DiscoveryMessage(m.State, m.Port, m.HostServer, payload)
+                payload = self.OutputQPayload()
+                return DiscoveryMessage(m.State, m.Port, m.HostServer, payload)
             elif state == DiscoveryStates.Connect:
                 return DiscoveryMessage(m.State, 0, m.HostServer, None)
             else:
-                logging.info ("MSM Bad Message [%i : %s]" % (m.State, m.HostServer))
+                logging.info ("MSM Unknown state [%i : %s]" % (m.State, m.HostServer))
                 return DiscoveryMessage(DiscoveryStates.Error, 0, m.HostServer, "{ ERROR: \"BAD MESSAGE\"}")
         except Exception as e:
             logging.error ("ER MeshMessage: %r" % e)
@@ -74,7 +102,7 @@ class MeshServiceManager:
             #exc_type, exc_value, exc_traceback = sys.exc_info()
             #traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
 
-        logging.info ("MSM Bad Message [%i : %s]" % (m.State, m.HostServer))
+        logging.info ("MSM Bad Message [%s][%s : %s]" % (clienttag, m.State, m.HostServer))
         return DiscoveryMessage(DiscoveryStates.Error, 0, m.HostServer, "{ ERROR: \"BAD MESSAGE\"}")
 
     def InputQPayload(self):

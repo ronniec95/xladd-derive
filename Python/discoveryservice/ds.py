@@ -8,6 +8,7 @@ import socketserver
 import functools
 import logging
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from pprint import pprint
 
 from DiscoveryMessage import DiscoveryMessage
 from MeshServiceManager import MeshServiceManager
@@ -62,22 +63,26 @@ def WrapBytes(b: bytearray):
 class MeshDSHandler(socketserver.BaseRequestHandler):
     def handle(self):
         # self.request is the TCP socket connected to the client
+        m = None
+        response = None
+        clienttag = str(self.client_address)
         try:
-            logging.info ("DC [%s]: New Connection" % (self.client_address[0]))
+            logging.info ("DC [%s]: New Connection" % (clienttag))
             while True:
-                #msg = self.readMeshjsonPacket()
-                #if not msg:
-                #    break
-                #m = MeshMessage.from_json(msg)
                 m = self.readMeshEncodedPacket()
-                response = config.MSM.Process(self.client_address[0], m)
+                response = config.MSM.Process(clienttag, m)
                 self.sendMeshMessage(response)
         except Exception as e:
-            logging.error ("ER [%s]: %r" % (self.client_address[0], e))
+            logging.error ("ER [%s]: %r" % (clienttag, e))
             logging.exception(e)
+            if m:
+                pprint(vars(m))
+            if response:
+                pprint(vars(response))
             #exc_type, exc_value, exc_traceback = sys.exc_info()
             #traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
-        logging.info ("DC [%s]: Disconnected" % (self.client_address[0]))
+        config.MSM.Disconnect(clienttag)
+        logging.info ("DC [%s]: Disconnected" % (clienttag))
 
     def sendString(self, message: str, name: str = None):
         b = WrapMessage(message)
