@@ -26,11 +26,11 @@ namespace AARC.Mesh.TCP
         /// <summary>
         /// Uses servicedetails work work out how to setup this MeshQueueService
         /// </summary>
-        /// <param name="servicedetails"></param>
+        /// <param name="url"></param>
         /// <returns></returns>
-        public IMeshServiceTransport Create(string servicedetails)
+        public IMeshServiceTransport Create(string url)
         {
-            _url = new Uri(servicedetails);
+            _url = new Uri(url);
 
             return Create(_url);
         }

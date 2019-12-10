@@ -1,7 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using Newtonsoft.Json;
-
 using AARC.Mesh.Interface;
 using AARC.Mesh.Model;
 using AARC.Utilities;

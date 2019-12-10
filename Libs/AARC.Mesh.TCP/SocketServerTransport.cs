@@ -6,7 +6,6 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using AARC.Mesh.Interface;
-using AARC.Mesh.Model;
 using Microsoft.Extensions.Logging;
 
 namespace AARC.Mesh.TCP
@@ -15,18 +14,18 @@ namespace AARC.Mesh.TCP
     /// A socket server that creates socketservice classes when client services connect.
     /// </summary>
     /// <typeparam name="T"></typeparam>
-    public class SocketServerTransport<T> : ObserverablePattern<T>, IMeshTransport<T>, IPublisher<byte[]> where T: IMeshMessage,new()
+    public class SocketServerTransport<T> : ObserverablePattern<T>, IMeshTransport<T>, IPublisher<byte[]> where T : IMeshMessage, new()
     {
         private readonly CancellationTokenSource _localCancelSource;
         private readonly CancellationToken _localct;
 
         private readonly ManualResetEvent _listenAcceptEvent;
 
-        private readonly ConcurrentDictionary<string, IMeshChannelService> _meshServices;
+        private readonly ConcurrentDictionary<string, IMeshServiceTransport> _meshServices;
 
         private readonly ILogger _logger;
 
-        private readonly IMeshQueueServiceFactory _qServiceFactory;
+        private readonly IMeshTransportFactory _qServiceFactory;
 
         public int MonitorPeriod { get; set; }
 
@@ -34,15 +33,15 @@ namespace AARC.Mesh.TCP
 
         private Uri _url;
 
-        public string TransportId { get { return _url?.ToString(); } }
+        public string Url { get { return _url?.ToString(); } }
 
-        public SocketServerTransport(ILogger<SocketServerTransport<T>> logger, IMeshQueueServiceFactory qServiceFactory)
+        public SocketServerTransport(ILogger<SocketServerTransport<T>> logger, IMeshTransportFactory qServiceFactory)
         {
             _localCancelSource = new CancellationTokenSource();
             _listenAcceptEvent = new ManualResetEvent(false);
             _logger = logger;
             _qServiceFactory = qServiceFactory;
-            _meshServices = new ConcurrentDictionary<string, IMeshChannelService>();
+            _meshServices = new ConcurrentDictionary<string, IMeshServiceTransport>();
             MonitorPeriod = 15000;
             _localct = _localCancelSource.Token;
         }
@@ -85,9 +84,9 @@ namespace AARC.Mesh.TCP
         public void Listen(int port, CancellationToken cancellationToken)
         {
 
-            _url = SocketHelper.GetHostNameUrl(port);
+            _url = NetworkExt.GetHostNameUrl(port);
 
-            var ipAddress = SocketHelper.GetHostIPAddress(_url.Host);
+            var ipAddress = NetworkExt.GetHostIPAddress(_url.Host);
             var localEndPoint = new IPEndPoint(IPAddress.Any, port);
             try
             {
@@ -139,15 +138,15 @@ namespace AARC.Mesh.TCP
             var service = _qServiceFactory.Create(socket);
             //service.NewMessageBytes += ProcessNewBytes;
             socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
-            _logger?.LogInformation($"[{service.ServiceDetails}]: New Connection");
-           service.Subscribe(this);
+            _logger?.LogInformation($"[{service.Url}]: New Connection");
+            service.Subscribe(this);
         }
 
         /// <summary>
         /// Check if service is a live and drop if not
         /// </summary>
         /// <param name="qService">connected to a network service</param>
-        protected bool DropClosedConnections(IMeshChannelService qService)
+        protected bool DropClosedConnections(IMeshServiceTransport qService)
         {
             try
             {
@@ -165,7 +164,7 @@ namespace AARC.Mesh.TCP
             return false;
         }
 
-        protected void ShutdownConnection(SocketTransport socketService)
+        protected void ShutdownConnection(IMeshServiceTransport socketService)
         {
             if (socketService != null)
                 socketService.Shutdown();
@@ -183,13 +182,13 @@ namespace AARC.Mesh.TCP
                         var service = kvp.Value;
                         if (DropClosedConnections(service))
                         {
-                            IMeshChannelService ss;
+                            IMeshServiceTransport ss;
                             if (_meshServices.TryRemove(kvp.Key, out ss))
                             {
-                                _logger?.LogInformation($"MSS dropped connections[{ss.ServiceDetails}]");
+                                _logger?.LogInformation($"MSS dropped connections[{ss.Url}]");
                             }
                             else
-                                _logger?.LogInformation($"MSS failed to drop [{service.ServiceDetails}]");
+                                _logger?.LogInformation($"MSS failed to drop [{service.Url}]");
                         }
 
                     }

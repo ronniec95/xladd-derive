@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using AARC.Mesh.Interface;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
 
 namespace AARC.Mesh.Model
 {
@@ -14,31 +13,21 @@ namespace AARC.Mesh.Model
         public uint GraphId { get; set; }
         public uint XId { get; set; }
         public string Service { get; set; }
-        public string QueueName { get; set; }
+        public string Channel { get; set; }
         public string PayLoad { get; set; }
-        public bool IsValid() => !string.IsNullOrWhiteSpace(Service) && !string.IsNullOrWhiteSpace(QueueName) && XId > 0;
+        public bool IsValid() => !string.IsNullOrWhiteSpace(Service) && !string.IsNullOrWhiteSpace(Channel) && XId > 0;
         public IEnumerable<string> Routes { get; set; }
 
         public byte[] Serialize()
         {
-#if OBS
-            var json =JsonConvert.SerializeObject(this);
-            return System.Text.Encoding.ASCII.GetBytes(json);
-#else
             var bytes = this.Encode();
             return bytes;
-#endif
         }
         public static MeshMessage Deserialise(byte[] bytes)
         {
-#if OBS
-            var message = System.Text.Encoding.ASCII.GetString(bytes, 0, bytes.Length);
-            return JsonConvert.DeserializeObject<MeshMessage>(message);
-#else
             var m = new MeshMessage();
             m.Decode(bytes);
             return m;
-#endif
         }
     }
 
@@ -51,23 +40,20 @@ namespace AARC.Mesh.Model
         {
             var bytes = new List<byte>();
             // GraphId
-            bytes.AddRange( BitConverter.GetBytes(this.GraphId));
+            bytes.AddRange(BitConverter.GetBytes(this.GraphId));
             // Xid
             bytes.AddRange(BitConverter.GetBytes(this.XId));
             // Service
-            bytes.AddRange(BitConverter.GetBytes(this.Service.Length));      
+            bytes.AddRange(BitConverter.GetBytes(this.Service.Length));
             bytes.AddRange(System.Text.Encoding.ASCII.GetBytes(this.Service));
             // QueueName
-            bytes.AddRange(BitConverter.GetBytes(this.QueueName.Length));
-            bytes.AddRange(System.Text.Encoding.ASCII.GetBytes(this.QueueName));
+            bytes.AddRange(BitConverter.GetBytes(this.Channel.Length));
+            bytes.AddRange(System.Text.Encoding.ASCII.GetBytes(this.Channel));
             // PayLoad
-            if (string.IsNullOrEmpty(this.PayLoad))
-                bytes.AddRange(BitConverter.GetBytes((uint)0));
-            else
-            {
-                bytes.AddRange(BitConverter.GetBytes(this.PayLoad.Length));
-                bytes.AddRange(System.Text.Encoding.ASCII.GetBytes(this.PayLoad));
-            }
+
+            var compressedbytes = AARC.Compression.Compression.CompressString(this.PayLoad);
+            //                bytes.AddRange(BitConverter.GetBytes(compressedbytes.Length));
+            bytes.AddRange(compressedbytes);
             return bytes.ToArray();
         }
 
@@ -90,15 +76,10 @@ namespace AARC.Mesh.Model
             // QueueName
             len = BitConverter.ToInt32(bytes, msgPtr);
             msgPtr += sizeof(Int32);
-            this.QueueName = System.Text.Encoding.ASCII.GetString(bytes, msgPtr, len);
+            this.Channel = System.Text.Encoding.ASCII.GetString(bytes, msgPtr, len);
             msgPtr += len;
             // PayLoad
-            len = BitConverter.ToInt32(bytes, msgPtr);
-            if (len > 0) // PayLoad is allowed to be empty
-            {
-                msgPtr += sizeof(Int32);
-                this.PayLoad = System.Text.Encoding.ASCII.GetString(bytes, msgPtr, len);
-            }
+            this.PayLoad = AARC.Compression.Compression.DecompressString(bytes, msgPtr);
             return this;
         }
 
@@ -131,10 +112,10 @@ namespace AARC.Mesh.Model
                         _logger?.LogWarning($"Missing Service");
                     else
                         _logger?.LogInformation($"Service {message.Service} OK");
-                    if (string.IsNullOrWhiteSpace(message.QueueName))
+                    if (string.IsNullOrWhiteSpace(message.Channel))
                         _logger?.LogWarning($"Missing Queue Name");
                     else
-                        _logger?.LogInformation($"Action {message.QueueName} OK");
+                        _logger?.LogInformation($"Action {message.Channel} OK");
 
                     _logger?.LogInformation($"PayLoad {message.PayLoad}");
                 }

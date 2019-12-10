@@ -3,7 +3,6 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks.Dataflow;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace AARC.Mesh.TCP
@@ -18,7 +17,7 @@ namespace AARC.Mesh.TCP
     /// IObservable to PacketProtcol for socket inputs
     /// IObserver 
     /// </summary>
-    public class SocketTransport : SubscriberPattern<byte[]>, IMeshChannelService
+    public class SocketTransport : SubscriberPattern<byte[]>, IMeshServiceTransport
     {
         // Size of receive buffer.  
         public const int BufferSize = 1024;
@@ -29,7 +28,7 @@ namespace AARC.Mesh.TCP
         // Client  socket.  
         protected Socket _socket { get; private set; }
 
-        public Uri Url;
+        private Uri _url;
 
         // Receive buffer.  
         private readonly byte[] _rawReceiveBuffer;
@@ -41,7 +40,7 @@ namespace AARC.Mesh.TCP
         /// </summary>
         //public Action<string, byte[]> NewMessageBytes { get; set; }
 
-        public string ServiceDetails { get { return Url.ToString(); } }
+        public string Url { get { return _url.ToString(); } }
 
         public SocketTransport(ILogger logger = null)
         {
@@ -49,7 +48,7 @@ namespace AARC.Mesh.TCP
             _localCancelSource = new CancellationTokenSource();
             _rawReceiveBuffer = new byte[BufferSize];
             _byteBlocks = new BufferBlock<byte[]>();
-            Url = SocketHelper.GetHostNameUrl();
+            _url = NetworkExt.GetHostNameUrl();
 
             _packetizer = new PacketProtocol(PacketSize);
 
@@ -66,15 +65,14 @@ namespace AARC.Mesh.TCP
         public SocketTransport(Socket socket, ILogger logger = null) : this(logger)
         {
             _socket = socket;
-            Url = socket?.GetServiceHost();
+            _url = socket?.GetServiceHost();
         }
 
         /// <summary>
         /// Checkes to see if the connection is still alive and reconnects.
         /// Connects if not connected before
         /// </summary>
-        /// <param name="serverAddress"></param>
-        /// <param name="port"></param>
+        /// <param name="url"></param>
         /// <param name="reconnect"></param>
         public void ManageConnection(Uri url, bool reconnect = false)
         {
@@ -93,7 +91,7 @@ namespace AARC.Mesh.TCP
             }
             if (_socket.Connected)
             {
-                Url = new Uri(url.AbsoluteUri);
+                _url = new Uri(url.AbsoluteUri);
             }
         }
 
@@ -101,24 +99,24 @@ namespace AARC.Mesh.TCP
         ///
         /// http://tldp.org/HOWTO/TCP-Keepalive-HOWTO/overview.html
         /// </summary>
-        /// <param name="serverAddress"></param>
+        /// <param name="hostname"></param>
         /// <param name="port"></param>
         /// <returns></returns>
-        protected Socket Connect(string serverAddress, int port)
+        protected Socket Connect(string hostname, int port)
         {
-            var ipaddress = SocketHelper.GetHostIPAddress(serverAddress);
+            var ipaddress = NetworkExt.GetHostIPAddress(hostname);
             var ipEndPoint = new IPEndPoint(ipaddress, port);
             var worksocket = new Socket(ipEndPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
             var dsConnectEvent = new ManualResetEvent(false);
             dsConnectEvent.Reset();
-            worksocket.BeginConnect(serverAddress, port, ar =>
+            worksocket.BeginConnect(hostname, port, ar =>
             {
                 try
                 {
                     var s = (Socket)ar.AsyncState;
                     s.EndConnect(ar);
                     s.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
-                    _logger?.LogInformation($"[{s.TransportId()}]: Connected");                  
+                    _logger?.LogInformation($"[{s.TransportId()}]: Connected");
                 }
                 catch (SocketException se)
                 {
@@ -137,9 +135,9 @@ namespace AARC.Mesh.TCP
             return worksocket;
         }
 
-        protected Socket Connect(Uri url) =>Connect(url.Host, url.Port);
+        protected Socket Connect(Uri url) => Connect(url.Host, url.Port);
 
-        public bool Connected {  get { return _socket?.Connected ?? false;  } }
+        public bool Connected { get { return _socket?.Connected ?? false; } }
         public byte[] Receive(CancellationToken token) => _byteBlocks.Receive(token);
 
         //private void PacketNewMessageBytes(byte[] bytes) => NewMessageBytes?.Invoke(TransportId.ToString(), bytes);
@@ -154,14 +152,14 @@ namespace AARC.Mesh.TCP
             {
                 var result = _socket?.BeginReceive(_rawReceiveBuffer, 0, SocketTransport.BufferSize, 0, new AsyncCallback(ReadCallback), this);
             }
-            else _logger?.LogInformation($"[{Url}]: ReadAsync cancelled");
+            else _logger?.LogInformation($"[{_url}]: ReadAsync cancelled");
         }
 
         public void Shutdown()
         {
             // ToDo : Cancellation token
             _localCancelSource.Cancel();
-            _logger?.LogInformation($"[{Url}]: Closing Socket");
+            _logger?.LogInformation($"[{_url}]: Closing Socket");
             if (_socket?.Connected ?? false)
             {
                 _socket?.Shutdown(SocketShutdown.Both);
@@ -187,7 +185,7 @@ namespace AARC.Mesh.TCP
 
                 if (bytesRead > 0)
                 {
-//                    _logger?.LogInformation($"[{SocketDetails}]: Rx {bytesRead} bytes");
+                    //                    _logger?.LogInformation($"[{SocketDetails}]: Rx {bytesRead} bytes");
                     // Clone the buffer to the size we want.
                     // Read
                     var rawmessage = service._rawReceiveBuffer.CloneReduce(bytesRead);
@@ -195,11 +193,11 @@ namespace AARC.Mesh.TCP
                 }
                 ReadAsync();
             }
-            catch(SocketException se)
+            catch (SocketException se)
             {
                 _logger?.LogError(se, "Connection Read error");
             }
-            catch(Exception e)
+            catch (Exception e)
             {
                 _logger?.LogError(e, "General Socket Read error");
             }
@@ -212,7 +210,7 @@ namespace AARC.Mesh.TCP
                 var handler = (Socket)ar.AsyncState;
                 // Complete sending the data to the remote device.  
                 int bytesSent = handler?.EndSend(ar) ?? 0;
-//                _logger?.LogInformation($"[{handler.SocketDetails()}]: Tx {bytesSent} bytes");
+                //                _logger?.LogInformation($"[{handler.SocketDetails()}]: Tx {bytesSent} bytes");
             }
             catch (Exception e)
             {

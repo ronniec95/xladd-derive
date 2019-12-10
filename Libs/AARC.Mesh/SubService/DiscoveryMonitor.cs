@@ -12,15 +12,15 @@ namespace AARC.Mesh.SubService
     {
         private readonly CancellationTokenSource _localCancelSource;
         private readonly ILogger _logger;
-        private readonly IMeshQueueServiceFactory _qServiceFactory;
+        private readonly IMeshTransportFactory _qServiceFactory;
 
-        private IMeshChannelService _discoveryService;
+        private IMeshServiceTransport _discoveryService;
 
         public Action<T> DiscoveryReceive { get; set; }
 
         public Action<T, string> DiscoverySend { get; set; }
 
-        public DiscoveryMonitor(ILogger<DiscoveryMonitor<T>> logger, IMeshQueueServiceFactory qServiceFactory)
+        public DiscoveryMonitor(ILogger<DiscoveryMonitor<T>> logger, IMeshTransportFactory qServiceFactory)
         {
             _localCancelSource = new CancellationTokenSource();
             _logger = logger;

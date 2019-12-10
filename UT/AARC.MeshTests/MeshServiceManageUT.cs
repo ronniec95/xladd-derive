@@ -8,7 +8,7 @@ namespace AARC.MeshTests
 {
     class Test<T> : IMeshTransport<T> where T : IMeshMessage
     {
-        public string TransportId => throw new NotImplementedException();
+        public string Url => throw new NotImplementedException();
 
         public Task Cancel()
         {

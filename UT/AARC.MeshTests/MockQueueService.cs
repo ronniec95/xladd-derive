@@ -8,17 +8,17 @@ using AARC.Model;
 
 namespace AARC.MeshTests
 {
-    class MockQueueService : SubscriberPattern<byte[]>, IMeshChannelService
+    class MockQueueService : SubscriberPattern<byte[]>, IMeshServiceTransport
     {
         public ConcurrentQueue<byte[]> messagesin = new ConcurrentQueue<byte[]>();
-        public MockQueueService(string transportId)
+        public MockQueueService(string url)
         {
-            ServiceDetails = transportId;
+            Url = url;
         }
         public bool Connected => throw new NotImplementedException();
 
 
-        public string ServiceDetails { get; private set; }
+        public string Url { get; private set; }
 
         public bool ConnectionAlive()
         {
@@ -38,13 +38,18 @@ namespace AARC.MeshTests
                 tickerUniverse[t] = new TickerPrices { Ticker = t };
 
             var opayload = JsonConvert.SerializeObject(tickerUniverse);
-            var o = new MeshMessage { Service = ServiceDetails, QueueName = "nasdaqtestout", PayLoad = opayload };
+            var o = new MeshMessage { Service = Url, Channel = "nasdaqtestout", PayLoad = opayload };
             var obytes = o.Encode();
             foreach (var p in _publishers)
                 p.OnPublish(obytes);
         }
 
         public void ReadAsync()
+        {
+            throw new NotImplementedException();
+        }
+
+        public void Shutdown()
         {
             throw new NotImplementedException();
         }

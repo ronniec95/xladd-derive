@@ -103,8 +103,10 @@ class MeshDSHandler(socketserver.BaseRequestHandler):
 
     def readPacket(self):
         bytesMsgLen = self.request.recv(4)
-        logging.debug ("Rx [%s]: %s Header" % (self.client_address[0], bytesMsgLen))
         msgLen = int.from_bytes(bytesMsgLen, byteorder = 'little')
+        bmsgLen = int.from_bytes(bytesMsgLen, byteorder = 'big')
+        logging.debug ("Rx [%s]: MsgLen %i %i" % (self.client_address, msgLen, bmsgLen))
+        print(bytesMsgLen)
         packet = b''
         bytes_recd = 0
         while bytes_recd < msgLen:
@@ -113,7 +115,7 @@ class MeshDSHandler(socketserver.BaseRequestHandler):
                     return None
             packet += chunk
             bytes_recd = bytes_recd + len(chunk)
-        logging.debug ("Rx [%s]: %s bytes" % (self.client_address[0], len(packet)))
+        logging.debug ("Rx [%s]: %s bytes" % (self.client_address, len(packet)))
         return packet
 
     def readMeshjsonPacket(self):
@@ -178,7 +180,7 @@ def SocketServerMain():
 
 if __name__ == "__main__":
     try:
-        logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
+        logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
         #TestMeshJsonSerialize2()
         #TestMeshSerializer()
 #        TestMSM()

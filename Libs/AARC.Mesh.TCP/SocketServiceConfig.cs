@@ -13,10 +13,10 @@ namespace AARC.Mesh.TCP
         /// <param name="services"></param>
         public static void Transport(IServiceCollection services)
         {
-            services.AddSingleton<ServiceHostNameFactory>();
+            services.AddSingleton<ServiceUrlFactory>();
             // MeshSocketServer needs the port it allows external services to connect on.
             services.AddSingleton<IMeshTransport<MeshMessage>, SocketServerTransport<MeshMessage>>();
-            services.AddSingleton<IMeshQueueServiceFactory, SocketServiceFactory>();
+            services.AddSingleton<IMeshTransportFactory, MeshTransportFactory>();
         }
     }
 }

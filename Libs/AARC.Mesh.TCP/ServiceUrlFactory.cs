@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Net;
-using AARC.Mesh.Model;
 
 namespace AARC.Mesh.TCP
 {

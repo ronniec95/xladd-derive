@@ -11,14 +11,14 @@ namespace AARC.MeshTests
 
     class MockTransportServer : ObserverablePattern<MeshMessage>, IMeshTransport<MeshMessage>, IDuplex<byte[]>
     {
-        private readonly ConcurrentDictionary<string, IMeshChannelService> _meshServices = new ConcurrentDictionary<string, IMeshChannelService>();
+        private readonly ConcurrentDictionary<string, IMeshServiceTransport> _meshServices = new ConcurrentDictionary<string, IMeshServiceTransport>();
 
         public MockTransportServer()
         {
 
         }
 
-        public string TransportId => "localhost:0";
+        public string Url => "localhost:0";
 
         public Task Cancel()
         {
@@ -49,10 +49,10 @@ namespace AARC.MeshTests
         /// 
         /// </summary>
         /// <param name="service"></param>
-        public void RegisterService(IMeshChannelService service)
+        public void RegisterService(IMeshServiceTransport service)
         {
-            if (!_meshServices.ContainsKey(service.ServiceDetails))
-                _meshServices[service.ServiceDetails] = service;
+            if (!_meshServices.ContainsKey(service.Url))
+                _meshServices[service.Url] = service;
 
             service.Subscribe(this);
             Subscribe(service);

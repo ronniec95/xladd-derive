@@ -1,12 +1,12 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Threading;
 using System.Linq;
 using Newtonsoft.Json;
 
 namespace AARC.Mesh.SubService
 {
-    using System.Threading;
     using AARC.Mesh.Model;
     using static AARC.Mesh.Model.DiscoveryMessage;
 

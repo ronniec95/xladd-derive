@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using AARC.Mesh.Model;
 
 namespace AARC.Mesh.Interface
 {
@@ -19,7 +18,7 @@ namespace AARC.Mesh.Interface
         /// <summary>
         /// A unique id to identify this service for connected services
         /// </summary>
-        string TransportId { get; }
+        string Url { get; }
 
         /// <summary>
         /// Subscribe to incoming service messages

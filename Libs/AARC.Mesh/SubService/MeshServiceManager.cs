@@ -74,8 +74,8 @@ namespace AARC.Mesh.SubService
                 if (_dssmc.InputChannelRoutes.ContainsKey(channel))
                 {
                     _dssmc.outputChannels[channel].Add(message);
-                    message.Service = _transportServer.TransportId;
-                    message.QueueName = channel;
+                    message.Service = _transportServer.Url;
+                    message.Channel = channel;
 
                     // Find the external routes
                     var routes = _dssmc.InputChannelRoutes[channel];
@@ -105,11 +105,11 @@ namespace AARC.Mesh.SubService
         public void ServiceSubscriber(MeshMessage message)
         {
             // Todo: Has the message come from a known external source? If not what to do?
-            var known = _dssmc.RegisteredInputSource(message.QueueName, message.Service);
+            var known = _dssmc.RegisteredInputSource(message.Channel, message.Service);
 
-            if (_dssmc.inputChannels.ContainsKey(message.QueueName))
+            if (_dssmc.inputChannels.ContainsKey(message.Channel))
             {
-                _dssmc.inputChannels[message.QueueName].Add(message);
+                _dssmc.inputChannels[message.Channel].Add(message);
             }
         }
 
@@ -138,19 +138,19 @@ namespace AARC.Mesh.SubService
                     var routableInputQs = _dssmc.RoutableInputChannels();
                     foreach (var routes in _dssmc.InputQRoutes)
                     {
-                        _logger?.LogInformation($"ROUTE(i) [{string.Join(",", routes.Item2)}]=>{routes.Item1}=>[{_transportServer.TransportId}]");
+                        _logger?.LogInformation($"ROUTE(i) [{string.Join(",", routes.Item2)}]=>{routes.Item1}=>[{_transportServer.Url}]");
                     }
 
                     foreach (var routes in _dssmc.OutputQRoutes)
                     {
-                        _logger?.LogInformation($"ROUTE(o) [{_transportServer.TransportId}]=>{routes.Item1}=>[{string.Join(",", routes.Item2)}]");
+                        _logger?.LogInformation($"ROUTE(o) [{_transportServer.Url}]=>{routes.Item1}=>[{string.Join(",", routes.Item2)}]");
                     }
 
                     var routableAddresses = _dssmc.OutputQRoutes.SelectMany(r => r.Item2).Distinct();
                     foreach (var address in routableAddresses)
                         try
                         {
-                            if (_transportServer.TransportId != address)
+                            if (_transportServer.Url != address)
                             {
                                 // Connect to service and register our input qs
                                 _transportServer.ServiceConnect(address, cancellationToken);
@@ -226,7 +226,7 @@ namespace AARC.Mesh.SubService
         /// <param name="value"></param>
         public void OnNext(MeshMessage value)
         {
-            _dssmc.inputChannels[value.QueueName].Add(value);
+            _dssmc.inputChannels[value.Channel].Add(value);
         }
         #endregion
     }

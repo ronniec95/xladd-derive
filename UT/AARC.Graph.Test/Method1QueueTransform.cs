@@ -33,7 +33,7 @@ namespace AARC.Graph.Test
             {
                 if (item != null)
                 {
-                    var action = Enum.Parse(typeof(GraphMethod1), item.QueueName);
+                    var action = Enum.Parse(typeof(GraphMethod1), item.Channel);
 
                     var payLoad = item.PayLoad;
                     // Use the T Deserializer

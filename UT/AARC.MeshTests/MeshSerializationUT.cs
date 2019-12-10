@@ -69,7 +69,7 @@ namespace AARC.MeshTests
 
             Assert.IsNotNull(meshmessage);
 
-            Assert.IsNotNull(meshmessage.QueueName);
+            Assert.IsNotNull(meshmessage.Channel);
 
             Assert.IsNotNull(meshmessage.PayLoad);
         }
@@ -132,7 +132,7 @@ namespace AARC.MeshTests
 
             Assert.IsNotNull(meshmessage);
 
-            Assert.IsNotNull(meshmessage.QueueName);
+            Assert.IsNotNull(meshmessage.Channel);
 
             Assert.IsNotNull(meshmessage.PayLoad);
         }
