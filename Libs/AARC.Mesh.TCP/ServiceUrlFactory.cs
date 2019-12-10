@@ -4,11 +4,11 @@ using AARC.Mesh.Model;
 
 namespace AARC.Mesh.TCP
 {
-    public class ServiceHostNameFactory
+    public class ServiceUrlFactory
     {
         protected readonly Uri _url;
 
-        public ServiceHostNameFactory()
+        public ServiceUrlFactory()
         {
             _url = new Uri(Dns.GetHostName());
         }

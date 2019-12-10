@@ -5,7 +5,7 @@ using System.Net.Sockets;
 
 namespace AARC.Mesh.TCP
 {
-    public static class SocketHelper
+    public static class NetworkExt
     {
         public static Socket Bind(string server, int port)
         {

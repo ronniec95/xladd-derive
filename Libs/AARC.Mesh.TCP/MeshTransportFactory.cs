@@ -6,12 +6,12 @@ using Microsoft.Extensions.Logging;
 
 namespace AARC.Mesh.TCP
 {
-    public class SocketServiceFactory : IMeshQueueServiceFactory
+    public class MeshTransportFactory : IMeshTransportFactory
     {
         protected readonly IServiceProvider _serviceProvider;
         private Uri _url;
 
-        public SocketServiceFactory(IServiceProvider serviceProvider)
+        public MeshTransportFactory(IServiceProvider serviceProvider)
         {
             _serviceProvider = serviceProvider;
         }
@@ -20,7 +20,7 @@ namespace AARC.Mesh.TCP
         /// Using _serviceHost details to create connection
         /// </summary>
         /// <returns></returns>
-        public IMeshChannelService Create() => Create(_url);
+        public IMeshServiceTransport Create() => Create(_url);
 
 
         /// <summary>
@@ -28,7 +28,7 @@ namespace AARC.Mesh.TCP
         /// </summary>
         /// <param name="servicedetails"></param>
         /// <returns></returns>
-        public IMeshChannelService Create(string servicedetails)
+        public IMeshServiceTransport Create(string servicedetails)
         {
             _url = new Uri(servicedetails);
 
@@ -40,7 +40,7 @@ namespace AARC.Mesh.TCP
         /// </summary>
         /// <param name="url">Host name or IP address</param>
         /// <returns></returns>
-        public SocketTransport Create(Uri url)
+        public IMeshServiceTransport Create(Uri url)
         {
             var qss = new SocketTransport(_serviceProvider.GetService<ILogger<SocketTransport>>());
             qss.ManageConnection(url, false);
@@ -53,7 +53,7 @@ namespace AARC.Mesh.TCP
         /// </summary>
         /// <param name="dispose"></param>
         /// <returns></returns>
-        public IMeshChannelService Create(IDisposable dispose)
+        public IMeshServiceTransport Create(IDisposable dispose)
         {
             var socket = dispose as Socket;
             if (socket != null)

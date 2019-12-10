@@ -1,7 +1,7 @@
 ﻿using System;
 namespace AARC.Mesh.Interface
 {
-    public interface IMeshChannelService: IDuplex<byte[]>, IDisposable
+    public interface IMeshServiceTransport: IDuplex<byte[]>, IDisposable
     {
         bool Connected { get; }
 
@@ -20,6 +20,8 @@ namespace AARC.Mesh.Interface
         /// </summary>
         void ReadAsync();
 
-        string ServiceDetails { get; }
+        string Url { get; }
+
+        void Shutdown();
     }
 }
