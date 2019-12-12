@@ -21,7 +21,7 @@ namespace AARC.Mesh.TCP
     {
         // Size of receive buffer.  
         public const int BufferSize = 1024;
-        public const int PacketSize = 1024;
+        public const int PacketSize = 4194304;
 
         private CancellationTokenSource _localCancelSource;
 

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Buffers;
 using AARC.Mesh.Model;
+using AARC.Mesh.TCP;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace AARC.MeshTests

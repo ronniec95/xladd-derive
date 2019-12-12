@@ -2,13 +2,14 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+
 using AARC.Mesh.Model;
 using AARC.Mesh.SubService;
 using AARC.Mesh.TCP;
 using AARC.Model.Interfaces;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 namespace AARC.Mesh.Client
 {
@@ -53,7 +54,7 @@ namespace AARC.Mesh.Client
             // Todo: Bit of a hack as DS should supply port
             msm.ListeningPort = config.GetValue<Int32>("port", 0);
 
-            var nasdaqTickers = new MeshObservable<IDictionary<string, IAarcPrice>>("nasdaqtestout");
+            var nasdaqTickers = new MeshObservable<IAarcPrice>("nasdaqtestout");
             msm.RegisterChannels(nasdaqTickers);
 
             var nasdaqUpdater = new MeshObserver<IList<string>>("nasdaqtestin");
@@ -65,12 +66,9 @@ namespace AARC.Mesh.Client
             // Connect to publishers of the data we want
             var t3 = msm.StartPublisherConnections(cancellationToken);
 
-            nasdaqTickers.Subscribe((tickerUniverse) =>
+            nasdaqTickers.Subscribe((tickerprices) =>
             {
-                foreach (var kv in tickerUniverse)
-                {
-                    logger.LogInformation($"{kv.Key} update");
-                }
+                 logger.LogInformation($"{tickerprices.Ticker} update");
             });
 
             Task.Delay(30000).Wait();

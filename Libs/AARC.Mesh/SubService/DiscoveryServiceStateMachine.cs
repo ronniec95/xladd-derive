@@ -131,7 +131,7 @@ namespace AARC.Mesh.SubService
                     message.Payload = inputChannels.Keys.Any() ? string.Join(",", inputChannels.Keys) : null;
 #endif
 #if NETSTANDARD2_1 // Targets .netcore 3.0
-                    message.PayLoad = inputQs.Keys.Any() ? string.Join(',',inputQs.Keys) : string.Empty;
+                    message.Payload = inputChannels.Keys.Any() ? string.Join(',', inputChannels.Keys) : string.Empty;
 #endif
                     break;
                 case DiscoveryStates.GetOutputQs:
@@ -139,7 +139,7 @@ namespace AARC.Mesh.SubService
                     message.Payload = outputChannels.Keys.Any() ? string.Join(",", outputChannels.Keys) : null;
 #endif
 #if NETSTANDARD2_1 // Targets .netcore 3.0
-                    message.PayLoad =  outputQs.Keys.Any() ? string.Join(',', outputQs.Keys) : string.Empty;
+                    message.Payload = outputChannels.Keys.Any() ? string.Join(',', outputChannels.Keys) : string.Empty;
 #endif
                     break;
                 default:

@@ -10,6 +10,7 @@ namespace AARC.Repository.EF
     using AARC.Utilities;
     using AARC.RDS;
     using AARC.Repository.Interfaces;
+    using System.Collections.Concurrent;
 
     public class MarketDataRepository : IMarketDataRepository
     {
@@ -22,29 +23,31 @@ namespace AARC.Repository.EF
 
         public IDictionary<string, IAarcPrice> GetClosingPrices(IList<string> tickers, uint from, uint to)
         {
+            var closingPrices = new ConcurrentDictionary<string, IAarcPrice>();
             var s = DateTimeUtilities.ToDate(from);
             var e = DateTimeUtilities.ToDate(to);
-            
-            var query = _context.UnderlyingPrices
-                .AsNoTracking()
-                .Where(u => tickers.Contains(u.Ticker) && u.Date >= s && u.Date <= e)
-                .GroupBy(u => u.Ticker)
-                .ToDictionary(g => g.Key, g => g.OrderBy(u => u.Date).ToList());
 
-            var q = query
-                .Select(d => new TickerPrices
+            foreach (var ticker in tickers)
             {
-                Ticker = d.Key,
-                Volume = d.Value.Select(v => v.Volume ?? 0.0).ToList(),
-                Dates = d.Value.Select(v => DateTimeUtilities.ToUnsignedInt(v.Date)).ToList(),
-                ClosingPrices = d.Value.Select(v => v.AdjustedClose ?? v.Close).ToList(),
-                High = d.Value.Select(v => v.High ?? 0).ToList(),
-                Low = d.Value.Select(v => v.Low ?? 0).ToList(),
-                Open = d.Value.Select(v => v.Open ?? 0).ToList()
-                })
-            .ToDictionary(sp => sp.Ticker, sp => (IAarcPrice)sp);
+                var query = _context.UnderlyingPrices
+                    .AsNoTracking()
+                    .Where(u => u.Ticker == ticker)
+                    .Where(u => u.Date >= s && u.Date <= e)
+                    .ToList();
 
-            return q;
+                var tp = new TickerPrices
+                {
+                    Ticker = ticker,
+                    Volume = query.Select(v => v.Volume ?? 0.0).ToList(),
+                    Dates = query.Select(v => DateTimeUtilities.ToUnsignedInt(v.Date)).ToList(),
+                    ClosingPrices = query.Select(v => v.AdjustedClose ?? v.Close).ToList(),
+                    High = query.Select(v => v.High ?? 0).ToList(),
+                    Low = query.Select(v => v.Low ?? 0).ToList(),
+                    Open = query.Select(v => v.Open ?? 0).ToList()
+                };
+                closingPrices.TryAdd(ticker, tp);
+            }
+            return closingPrices;
         }
 
         public IDictionary<string, IList<double>> GetClosingPrices(string ticker, uint from, uint to)
