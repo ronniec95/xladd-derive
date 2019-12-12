@@ -8,7 +8,7 @@ namespace AARC.Mesh.Model
     /// A mesh subscriber to T as in IObservable<typeparamref name="T"/>
     /// </summary>
     /// <typeparam name="T"></typeparam>
-    public class MeshObservable<T> : IMeshObservable<T> where T : class
+    public class MeshObservable<T> : IMeshObservable<T> where T : class, new()
     {
         public IList<string> InputChannelNames { get; set; }
 

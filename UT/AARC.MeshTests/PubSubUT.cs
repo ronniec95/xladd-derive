@@ -10,19 +10,19 @@ namespace AARC.MeshTests
     [TestClass]
     public class PubSubUT
     {
-        private MeshChannelProxy<IList<string>> marshal;
+        private MeshChannelProxy<List<string>> marshal;
 
         [TestInitialize]
         public void Initialise()
         {
-            marshal = new MeshChannelProxy<IList<string>>("testin", "testout");
+            marshal = new MeshChannelProxy<List<string>>("testin", "testout");
         }
 
         [TestMethod]
         public void TestMeshSubscriber()
         {
             var testdata = new Queue<IList<string>>();
-            var MyStringSubsciber = new MeshObservable<IList<string>>(marshal);
+            var MyStringSubsciber = new MeshObservable<List<string>>(marshal);
 
             using (var handle = MyStringSubsciber.Subscribe((m) => { testdata.Enqueue(m); }))
             {
@@ -36,7 +36,7 @@ namespace AARC.MeshTests
         public void TestMeshThrottle()
         {
             var testdata = new Queue<IList<string>>();
-            var myStringSubscriber = new MeshObservable<IList<string>>(marshal);
+            var myStringSubscriber = new MeshObservable<List<string>>(marshal);
 
             using (var handle = myStringSubscriber.Throttle(TimeSpan.FromMilliseconds(600)).Subscribe((m) => { testdata.Enqueue(m); }))
             {
@@ -49,8 +49,8 @@ namespace AARC.MeshTests
         [TestMethod]
         public void TestMeshBuffer()
         {
-            var testdata = new Queue<IList<IList<string>>>();
-            var MyStringReceiver = new MeshObservable<IList<string>>(marshal);
+            var testdata = new Queue<IList<List<string>>>();
+            var MyStringReceiver = new MeshObservable<List<string>>(marshal);
 
             var handle = MyStringReceiver.Buffer(TimeSpan.FromMilliseconds(600)).Subscribe((m) => { testdata.Enqueue(m); });
             SimulateMeshReceiveMessages(marshal);
@@ -59,7 +59,7 @@ namespace AARC.MeshTests
             Assert.AreEqual<int>(0, testdata.Count);
         }
 
-        public void SimulateMeshReceiveMessages(MeshChannelProxy<IList<string>> sender)
+        public void SimulateMeshReceiveMessages(MeshChannelProxy<List<string>> sender)
         {
             for (var i = 0; i < 100; i++)
                 sender.OnNext(new MeshMessage { PayLoad = $"[ \"Test{i}\" ]" });
@@ -68,12 +68,12 @@ namespace AARC.MeshTests
         [TestMethod]
         public void TestMeshPublisher()
         {
-            var MyStringSender = new MeshObserver<IList<string>>(marshal);
+            var MyStringSender = new MeshObserver<List<string>>(marshal);
           
             SimulateMeshSendMessages(MyStringSender);
         }
 
-        private void SimulateMeshSendMessages(MeshObserver<IList<string>> sender)
+        private void SimulateMeshSendMessages(MeshObserver<List<string>> sender)
         {
 
             var outMyStringObserver = new MeshDictionary<MeshMessage>();

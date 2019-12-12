@@ -9,7 +9,8 @@ using Microsoft.Extensions.Logging;
 using AARC.Mesh.Model;
 using AARC.Mesh.SubService;
 using AARC.Mesh.TCP;
-using AARC.Model.Interfaces;
+using AARC.Model;
+using System.Linq;
 
 namespace AARC.Mesh.Client
 {
@@ -22,6 +23,7 @@ namespace AARC.Mesh.Client
     {
         public static void Main(string[] args)
         {
+            ManualResetEvent dsConnectEvent = new ManualResetEvent(false);
             log4net.GlobalContext.Properties["LogFileName"] = $"MeshTestClient";
             var cancellationTokenSrc = new CancellationTokenSource();
             var cancellationToken = cancellationTokenSrc.Token;
@@ -54,7 +56,7 @@ namespace AARC.Mesh.Client
             // Todo: Bit of a hack as DS should supply port
             msm.ListeningPort = config.GetValue<Int32>("port", 0);
 
-            var nasdaqTickers = new MeshObservable<IAarcPrice>("nasdaqtestout");
+            var nasdaqTickers = new MeshObservable<TickerPrices>("nasdaqtestout");
             msm.RegisterChannels(nasdaqTickers);
 
             var nasdaqUpdater = new MeshObserver<IList<string>>("nasdaqtestin");
@@ -68,16 +70,18 @@ namespace AARC.Mesh.Client
 
             nasdaqTickers.Subscribe((tickerprices) =>
             {
-                 logger.LogInformation($"{tickerprices.Ticker} update");
+                logger.LogInformation($"{tickerprices.Ticker} Updated {tickerprices.Dates.Max()}-{tickerprices.Dates.Min()}");
+                dsConnectEvent.Set();
             });
 
             Task.Delay(30000).Wait();
-            for(var i = 0; i < 10; i ++)
+            for(; ; )
             {
-                Task.Delay(1000).Wait();
+                dsConnectEvent.Reset();
                 logger.LogInformation("Ticker update");
                 var tickers = new List<string> { "AAPL" };
                 nasdaqUpdater.OnNext(tickers);
+                dsConnectEvent.WaitOne();
             }
             logger.LogInformation("Waiting for death");
             Task.WaitAll(t1, t2, t3);

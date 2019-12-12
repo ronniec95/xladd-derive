@@ -42,7 +42,15 @@ namespace AARC.MeshTests
             var bytes = value.Encode();
             foreach (var transportId in value.Routes)
                 if (_meshServices.ContainsKey(transportId))
-                    _meshServices[transportId].OnPublish(bytes);
+                {
+                    var service = _meshServices[transportId];
+                    if (service.Connected)
+                        _meshServices[transportId].OnPublish(bytes);
+                    else
+                    {
+                        _meshServices.Remove(transportId, out service);
+                    }
+                }
         }
 
         /// <summary>

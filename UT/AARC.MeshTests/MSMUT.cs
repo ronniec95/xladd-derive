@@ -27,8 +27,8 @@ namespace AARC.MeshTests
             var msm = new MeshServiceManager(new NullLogger<MeshServiceManager>(), dssm, new DiscoveryMonitor<DiscoveryMessage>(new NullLogger<DiscoveryMonitor<DiscoveryMessage>>(), null), transport);
             Assert.IsNotNull(msm);
 
-            var omarshal = new MeshChannelProxy<IDictionary<string, TickerPrices>>(inputq: "nasdaqtestout");
-            var nssdaqObservableSubscriber = new MeshObservable<IDictionary<string, TickerPrices>>(omarshal);
+            var omarshal = new MeshChannelProxy<Dictionary<string, TickerPrices>>(inputq: "nasdaqtestout");
+            var nssdaqObservableSubscriber = new MeshObservable<Dictionary<string, TickerPrices>>(omarshal);
             msm.RegisterChannels(nssdaqObservableSubscriber);
 
             var imarshal = new MeshChannelProxy<IList<string>>(outputq: "nasdaqtestin");

@@ -54,7 +54,7 @@ namespace AARC.Service.Hosted
                     // Add our Market Data Repository
                     services.AddScoped<IMarketDataRepository, Repository.EF.MarketDataRepository>();
                     // Might be worth doing this as a factory with type and suppliying name for more configurability
-                    services.AddSingleton<IMeshObservable<IList<string>>>(new MeshObservable<IList<string>>("nasdaqtestin"));
+                    services.AddSingleton<IMeshObservable<List<string>>>(new MeshObservable<List<string>>("nasdaqtestin"));
                     services.AddSingleton<IMeshObserver<IAarcPrice>>(new MeshObserver<IAarcPrice>("nasdaqtestout"));
                     services.AddSingleton<IMeshReactor<MeshMessage>, Mesh.Dataflow.NasdaqTradableTickers>();
 
