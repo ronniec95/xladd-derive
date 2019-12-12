@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿#if !NETSTANDARD2_1
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace System.Buffers
@@ -97,3 +98,4 @@ namespace System.Buffers
 		}
 	}
 }
+#endif

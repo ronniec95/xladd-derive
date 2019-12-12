@@ -17,12 +17,12 @@ namespace AARC.Mesh.Dataflow
         private IDictionary<string, IAarcPrice> _marketUniverse;
         private readonly object _sync = new object();
         private IList<IMeshObserver<IAarcPrice>> _observers;
-        private IList<IMeshObservable<IList<string>>> _observerables;
+        private IList<IMeshObservable<List<string>>> _observerables;
         private readonly HashSet<string> _tickers;
         private readonly ILogger<NasdaqTradableTickers> _logger;
 
         public string Name { get { return "nasdaq"; } }
-        public NasdaqTradableTickers(ILogger<NasdaqTradableTickers> logger, IMarketDataRepository marketDataRepository, IMeshObserver<IAarcPrice> observer, IMeshObservable<IList<string>> observerable)
+        public NasdaqTradableTickers(ILogger<NasdaqTradableTickers> logger, IMarketDataRepository marketDataRepository, IMeshObserver<IAarcPrice> observer, IMeshObservable<List<string>> observerable)
         {
             _logger = logger;
             _tickers = new HashSet<string>();
@@ -30,7 +30,7 @@ namespace AARC.Mesh.Dataflow
             _tickers.Add("AAPL");
             _marketDataRepository = marketDataRepository;
             _observers = new List<IMeshObserver<IAarcPrice>> { observer };
-            _observerables = new List<IMeshObservable<IList<string>>> { observerable };
+            _observerables = new List<IMeshObservable<List<string>>> { observerable };
 
             Queues = new List < IRouteRegister < MeshMessage >> { observer as IRouteRegister<MeshMessage>, observerable as IRouteRegister<MeshMessage> };
 

@@ -213,8 +213,19 @@ namespace AARC.Mesh.TCP
             var bytes = value.Encode();
             foreach (var transportId in value.Routes)
                 if (_meshServices.ContainsKey(transportId))
-                    _meshServices[transportId].OnPublish(bytes);
-                else
+                    if (_meshServices.ContainsKey(transportId))
+                    {
+                        var service = _meshServices[transportId];
+                        if (service.Connected)
+                            _meshServices[transportId].OnPublish(bytes);
+                        else
+                        {
+                            _logger.LogInformation($"{transportId}: Disconnected - Removing");
+                            _meshServices.Remove(transportId, out service);
+                            service.Dispose();
+                        }
+                    }
+                    else
                     _logger.LogInformation($"{transportId}: NO ROUTES available");
         }
 

@@ -148,11 +148,14 @@ namespace AARC.Mesh.TCP
         /// </summary>
         public void ReadAsync()
         {
-            if (!_localCancelSource?.IsCancellationRequested ?? false)
+            if ((_localCancelSource?.IsCancellationRequested ?? true) || (!_socket?.Connected ?? true))
+                // Need to signal socket is dead if not cancelled
+                _logger?.LogInformation($"[{_url}]: ReadAsync cancelled or not connected");
+            else
             {
                 var result = _socket?.BeginReceive(_rawReceiveBuffer, 0, SocketTransport.BufferSize, 0, new AsyncCallback(ReadCallback), this);
             }
-            else _logger?.LogInformation($"[{_url}]: ReadAsync cancelled");
+
         }
 
         public void Shutdown()
@@ -210,7 +213,6 @@ namespace AARC.Mesh.TCP
                 var handler = (Socket)ar.AsyncState;
                 // Complete sending the data to the remote device.  
                 int bytesSent = handler?.EndSend(ar) ?? 0;
-                //                _logger?.LogInformation($"[{handler.SocketDetails()}]: Tx {bytesSent} bytes");
             }
             catch (Exception e)
             {
@@ -245,7 +247,11 @@ namespace AARC.Mesh.TCP
                 {
                     _socket?.BeginSend(message, 0, message.Length, 0, new AsyncCallback(SendCallback), _socket);
                 }
-                else OnError(new SocketException((int)SocketError.NotConnected));
+                else
+                {
+                    OnError(new SocketException((int)SocketError.NotConnected));
+                    OnCompleted();
+                }
             }
             catch (Exception ex)
             {

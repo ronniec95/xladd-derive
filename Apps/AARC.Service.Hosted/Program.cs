@@ -22,8 +22,6 @@ namespace AARC.Service.Hosted
     {
         public static void Main(string[] args)
         {
-            log4net.GlobalContext.Properties["LogFileName"] = "MeshReactorService";
-
             CreateHostBuilder(args).Build().Run();
         }
 
@@ -39,6 +37,10 @@ namespace AARC.Service.Hosted
                 })
                 .ConfigureServices((hostContext, services) =>
                 {
+                    var service = hostContext.Configuration.GetValue<string>("service", "MeshDataFlow");
+                    var port = hostContext.Configuration.GetValue<string>("port", "");
+                    log4net.GlobalContext.Properties["LogFileName"] = $"{service}_{port}";
+
                     // DiscoveryMonitor connects remotely? Needs Host/Port  
                     // MeshSocketServer allows remote and internal connections
                     services.AddOptions();
@@ -60,14 +62,10 @@ namespace AARC.Service.Hosted
 
                     services.AddHostedService<MeshHostedService>();
                 })
-                .ConfigureLogging((hostContex, logging) =>
+                .ConfigureLogging((hostContext, logging) =>
                 {
-//                    var service = hostContex.Configuration.GetValue<string>("service", "MeshDataFlow");
-//                    var port = hostContex.Configuration.GetValue<string>("port", "");
-//                    log4net.GlobalContext.Properties["LogFileName"] = $"{service}_{port}";
-
-                    logging.AddLog4Net();
                     logging.SetMinimumLevel(LogLevel.Debug);
+                    logging.AddLog4Net();
                 });
 
     }

@@ -1,11 +1,9 @@
 ﻿using AARC.Model.Interfaces;
-using System;
 using System.Collections.Generic;
-using System.Text;
 
 namespace AARC.Model
 {
-    public struct TickerPrices : IAarcPrice
+    public class TickerPrices : IAarcPrice
     {
         public string Ticker { get; set; }
         public IList<uint> Dates { get; set; }
