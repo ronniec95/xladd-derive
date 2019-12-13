@@ -33,7 +33,6 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Log4Net.AspNetCore" Version="3.0.3" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\UT\AARC.Graph.Test\AARC.Graph.Test.csproj" />
     <ProjectReference Include="..\..\Libs\AARC.Mesh\AARC.Mesh.csproj" />
     <ProjectReference Include="..\..\Libs\AARC.Mesh.TCP\AARC.Mesh.TCP.csproj" />
     <ProjectReference Include="..\..\Libs\AARC.Mesh.Dataflow\AARC.Mesh.Dataflow.csproj" />
