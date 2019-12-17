@@ -13,11 +13,9 @@
     <Compile Remove="Extensions_AVS.cs" />
   </ItemGroup>
   <ItemGroup>
-    <Reference Include="System.ComponentModel.Annotations">
-      <HintPath>/usr/local/share/dotnet/sdk/NuGetFallbackFolder/microsoft.netcore.app/2.2.0/ref/netcoreapp2.2/System.ComponentModel.Annotations.dll</HintPath>
-    </Reference>
+    <None Remove="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <None Remove="packages.config" />
+    <PackageReference Include="System.ComponentModel.Annotations" Version="4.7.0" />
   </ItemGroup>
 </Project>

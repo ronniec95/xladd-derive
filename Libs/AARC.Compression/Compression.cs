@@ -51,7 +51,7 @@ namespace AARC.Compression
                 return Encoding.UTF8.GetString(buffer);
             }
         }
-
+  #if NETSTANDARD2_1
         public static Stream Compress_Stream(Stream inputStream)
         {
             var outputStream = new MemoryStream();
@@ -69,5 +69,6 @@ namespace AARC.Compression
             decompressor.Dispose();
             return outputStream;
         }
+#endif
     }
 }

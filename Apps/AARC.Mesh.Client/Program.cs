@@ -21,71 +21,113 @@ namespace AARC.Mesh.Client
     /// </summary>
     class Program
     {
+
+
+        class MeshClient : IDisposable
+        {
+            MeshServiceManager msm;
+            static CancellationTokenSource _cts = new CancellationTokenSource();
+            public IServiceProvider ServiceProvider;
+            public Task DiscoveryService;
+            public Task ChannelSubscriber;
+            public Task ChannelPublisher;
+            public MeshClient(string[] args)
+            {
+                var cancellationToken = _cts.Token;
+
+                var services = new ServiceCollection()
+                    .AddLogging()
+                    .AddOptions();
+
+                MeshServiceConfig.Server(services);
+                SocketServiceConfig.Transport(services);
+
+                ServiceProvider = services.BuildServiceProvider();
+
+                var config = new ConfigurationBuilder()
+                    .AddCommandLine(args)
+                    .AddJsonFile("appsettings.json", optional: true)
+                    .AddEnvironmentVariables()
+                    .Build();
+
+                ServiceProvider.GetService<ILoggerFactory>()
+                    .AddLog4Net();
+
+                msm = ServiceProvider.GetService<MeshServiceManager>();
+
+                var discoveryAddress = new Uri(config.GetValue<string>("ds", "tcp://localhost:9999"));
+
+                // Todo: Bit of a hack as DS should supply port
+                msm.ListeningPort = config.GetValue<Int32>("port", 0);
+
+                DiscoveryService = msm.StartDiscoveryServices(discoveryAddress.ToString(), cancellationToken);
+                // Listen for subscibers for output Qs
+                ChannelSubscriber = msm.StartListeningServices(cancellationToken);
+                // Connect to publishers of the data we want
+                ChannelPublisher = msm.StartPublisherConnections(cancellationToken);
+            }
+            public IObservable<T> CreateObservable<T>(string channel) where T: class,new()
+            {
+                var observable = new MeshObservable<T>(channel);
+                msm.RegisterChannels(observable);
+                return observable;
+            }
+
+            public IObserver<T> CreateObserver<T>(string channel) where T: class,new()
+            {
+                var observer = new MeshObserver<T>(channel);
+                msm.RegisterChannels(observer);
+                return observer;
+            }
+
+            public void Stop()
+            {
+                if (!_cts.IsCancellationRequested)
+                    _cts.Cancel();
+                Task.WaitAll(DiscoveryService, ChannelPublisher, ChannelSubscriber);
+                DiscoveryService = Task.CompletedTask;
+                ChannelPublisher = Task.CompletedTask;
+                ChannelSubscriber = Task.CompletedTask;
+            }
+            public void Dispose() => Stop();
+        }
         public static void Main(string[] args)
         {
             ManualResetEvent dsConnectEvent = new ManualResetEvent(false);
             log4net.GlobalContext.Properties["LogFileName"] = $"MeshTestClient";
-            var cancellationTokenSrc = new CancellationTokenSource();
-            var cancellationToken = cancellationTokenSrc.Token;
-            var services = new ServiceCollection()
-                .AddLogging()
-                .AddOptions();
 
-            MeshServiceConfig.Server(services);
-            SocketServiceConfig.Transport(services);
+            var msm = new MeshClient(args);
 
-            var serviceProvider = services.BuildServiceProvider();
-
-            var config = new ConfigurationBuilder()
-                .AddCommandLine(args)
-                .AddJsonFile("appsettings.json", optional: true)
-                .AddEnvironmentVariables()
-                .Build();
-
-            serviceProvider.GetService<ILoggerFactory>()
-                .AddLog4Net();
-
-            var logger = serviceProvider.GetService<ILoggerFactory>()
+            var logger = msm.ServiceProvider.GetService<ILoggerFactory>()
                 .CreateLogger<Program>();
 
             logger.LogDebug("Starting application");
-            var msm = serviceProvider.GetService<MeshServiceManager>();
-
-            var discoveryAddress = new Uri(config.GetValue<string>("ds", "tcp://localhost:9999"));
-
-            // Todo: Bit of a hack as DS should supply port
-            msm.ListeningPort = config.GetValue<Int32>("port", 0);
-
-            var nasdaqTickers = new MeshObservable<TickerPrices>("nasdaqtestout");
-            msm.RegisterChannels(nasdaqTickers);
-
-            var nasdaqUpdater = new MeshObserver<IList<string>>("nasdaqtestin");
-            msm.RegisterChannels(nasdaqUpdater);
-
-            var t1 = msm.StartDiscoveryServices(discoveryAddress.ToString(), cancellationToken);
-            // Listen for subscibers for output Qs
-            var t2 = msm.StartListeningServices(cancellationToken);
-            // Connect to publishers of the data we want
-            var t3 = msm.StartPublisherConnections(cancellationToken);
-
-            nasdaqTickers.Subscribe((tickerprices) =>
+            try
             {
-                logger.LogInformation($"{tickerprices.Ticker} Updated {tickerprices.Dates.Max()}-{tickerprices.Dates.Min()}");
-                dsConnectEvent.Set();
-            });
+                var nasdaqTickers = msm.CreateObservable<TickerPrices>("nasdaqtestout");
+                var nasdaqUpdater = msm.CreateObserver<List<string>>("nasdaqtestin");
 
-            Task.Delay(30000).Wait();
-            for(; ; )
-            {
-                dsConnectEvent.Reset();
-                logger.LogInformation("Ticker update");
-                var tickers = new List<string> { "AAPL" };
-                nasdaqUpdater.OnNext(tickers);
-                dsConnectEvent.WaitOne();
+                nasdaqTickers.Subscribe((tickerprices) =>
+                {
+                    logger.LogInformation($"{tickerprices.Ticker} Updated {tickerprices.Dates.Max()}-{tickerprices.Dates.Min()}");
+                    dsConnectEvent.Set();
+                });
+
+                Task.Delay(30000).Wait();
+                for (; ; )
+                {
+                    dsConnectEvent.Reset();
+                    logger.LogInformation("Sending Ticker update");
+                    var tickers = new List<string> { "AAPL" };
+                    nasdaqUpdater.OnNext(tickers);
+                    dsConnectEvent.WaitOne();
+                }
             }
-            logger.LogInformation("Waiting for death");
-            Task.WaitAll(t1, t2, t3);
-
+            finally
+            {
+                msm.Stop();
+                logger.LogInformation("Waiting for death");
+            }
             logger.LogDebug("All done!");
         }
     }

@@ -220,9 +220,10 @@ namespace AARC.Mesh.TCP
                             _meshServices[transportId].OnPublish(bytes);
                         else
                         {
+                            // Todo: What if we cant remove?
                             _logger.LogInformation($"{transportId}: Disconnected - Removing");
-                            _meshServices.Remove(transportId, out service);
-                            service.Dispose();
+                            if (_meshServices.TryRemove(transportId, out service))
+                                service.Dispose();
                         }
                     }
                     else

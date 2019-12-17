@@ -5,3 +5,6 @@ obj
 .vs
 .bin
 .gitignore
+/MeshClientLibrary
+/packages
+/Python/discoveryservice/__pycache__
