@@ -25,7 +25,7 @@ namespace AARC.Service.Hosted
             // Todo: Bit of a hack as DS should supply port
             _msm.ListeningPort = configuration.GetValue<Int32>("port", 0);
 
-            foreach (var route in queueClient.Queues)
+            foreach (var route in queueClient.ChannelRouters)
                 _msm.RegisterChannels(route);
         }
 

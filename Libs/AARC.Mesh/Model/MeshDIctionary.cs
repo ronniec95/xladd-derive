@@ -5,7 +5,7 @@ using Newtonsoft.Json;
 
 namespace AARC.Mesh.Model
 {
-    public class MeshDictionary<T> : ConcurrentDictionary<string, INetQueueObservable<T>>
+    public class MeshDictionary<T> : ConcurrentDictionary<string, IChannelObservable<T>>
     {
         public string Serialize() => JsonConvert.SerializeObject(this);
         public static MeshDictionary<T> Deserialise(string message) => JsonConvert.DeserializeObject<MeshDictionary<T>>(message);

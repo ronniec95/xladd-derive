@@ -26,7 +26,5 @@ namespace AARC.Mesh.Interface
 
     public interface IMeshObservable<T> : IObservable<T>, IRouteRegister<MeshMessage> where T: class, new() { }
 
-
     public delegate void MeshChannelResult<T>(string action, T message) where T : class;
-
 }

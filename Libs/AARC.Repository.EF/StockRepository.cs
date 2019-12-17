@@ -44,5 +44,7 @@ namespace AARC.Repository.EF
         public IEnumerable<Stock> GetStocksBySector(string sector) => _context.Stocks.AsNoTracking().Where(s => s.Sector == sector);
 
         public IEnumerable<Stock> GetStocksByGreaterEqualMarketCap(long cap) => _context.Stocks.AsNoTracking().Where(s => s.MarketCap >= cap);
+
+        public IEnumerable<Stock> GetStocksByWithOptionsMarketCap() => _context.Stocks.AsNoTracking().Where(x => x.HasOptions.HasValue && x.HasOptions.Value == true && x.MarketCap.HasValue).OrderByDescending(x => x.MarketCap.Value);
     }
 }

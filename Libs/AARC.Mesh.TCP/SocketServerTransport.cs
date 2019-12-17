@@ -78,7 +78,6 @@ namespace AARC.Mesh.TCP
             _logger.LogInformation($"Creating a connecting to {servicedetails}");
             var qss = _qServiceFactory.Create(servicedetails);
             _meshServices[servicedetails] = qss;
-
         }
 
         public void Listen(int port, CancellationToken cancellationToken)
@@ -136,7 +135,6 @@ namespace AARC.Mesh.TCP
 
             // Create the state object.  
             var service = _qServiceFactory.Create(socket);
-            //service.NewMessageBytes += ProcessNewBytes;
             socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
             _logger?.LogInformation($"[{service.Url}]: New Connection");
             service.Subscribe(this);

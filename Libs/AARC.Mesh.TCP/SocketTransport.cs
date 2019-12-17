@@ -96,7 +96,6 @@ namespace AARC.Mesh.TCP
         }
 
         /// <summary>
-        ///
         /// http://tldp.org/HOWTO/TCP-Keepalive-HOWTO/overview.html
         /// </summary>
         /// <param name="hostname"></param>
@@ -188,7 +187,6 @@ namespace AARC.Mesh.TCP
 
                 if (bytesRead > 0)
                 {
-                    //                    _logger?.LogInformation($"[{SocketDetails}]: Rx {bytesRead} bytes");
                     // Clone the buffer to the size we want.
                     // Read
                     var rawmessage = service._rawReceiveBuffer.CloneReduce(bytesRead);
@@ -228,6 +226,7 @@ namespace AARC.Mesh.TCP
             Dispose();
         }
 
+        // Todo: Notifiy who sent it?
         public void OnError(Exception error)
         {
             _logger.LogError(error, "Send error");

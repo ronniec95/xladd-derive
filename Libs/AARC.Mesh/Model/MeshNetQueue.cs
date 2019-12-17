@@ -4,8 +4,7 @@ using AARC.Mesh.Interface;
 
 namespace AARC.Mesh.Model
 {
-
-    public class MeshNetChannel<T> : INetQueueObservable<T> where T: class
+    public class MeshNetChannel<T> : IChannelObservable<T> where T: class
     {
         private List<IObserver<T>> observers;
 
@@ -33,7 +32,7 @@ namespace AARC.Mesh.Model
         {
             if (!observers.Contains(observer))
                 observers.Add(observer);
-            return new Unsubscriber(observers, observer);
+            return new Unsubscriber<IObserver<T>>(observers, observer);
         }
 
         public void Completed()
@@ -43,24 +42,6 @@ namespace AARC.Mesh.Model
                     observer.OnCompleted();
 
             observers.Clear();
-        }
-
-        private class Unsubscriber : IDisposable
-        {
-            private List<IObserver<T>> _observers;
-            private IObserver<T> _observer;
-
-            public Unsubscriber(List<IObserver<T>> observers, IObserver<T> observer)
-            {
-                this._observers = observers;
-                this._observer = observer;
-            }
-
-            public void Dispose()
-            {
-                if (_observer != null && _observers.Contains(_observer))
-                    _observers.Remove(_observer);
-            }
         }
     }
 

@@ -14,6 +14,6 @@ namespace AARC.Graph.Test
 
         public string Name => throw new NotImplementedException();
 
-        public IList<IRouteRegister<MeshMessage>> Queues => throw new NotImplementedException();
+        public IList<IRouteRegister<MeshMessage>> ChannelRouters => throw new NotImplementedException();
     }
 }

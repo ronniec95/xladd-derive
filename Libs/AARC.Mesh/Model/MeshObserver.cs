@@ -19,22 +19,22 @@ namespace AARC.Mesh.Model
         /// </summary>
         public IList<string> OutputChannelNames { get; set; }
 
-        private readonly MeshChannelProxy<T> _channelsMarshal;
+        private readonly MeshChannelProxy<T> _channelProxy;
 
         public MeshObserver(MeshChannelProxy<T> external)
         {
-            _channelsMarshal = external;
+            _channelProxy = external;
         }
 
-        public MeshObserver(string qname): this(new MeshChannelProxy<T>(outputq: qname)) { }
+        public MeshObserver(string channelName): this(new MeshChannelProxy<T>(outputChannelName: channelName)) { }
 
-        public MeshChannelResult<MeshMessage> PublishChannel { get { return _channelsMarshal.PublishChannel; } set { _channelsMarshal.PublishChannel += value; } }
+        public MeshChannelResult<MeshMessage> PublishChannel { get { return _channelProxy.PublishChannel; } set { _channelProxy.PublishChannel += value; } }
 
-        public void OnCompleted() => _channelsMarshal.OnCompleted();
+        public void OnCompleted() => _channelProxy.OnCompleted();
 
-        public void OnError(Exception error) => _channelsMarshal.OnError(error);
+        public void OnError(Exception error) => _channelProxy.OnError(error);
 
-        public void OnNext(T value) => _channelsMarshal.OnPost(value);
+        public void OnNext(T value) => _channelProxy.OnPost(value);
 
         public void Subscriber(IObservable<MeshMessage> provider)
         {
@@ -42,10 +42,8 @@ namespace AARC.Mesh.Model
 //                unsubscriber = provider.Subscribe(this);
         }
 
-        public void RegisterDependencies(MeshDictionary<MeshMessage> outputQs) => _channelsMarshal.RegisterDependencies(outputQs: outputQs);
-
         public void RegisterReceiverChannels(MeshDictionary<MeshMessage> inputQChannels) { }
 
-        public void RegistePublisherChannels(MeshDictionary<MeshMessage> outputChannels) => _channelsMarshal.RegistePublisherChannels(outputChannels);
+        public void RegistePublisherChannels(MeshDictionary<MeshMessage> outputChannels) => _channelProxy.RegistePublisherChannels(outputChannels);
     }
 }

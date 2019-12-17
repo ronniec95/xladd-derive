@@ -32,7 +32,7 @@ namespace AARC.Mesh.Dataflow
             _observers = new List<IMeshObserver<IAarcPrice>> { observer };
             _observerables = new List<IMeshObservable<List<string>>> { observerable };
 
-            Queues = new List < IRouteRegister < MeshMessage >> { observer as IRouteRegister<MeshMessage>, observerable as IRouteRegister<MeshMessage> };
+            ChannelRouters = new List < IRouteRegister < MeshMessage >> { observer as IRouteRegister<MeshMessage>, observerable as IRouteRegister<MeshMessage> };
 
             foreach (var observable in _observerables)
                 observable.Subscribe((tickers) =>
@@ -45,7 +45,7 @@ namespace AARC.Mesh.Dataflow
             Update();
         }
 
-        public IList<IRouteRegister<MeshMessage>> Queues { get; private set; }
+        public IList<IRouteRegister<MeshMessage>> ChannelRouters { get; private set; }
 
         private void Update()
         {

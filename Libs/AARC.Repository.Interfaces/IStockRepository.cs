@@ -14,5 +14,6 @@ namespace AARC.Repository.Interfaces
         IEnumerable<Stock> GetStocksByExchange(string exchange);
         IEnumerable<Stock> GetStocksBySector(string sector);
         IEnumerable<Stock> GetStocksByGreaterEqualMarketCap(long cap);
+        IEnumerable<Stock> GetStocksByWithOptionsMarketCap();
     }
 }
