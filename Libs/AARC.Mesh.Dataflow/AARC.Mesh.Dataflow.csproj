@@ -3,11 +3,7 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
   </PropertyGroup>
-
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <Optimize></Optimize>
-    <Optimize></Optimize>
-  </PropertyGroup>
+  
   <ItemGroup>
     <ProjectReference Include="..\AARC.Mesh\AARC.Mesh.csproj" />
     <ProjectReference Include="..\AARC.Model\AARC.Model.csproj" />

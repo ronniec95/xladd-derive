@@ -9,28 +9,42 @@ using Microsoft.Extensions.Logging;
 
 namespace AARC.Mesh.Dataflow
 {
-    public class BiggestStocks : IMeshReactor<MeshMessage>
+    public class BiggestStocksReactor : IMeshReactor<MeshMessage>
     {
         private readonly IStockRepository _stocksRepository;
         private readonly object _sync = new object();
         private readonly MeshObserver<List<Stock>> _observer;
-        private readonly ILogger<BiggestStocks> _logger;
+        private readonly ILogger<BiggestStocksReactor> _logger;
+        private List<Stock> stocks = null;
 
-        public BiggestStocks(ILogger<BiggestStocks> logger, IStockRepository stocksRepository)
+        public BiggestStocksReactor(ILogger<BiggestStocksReactor> logger, IStockRepository stocksRepository)
         {
             _logger = logger;
             _stocksRepository = stocksRepository;
             _observer = new MeshObserver<List<Stock>>("biggeststocks");
 
             ChannelRouters = new List<IRouteRegister<MeshMessage>> { _observer as IRouteRegister<MeshMessage>};
+
+
+            _observer.OnConnect += ((transportUrl) =>
+            {
+                lock(_sync)
+                    if (stocks != null)
+                        _observer?.OnNext(stocks);
+            });
         }
 
         public void UpdateBiggestStocks()
         {
-            var stocks = _stocksRepository
-                .GetStocksByWithOptionsMarketCap()
-                .ToList();
+            if (stocks == null)
+                lock (_sync)
+                    stocks = _stocksRepository
+                        .GetAllStocks()
+                        //.GetStocksByWithOptionsMarketCap()
+                        .ToList();
 
+
+            lock (_sync)
                 _observer?.OnNext(stocks);
         }
 

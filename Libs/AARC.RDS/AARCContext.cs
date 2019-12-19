@@ -13,6 +13,8 @@ namespace AARC.RDS
 
         public DbSet<Stock> Stocks { get; set; }
 
+        public DbSet<Dividend> Dividends { get; set; }
+
         public DbSet<ServiceStats> ServiceStats { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)

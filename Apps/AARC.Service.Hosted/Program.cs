@@ -56,7 +56,10 @@ namespace AARC.Service.Hosted
                     // Add our Market Data Repository
                     services.AddScoped<IMarketDataRepository, Repository.EF.MarketDataRepository>();
                     // Might be worth doing this as a factory with type and suppliying name for more configurability
-                    services.AddSingleton<IMeshReactor<MeshMessage>, Mesh.Dataflow.NasdaqTradableTickers>();
+                    //                    services.AddSingleton<IMeshReactor<MeshMessage>, Mesh.Dataflow.NasdaqTradableTickers>();
+
+                    services.AddScoped<IStockRepository, Repository.EF.StockRepository>();
+                    services.AddSingleton<IMeshReactor<MeshMessage>, Mesh.Dataflow.BiggestStocksReactor>();
 
                     services.AddHostedService<MeshHostedService>();
                 })

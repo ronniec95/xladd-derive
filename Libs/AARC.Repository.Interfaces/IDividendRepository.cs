@@ -9,5 +9,8 @@ namespace AARC.Repository.Interfaces
         void Add(Dividend dividend);
         void Overwrite(List<Dividend> dividends);
         DateTime Max(string symbol);
+
+        List<Dividend> GetAllDividends();
+        List<Dividend> GetDividends(uint startDate, uint endDate);
     }
 }

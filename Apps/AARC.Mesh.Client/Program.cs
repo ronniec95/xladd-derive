@@ -35,12 +35,20 @@ namespace AARC.Mesh.Client
             try
             {
                 var nasdaqTickers = msm.CreateObservable<TickerPrices>("nasdaqtestout");
-//                var nasdaqUpdater = msm.CreateObserver<List<string>>("nasdaqtestin");
+                //                var nasdaqUpdater = msm.CreateObserver<List<string>>("nasdaqtestin");
+                var biggeststocks = msm.CreateObservable<List<Stock>>("biggeststocks");
 
                 nasdaqTickers.Subscribe((tickerprices) =>
                 {
                     logger.LogInformation($"{tickerprices.Ticker} Updated {tickerprices.Dates.Max()}-{tickerprices.Dates.Min()}");
 //                    dsConnectEvent.Set();
+                });
+                biggeststocks.Subscribe((stocks) =>
+                {
+                    logger.LogInformation($"Biggiest Stocks [{stocks.Count}]");
+                    foreach (var stock in stocks)
+                        logger.LogInformation($"{stock.Ticker} {stock.MarketCap}, {stock.HasOptions}");
+                    //                    dsConnectEvent.Set();
                 });
 
                 Task.Delay(-1).Wait();

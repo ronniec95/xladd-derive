@@ -10,7 +10,6 @@ namespace AARC.Repository.EF
     using AARC.Utilities;
     using AARC.RDS;
     using AARC.Repository.Interfaces;
-    using System.Collections.Concurrent;
 
     public class MarketDataRepository : IMarketDataRepository
     {
