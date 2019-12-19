@@ -10,28 +10,25 @@ namespace AARC.Mesh.Model
     /// <typeparam name="T"></typeparam>
     public class MeshObservable<T> : IMeshObservable<T> where T : class, new()
     {
-        public IList<string> InputChannelNames { get; set; }
+        public IList<string> InputChannelNames { get { return _channelProxy.InputChannelNames; } }
 
-        /// <summary>
-        /// Names of Output Queues
-        /// </summary>
-        public IList<string> OutputChannelNames { get; set; }
+        public IList<string> OutputChannelNames { get { return _channelProxy.OutputChannelNames; } }
 
-        private MeshChannelProxy<T> _channelsMarshal;
+        private MeshChannelProxy<T> _channelProxy;
 
         public MeshObservable(MeshChannelProxy<T> external)
         {
-            _channelsMarshal = external;
+            _channelProxy = external;
         }
 
         public MeshObservable(string qname) : this(new MeshChannelProxy<T>(inputChannelName: qname)) { }
 
-        public IDisposable Subscribe(IObserver<T> observer) => _channelsMarshal.Subscribe(observer);
+        public IDisposable Subscribe(IObserver<T> observer) => _channelProxy.Subscribe(observer);
 
-        public void RegisterReceiverChannels(MeshDictionary<MeshMessage> inputQChannels) => _channelsMarshal.RegisterReceiverChannels(inputQChannels);
+        public void RegisterReceiverChannels(MeshDictionary<MeshMessage> inputQChannels) => _channelProxy.RegisterReceiverChannels(inputQChannels);
 
         public void RegistePublisherChannels(MeshDictionary<MeshMessage> outputChannels) {}
 
-        public MeshChannelResult<MeshMessage> PublishChannel { get { return _channelsMarshal.PublishChannel; } set { _channelsMarshal.PublishChannel += value; } }
+        public MeshChannelResult<MeshMessage> PublishChannel { get { return _channelProxy.PublishChannel; } set { _channelProxy.PublishChannel += value; } }
     }
 }

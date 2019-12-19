@@ -7,10 +7,16 @@ namespace AARC.Mesh.Model
     public class MeshNetChannel<T> : IChannelObservable<T> where T: class
     {
         private List<IObserver<T>> observers;
+        private IChannelProxy onConnectCallbackProxy = null;
 
         public MeshNetChannel()
         {
             observers = new List<IObserver<T>>();
+        }
+
+        public MeshNetChannel(IChannelProxy callBackProxy): this()
+        {
+            onConnectCallbackProxy = callBackProxy;
         }
 
         public string Name { get; set; }
@@ -28,11 +34,13 @@ namespace AARC.Mesh.Model
             }
         }
 
+        public void OnConnect(string transportUrl) => onConnectCallbackProxy?.OnConnect?.Invoke(transportUrl);
+
         public IDisposable Subscribe(IObserver<T> observer)
         {
             if (!observers.Contains(observer))
                 observers.Add(observer);
-            return new Unsubscriber<IObserver<T>>(observers, observer);
+            return new Unsubscriber(observers, observer);
         }
 
         public void Completed()
@@ -42,6 +50,24 @@ namespace AARC.Mesh.Model
                     observer.OnCompleted();
 
             observers.Clear();
+        }
+
+        private class Unsubscriber : IDisposable
+        {
+            private List<IObserver<T>> _observers;
+            private IObserver<T> _observer;
+
+            public Unsubscriber(List<IObserver<T>> observers, IObserver<T> observer)
+            {
+                this._observers = observers;
+                this._observer = observer;
+            }
+
+            public void Dispose()
+            {
+                if (_observer != null && _observers.Contains(_observer))
+                    _observers.Remove(_observer);
+            }
         }
     }
 

@@ -46,7 +46,7 @@ namespace AARC.Mesh.TCP
             // Todo: Bit of a hack as DS should supply port
             msm.ListeningPort = config.GetValue<Int32>("port", 0);
 
-            DiscoveryService = msm.StartDiscoveryServices(discoveryAddress.ToString(), cancellationToken);
+            DiscoveryService = msm.StartDiscoveryServices(discoveryAddress, cancellationToken);
             // Listen for subscibers for output Qs
             ChannelSubscriber = msm.StartListeningServices(cancellationToken);
             // Connect to publishers of the data we want

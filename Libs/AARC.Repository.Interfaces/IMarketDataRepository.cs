@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using AARC.Model;
 using AARC.Model.Interfaces;
 
 namespace AARC.Repository.Interfaces
@@ -24,7 +25,7 @@ namespace AARC.Repository.Interfaces
         /// </summary>
         /// <returns>ticker, list of dates, closing prices and volumes</returns>
         /// <param name="tickers">Tickers.</param>
-        IDictionary<string, IAarcPrice> GetClosingPrices(IList<string> tickers, uint from, uint to);
+        Dictionary<string, TickerPrices> GetClosingPrices(IList<string> tickers, uint from, uint to);
 
         /// <summary>
         /// Gets the stocks.

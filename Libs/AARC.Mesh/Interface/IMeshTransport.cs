@@ -49,8 +49,9 @@ namespace AARC.Mesh.Interface
         /// <summary>
         /// Register subscription
         /// </summary>
-        /// <param name="serverDetails"></param>
+        /// <param name="transportUrl"></param>
         /// <param name="cancellationToken"></param>
-        void ServiceConnect(string serverDetails, CancellationToken cancellationToken);
+        /// <returns>new connection and connected</returns>
+        bool ServiceConnect(string transportUrl, CancellationToken cancellationToken);
     }
 }

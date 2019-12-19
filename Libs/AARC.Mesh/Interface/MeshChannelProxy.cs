@@ -5,25 +5,32 @@ using Newtonsoft.Json;
 
 namespace AARC.Mesh.Interface
 {
-    public class MeshChannelProxy<T> : ObserverablePattern<T>, IRouteRegister<MeshMessage>, IObserver<MeshMessage>
+    public class MeshChannelProxy<T> : ObserverablePattern<T>, IRouteRegister<MeshMessage>, IObserver<MeshMessage>, IChannelProxy
     {
         /// <summary>
         /// Input Channel Names are past to the discovery service to help client/servers find matches
         /// </summary>
-        public IList<string> InputChannelNames { get; set; }
+        public IList<string> InputChannelNames { get; }
 
-		/// <summary>
-		///Output Channel Names are past to the discovery service to help client/servers find matches
-		/// </summary>
-		public IList<string> OutputChannelNames { get; set; }
+        /// <summary>
+        ///Output Channel Names are past to the discovery service to help client/servers find matches
+        /// </summary>
+        public IList<string> OutputChannelNames { get; }
 
-        public MeshChannelProxy(string inputChannelName = null, string outputChannelName = null)
+        public Action<string> OnConnect { get; set; }
+
+        private MeshChannelProxy()
         {
             _observers = new List<IObserver<T>>();
             this.InputChannelNames = new List<string>();
+            this.OutputChannelNames = new List<string>();
+        }
+
+        public MeshChannelProxy(string inputChannelName = null, string outputChannelName = null)
+            : this()
+        {
             if (!string.IsNullOrEmpty(inputChannelName))
                 this.InputChannelNames.Add(inputChannelName);
-            this.OutputChannelNames = new List<string>();
             if (!string.IsNullOrEmpty(outputChannelName))
                 this.OutputChannelNames.Add(outputChannelName);
         }
@@ -66,11 +73,9 @@ namespace AARC.Mesh.Interface
             if (outputChannels != null)
                 foreach (var route in OutputChannelNames)
                     if (!outputChannels.ContainsKey(route))
-                        outputChannels[route] = new MeshNetChannel<MeshMessage>();
-        }
-
-        public void OnConnect()
-        {
+                    {
+                        outputChannels[route] = new MeshNetChannel<MeshMessage>(this);
+                    }
         }
 
         public void OnError(Exception error)
@@ -80,9 +85,11 @@ namespace AARC.Mesh.Interface
 
         public void OnNext(MeshMessage item)
         {
+            T payload = default;
             // If the payload fails to serialize then throw it to the user
             // Todo: If the transport fails....
-            var payload = JsonConvert.DeserializeObject<T>(item.PayLoad);
+            payload = JsonConvert.DeserializeObject<T>(item.PayLoad);
+
             try
             {
                 foreach (var observer in _observers)
@@ -103,12 +110,14 @@ namespace AARC.Mesh.Interface
         public void OnCompleted() => Unsubscribe();
 
         public void Unsubscribe() => unsubscriber?.Dispose();
-
-        public void OnPost(T payload)
+        // To Transport out
+        public void OnPost(T payload, string transportUrl = null)
         {
             var jpayload = JsonConvert.SerializeObject(payload);
             var xid = MeshUtilities.NewXId;
             var message = new MeshMessage { GraphId = 1, XId = xid, PayLoad = jpayload };
+            if (!string.IsNullOrEmpty(transportUrl))
+                message.Routes = new List<string> { transportUrl };
             foreach (var channel in this.OutputChannelNames)
                 PublishChannel?.Invoke(channel, message);
         }

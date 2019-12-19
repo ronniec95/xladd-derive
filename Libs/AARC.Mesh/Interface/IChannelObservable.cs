@@ -4,5 +4,6 @@
     {
         string Name { get; set; }
         void Add(T item);
+        void OnConnect(string transportUrl);
     }
 }

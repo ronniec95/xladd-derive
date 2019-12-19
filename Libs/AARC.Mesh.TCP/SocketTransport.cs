@@ -2,13 +2,13 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
-using System.Threading.Tasks.Dataflow;
 using Microsoft.Extensions.Logging;
 
 namespace AARC.Mesh.TCP
 {
+    using System.Threading.Channels;
+    using System.Threading.Tasks;
     using AARC.Mesh.Interface;
-    using AARC.Mesh.Model;
 
     /// <summary>
     /// An asynchronous client socket does not suspend the application while waiting for network operations to complete.
@@ -17,7 +17,7 @@ namespace AARC.Mesh.TCP
     /// IObservable to PacketProtcol for socket inputs
     /// IObserver 
     /// </summary>
-    public class SocketTransport : SubscriberPattern<byte[]>, IMeshServiceTransport
+    public class SocketTransport : IMeshServiceTransport
     {
         // Size of receive buffer.  
         public const int BufferSize = 1024;
@@ -34,7 +34,13 @@ namespace AARC.Mesh.TCP
         private readonly byte[] _rawReceiveBuffer;
         private readonly ILogger _logger;
         private readonly PacketProtocol _packetizer;
-        private readonly BufferBlock<byte[]> _byteBlocks;
+        private Channel<byte[]> _senderChannel;
+        public ChannelWriter<byte[]> SenderChannel => _senderChannel?.Writer;
+
+        public ChannelWriter<byte[]> ReceiverChannel { get; set; }
+
+        private Task ChannelSenderProcessor;
+
         /// <summary>
         /// Action Delegate for New Message
         /// </summary>
@@ -47,17 +53,34 @@ namespace AARC.Mesh.TCP
             _logger = logger;
             _localCancelSource = new CancellationTokenSource();
             _rawReceiveBuffer = new byte[BufferSize];
-            _byteBlocks = new BufferBlock<byte[]>();
             _url = NetworkExt.GetHostNameUrl();
+            _senderChannel = Channel.CreateUnbounded<byte[]>();
 
             _packetizer = new PacketProtocol(PacketSize);
 
             // Pass the assembled bytes message to the IMeshObservers (subscriber)
-            _packetizer.MessageArrived += (bytes) =>
+            _packetizer.MessageArrived += async (bytes) =>
             {
-                foreach (var observer in _publishers)
-                    observer.OnPublish(bytes);
+                await ReceiverChannel.WriteAsync(bytes, _localCancelSource.Token);
+                //foreach (var observer in _publishers)
+                //    observer.OnPublish(bytes);
             };
+            ChannelSenderProcessor = Task.Factory.StartNew(async () =>
+            {
+                var reader = _senderChannel.Reader;
+                try
+                {
+                    while (!_localCancelSource.IsCancellationRequested)
+                    {
+                        var bytes = await reader.ReadAsync(_localCancelSource.Token);
+                        OnPublish(bytes);
+                    }
+                }
+                finally
+                {
+                    _logger.LogInformation("Parent Reader complete");
+                }
+            });
         }
 
         //public SocketTransport(IServiceProvider serviceProvider) : this(serviceProvider.GetService<ILogger<SocketTransport>>()) { }
@@ -137,7 +160,6 @@ namespace AARC.Mesh.TCP
         protected Socket Connect(Uri url) => Connect(url.Host, url.Port);
 
         public bool Connected { get { return _socket?.Connected ?? false; } }
-        public byte[] Receive(CancellationToken token) => _byteBlocks.Receive(token);
 
         //private void PacketNewMessageBytes(byte[] bytes) => NewMessageBytes?.Invoke(TransportId.ToString(), bytes);
 
@@ -167,6 +189,8 @@ namespace AARC.Mesh.TCP
                 _socket?.Shutdown(SocketShutdown.Both);
                 _socket?.Close();
             }
+            Task.WaitAll(ChannelSenderProcessor);
+            ChannelSenderProcessor = Task.CompletedTask;
             _socket = null;
         }
 

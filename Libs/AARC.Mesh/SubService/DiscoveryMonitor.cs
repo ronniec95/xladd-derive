@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using AARC.Mesh.Interface;
+using System.Threading.Channels;
 
 namespace AARC.Mesh.SubService
 {
@@ -13,6 +14,8 @@ namespace AARC.Mesh.SubService
         private readonly CancellationTokenSource _localCancelSource;
         private readonly ILogger _logger;
         private readonly IMeshTransportFactory _qServiceFactory;
+        private readonly Channel<byte[]> _parentReceiver;
+        private readonly Task ChannelReceiverProcessor;
 
         private IMeshServiceTransport _discoveryService;
 
@@ -25,9 +28,26 @@ namespace AARC.Mesh.SubService
             _localCancelSource = new CancellationTokenSource();
             _logger = logger;
             _qServiceFactory = qServiceFactory;
+            _parentReceiver = Channel.CreateUnbounded<byte[]>();
+            ChannelReceiverProcessor = Task.Factory.StartNew(async () =>
+            {
+                var reader = _parentReceiver.Reader;
+                try
+                {
+                    while (!_localCancelSource.IsCancellationRequested)
+                    {
+                        var bytes = await reader.ReadAsync(_localCancelSource.Token);
+                        OnPublish(bytes);
+                    }
+                }
+                finally
+                {
+                    _logger.LogInformation("Parent Reader complete");
+                }
+            });
         }
 
-        public async Task StartListeningServices(string serviceDetails, CancellationToken cancellationToken)
+        public async Task StartListeningServices(Uri discoveryUrl, CancellationToken cancellationToken)
         {
             await Task.Factory.StartNew(() =>
             {
@@ -43,8 +63,8 @@ namespace AARC.Mesh.SubService
                         {
                             if (_discoveryService == null)
                             {
-                                _discoveryService = _qServiceFactory.Create(serviceDetails);
-                                _discoveryService.Subscribe(this);
+                                _discoveryService = _qServiceFactory.Create(discoveryUrl);
+                                _discoveryService.ReceiverChannel = _parentReceiver.Writer;
                             }
 
                             if (_discoveryService.Connected)
@@ -53,7 +73,8 @@ namespace AARC.Mesh.SubService
                                 DiscoverySend.Invoke(message, serviceUrl);
 
                                 var obytes = message.Encode();
-                                _discoveryService.OnPublish(obytes);
+                                // Todo: Not sure I like this
+                                _discoveryService.SenderChannel.WriteAsync(obytes);
                                 _logger?.LogDebug($"DS Tx {obytes.Length}");
                             }
                             else
@@ -100,6 +121,7 @@ namespace AARC.Mesh.SubService
                 if (disposing)
                 {
                     _localCancelSource.Cancel();
+                    Task.WaitAll(ChannelReceiverProcessor);
                 }
 
                 // TODO: free unmanaged resources (unmanaged objects) and override a finalizer below.

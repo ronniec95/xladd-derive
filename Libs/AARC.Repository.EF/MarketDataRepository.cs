@@ -21,9 +21,9 @@ namespace AARC.Repository.EF
             _context = (IMarketDataContext)context;
         }
 
-        public IDictionary<string, IAarcPrice> GetClosingPrices(IList<string> tickers, uint from, uint to)
+        public Dictionary<string, TickerPrices> GetClosingPrices(IList<string> tickers, uint from, uint to)
         {
-            var closingPrices = new ConcurrentDictionary<string, IAarcPrice>();
+            var closingPrices = new Dictionary<string, TickerPrices>();
             var s = DateTimeUtilities.ToDate(from);
             var e = DateTimeUtilities.ToDate(to);
 

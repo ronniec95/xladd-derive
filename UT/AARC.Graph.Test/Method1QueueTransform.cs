@@ -27,6 +27,8 @@ namespace AARC.Graph.Test
             //InputQueueNames = new string[] { GraphMethod1.newcloseprice.ToString(), GraphMethod1.newrandom.ToString() };
             //OutputQueueNames = new string[] { GraphMethod1.method1.ToString() };
         }
+        public void Start() { }
+
         public  void OnNext(MeshMessage item)
         {
             try

@@ -23,7 +23,7 @@ namespace AARC.Mesh.Client
     {
         public static void Main(string[] args)
         {
-            ManualResetEvent dsConnectEvent = new ManualResetEvent(false);
+            //ManualResetEvent dsConnectEvent = new ManualResetEvent(false);
             log4net.GlobalContext.Properties["LogFileName"] = $"MeshTestClient";
 
             var msm = new MeshClient(args);
@@ -31,27 +31,28 @@ namespace AARC.Mesh.Client
             var logger = msm.ServiceProvider.GetService<ILoggerFactory>()
                 .CreateLogger<Program>();
 
-            logger.LogDebug("Starting application");
+            logger.LogDebug("Starting subscribers to nasdaqtestout");
             try
             {
                 var nasdaqTickers = msm.CreateObservable<TickerPrices>("nasdaqtestout");
-                var nasdaqUpdater = msm.CreateObserver<List<string>>("nasdaqtestin");
+//                var nasdaqUpdater = msm.CreateObserver<List<string>>("nasdaqtestin");
 
                 nasdaqTickers.Subscribe((tickerprices) =>
                 {
                     logger.LogInformation($"{tickerprices.Ticker} Updated {tickerprices.Dates.Max()}-{tickerprices.Dates.Min()}");
-                    dsConnectEvent.Set();
+//                    dsConnectEvent.Set();
                 });
 
-                Task.Delay(30000).Wait();
-                for (; ; )
+                Task.Delay(-1).Wait();
+                //Task.Delay(30000).Wait();
+/*                for (; ; )
                 {
                     dsConnectEvent.Reset();
                     logger.LogInformation("Sending Ticker update");
                     var tickers = new List<string> { "AAPL" };
                     nasdaqUpdater.OnNext(tickers);
                     dsConnectEvent.WaitOne();
-                }
+                }*/
             }
             finally
             {

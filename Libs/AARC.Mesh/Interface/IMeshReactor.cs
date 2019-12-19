@@ -7,5 +7,6 @@ namespace AARC.Mesh.Interface
     {
         string Name { get; }
         IList<IRouteRegister<T>> ChannelRouters { get; }
+        void Start();
     }
 }

@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Threading.Channels;
+
 namespace AARC.Mesh.Interface
 {
-    public interface IMeshServiceTransport: IDuplex<byte[]>, IDisposable
+    public interface IMeshServiceTransport: IDisposable
     {
         bool Connected { get; }
 
@@ -19,6 +21,10 @@ namespace AARC.Mesh.Interface
         /// Start Q service async reads
         /// </summary>
         void ReadAsync();
+
+        ChannelWriter<byte[]> ReceiverChannel { get; set; }
+
+        ChannelWriter<byte[]> SenderChannel { get; }
 
         string Url { get; }
 

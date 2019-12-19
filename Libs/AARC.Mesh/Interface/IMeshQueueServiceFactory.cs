@@ -19,6 +19,13 @@ namespace AARC.Mesh.Interface
         IMeshServiceTransport Create(string url);
 
         /// <summary>
+        /// Creates a transport connection using the Url
+        /// </summary>
+        /// <param name="url"></param>
+        /// <returns></returns>
+        IMeshServiceTransport Create(Uri url);
+
+        /// <summary>
         /// Bit of a hack to allow a socket to be passed in to create Q service
         /// </summary>
         /// <param name="dispose"></param>

@@ -10,14 +10,11 @@ namespace AARC.Mesh.Model
     /// <typeparam name="T"></typeparam>
     public class MeshObserver<T> : IMeshObserver<T> where T : class
     {
-        private IDisposable unsubscriber;
+        public Action<string> OnConnect { get { return _channelProxy?.OnConnect; } set { _channelProxy.OnConnect = value; } }
 
-        public IList<string> InputChannelNames { get; set; }
+        public IList<string> InputChannelNames { get { return _channelProxy.InputChannelNames; } }
 
-        /// <summary>
-        /// Names of Output Queues
-        /// </summary>
-        public IList<string> OutputChannelNames { get; set; }
+        public IList<string> OutputChannelNames { get { return _channelProxy.OutputChannelNames; } }
 
         private readonly MeshChannelProxy<T> _channelProxy;
 
@@ -33,14 +30,12 @@ namespace AARC.Mesh.Model
         public void OnCompleted() => _channelProxy.OnCompleted();
 
         public void OnError(Exception error) => _channelProxy.OnError(error);
-
+        // To Transport
         public void OnNext(T value) => _channelProxy.OnPost(value);
 
-        public void Subscriber(IObservable<MeshMessage> provider)
-        {
-//            if (provider != null)
-//                unsubscriber = provider.Subscribe(this);
-        }
+        public void OnNext(T value, string transportUrl) => _channelProxy.OnPost(value, transportUrl);
+
+        public void Subscriber() => throw new NotSupportedException("Observers cannot subscribe");
 
         public void RegisterReceiverChannels(MeshDictionary<MeshMessage> inputQChannels) { }
 

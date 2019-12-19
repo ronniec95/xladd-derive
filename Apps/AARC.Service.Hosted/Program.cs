@@ -48,7 +48,7 @@ namespace AARC.Service.Hosted
                     MeshServiceConfig.Server(services);
                     SocketServiceConfig.Transport(services);
 
-                    services.AddDbContext<AARC.RDS.AARCContext>
+                    services.AddDbContext<RDS.AARCContext>
                     (options =>
                         options.UseSqlServer(hostContext.Configuration.GetConnectionString("DefaultConnection")
                     ));
@@ -56,8 +56,6 @@ namespace AARC.Service.Hosted
                     // Add our Market Data Repository
                     services.AddScoped<IMarketDataRepository, Repository.EF.MarketDataRepository>();
                     // Might be worth doing this as a factory with type and suppliying name for more configurability
-                    services.AddSingleton<IMeshObservable<List<string>>>(new MeshObservable<List<string>>("nasdaqtestin"));
-                    services.AddSingleton<IMeshObserver<IAarcPrice>>(new MeshObserver<IAarcPrice>("nasdaqtestout"));
                     services.AddSingleton<IMeshReactor<MeshMessage>, Mesh.Dataflow.NasdaqTradableTickers>();
 
                     services.AddHostedService<MeshHostedService>();

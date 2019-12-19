@@ -21,7 +21,7 @@ namespace AARC.Graph.Test
            // OutputQueueNames = new string[] { GraphMethod1.newcloseprice.ToString() };
         }
 
-
+        public void Start() { }
 
         public  void OnNext(MeshMessage item)
         {

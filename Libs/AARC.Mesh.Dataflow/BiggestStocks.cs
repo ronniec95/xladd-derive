@@ -14,7 +14,6 @@ namespace AARC.Mesh.Dataflow
         private readonly IStockRepository _stocksRepository;
         private readonly object _sync = new object();
         private readonly MeshObserver<List<Stock>> _observer;
-        private readonly IList<IMeshObserver<List<Stock>>> _observers;
         private readonly ILogger<BiggestStocks> _logger;
 
         public BiggestStocks(ILogger<BiggestStocks> logger, IStockRepository stocksRepository)
@@ -22,7 +21,6 @@ namespace AARC.Mesh.Dataflow
             _logger = logger;
             _stocksRepository = stocksRepository;
             _observer = new MeshObserver<List<Stock>>("biggeststocks");
-            _observers = new List<IMeshObserver<List<Stock>>> { _observer };
 
             ChannelRouters = new List<IRouteRegister<MeshMessage>> { _observer as IRouteRegister<MeshMessage>};
         }
@@ -33,9 +31,13 @@ namespace AARC.Mesh.Dataflow
                 .GetStocksByWithOptionsMarketCap()
                 .ToList();
 
-            foreach (var observer in _observers)
-                observer?.OnNext(stocks);
+                _observer?.OnNext(stocks);
         }
+
+        public void Start()
+		{
+			UpdateBiggestStocks();
+		}
 
         public string Name => "biggeststocks";
 

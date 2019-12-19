@@ -20,13 +20,18 @@ namespace AARC.Mesh.SubService
         protected readonly DiscoveryServiceStateMachine<MeshMessage> _dssmc;
         protected readonly ILogger _logger;
 
+        private IMeshTransport<MeshMessage> _transportServer;
+        private DiscoveryMonitor<DiscoveryMessage> _discoveryMonitor;
+
         public delegate void MeshMessagePublisherDelegate(string transportId, MeshMessage message);
 
         public MeshMessagePublisherDelegate ServicePublisher { get; set; }
 
         public int ListeningPort { get { return _dssmc.Port; } set { _dssmc.Port = value; } }
-        private IMeshTransport<MeshMessage> _transportServer;
-        private DiscoveryMonitor<DiscoveryMessage> _discoveryMonitor;
+
+        public Task DiscoveryService { get; private set; }
+        public Task ListenService { get; private set; }
+        public Task PublishService { get; private set; }
 
         public MeshServiceManager(ILogger<MeshServiceManager> logger, DiscoveryServiceStateMachine<MeshMessage> discoveryServiceState, DiscoveryMonitor<DiscoveryMessage> discoveryMonitor, IMeshTransport<MeshMessage> meshTransport)
         {
@@ -41,12 +46,12 @@ namespace AARC.Mesh.SubService
             // MeshMessages from transportserver
             // Todo: But this should really be any transportservice {socketservice}
             _transportServer.Subscribe(this);
-//            _transportServer.Subscribe += ServiceSubscriber;
-//            ServicePublisher += _transportServer.Publisher;
         }
 
         protected ConcurrentDictionary<string, IList<IRouteRegister<MeshMessage>>> routeLookup = new ConcurrentDictionary<string, IList<IRouteRegister<MeshMessage>>>();
         protected ConcurrentDictionary<string, IList<string>> serviceLookup = new ConcurrentDictionary<string, IList<string>>();
+
+
         /// <summary>
         /// Register action and q required
         /// </summary>
@@ -54,7 +59,7 @@ namespace AARC.Mesh.SubService
         public void RegisterChannels(IRouteRegister<MeshMessage> route)
         {
             route.RegisterReceiverChannels(_dssmc.inputChannels);
-            route.RegistePublisherChannels(_dssmc.outputChannels);
+            route.RegistePublisherChannels(_dssmc.LocalOutputChannels);
 
             route.PublishChannel += OnNext;
         }
@@ -68,22 +73,32 @@ namespace AARC.Mesh.SubService
         private void OnNext(string channel, MeshMessage message)
         {
             // Check this is one of our channels
-            if (_dssmc.outputChannels.ContainsKey(channel))
+            if (_dssmc.LocalOutputChannels.ContainsKey(channel))
             {
                 // Is it for external consumption?
-                if (_dssmc.InputChannelRoutes.ContainsKey(channel))
+                if (_dssmc.ExternalSubscriberChannels.ContainsKey(channel))
                 {
-                    _dssmc.outputChannels[channel].Add(message);
+                    // Todo: This causes feedback what do I want to do here?
+                    //_dssmc.outputChannels[channel].Add(message);
                     message.Service = _transportServer.Url;
                     message.Channel = channel;
 
                     // Find the external routes
-                    var routes = _dssmc.InputChannelRoutes[channel];
+                    var routes = _dssmc.ExternalSubscriberChannels[channel];
                     if (routes == null || !routes.Any())
                         _logger.LogWarning($"NO ROUTE Message GraphId={message.GraphId}, Xid={message.XId}, Channel={channel}");
                     else
                     {
-                        message.Routes = routes;
+                        if (message.Routes == null)
+                            message.Routes = routes;
+                        else
+                        {
+                            var intersection = message.Routes.Intersect(routes);
+                            if (intersection.Any())
+                                _logger.LogWarning($"ROUTE CONFIRMED Message GraphId={message.GraphId}, Xid={message.XId}, Channel={channel} Routes={string.Join(",",intersection)}");
+                            else
+                                _logger.LogWarning($"ROUTE NOT FOUND Message GraphId={message.GraphId}, Xid={message.XId}, Channel={channel} Routes={string.Join(",", message.Routes)}");
+                        }
                          _transportServer.OnNext(message);
                     }
                 }
@@ -113,7 +128,15 @@ namespace AARC.Mesh.SubService
             }
         }
 
-        public async Task StartDiscoveryServices(string serviceDetails, CancellationToken cancellationToken) => await _discoveryMonitor.StartListeningServices(serviceDetails, cancellationToken);
+        public Task StartService(Uri discoveryUrl, CancellationToken token)
+        {
+            DiscoveryService = StartDiscoveryServices(discoveryUrl, token);
+            ListenService = StartListeningServices(token);
+            PublishService = StartPublisherConnections(token);
+            return Task.WhenAll(DiscoveryService, ListenService, PublishService);
+        }
+
+        public async Task StartDiscoveryServices(Uri serviceDetails, CancellationToken cancellationToken) => await _discoveryMonitor.StartListeningServices(serviceDetails, cancellationToken);
 
         /// <summary>
         /// down stream services will lookup the output queues from the DS and find out IP address and connect.
@@ -146,14 +169,28 @@ namespace AARC.Mesh.SubService
                         _logger?.LogInformation($"ROUTE(o) [{_transportServer.Url}]=>{routes.Item1}=>[{string.Join(",", routes.Item2)}]");
                     }
 
-                    var routableAddresses = _dssmc.OutputQRoutes.SelectMany(r => r.Item2).Distinct();
-                    foreach (var address in routableAddresses)
+                    var channelTransports = _dssmc.OutputQRoutes.SelectMany(r => r.Item2).Distinct();
+                    foreach (var transportUrl in channelTransports)
                         try
                         {
-                            if (_transportServer.Url != address)
+                            if (_transportServer.Url != transportUrl)
                             {
-                                // Connect to service and register our input qs
-                                _transportServer.ServiceConnect(address, cancellationToken);
+                                // If new connection and connected
+                                if (_transportServer.ServiceConnect(transportUrl, cancellationToken))
+                                {
+                                    // Need Channel Names
+                                    //_dssmc.OutputChannelRoutes[]
+                                    var channels = _dssmc.OutputQRoutes.Where(r => r.Item2.Contains(transportUrl)).Select(r => r.Item1);
+                                    _logger?.LogInformation($"{transportUrl} OnConnect {string.Join(",", channels)}");
+                                    foreach(var c in channels)
+                                    {
+                                        if (_dssmc.LocalOutputChannels.ContainsKey(c))
+                                        {
+                                            var o = _dssmc.LocalOutputChannels[c];
+                                            o.OnConnect(transportUrl);
+                                        }
+                                    }
+                                }
                             }
                         }
                         catch (Exception e)
@@ -180,6 +217,8 @@ namespace AARC.Mesh.SubService
             {
                 if (disposing)
                 {
+                    Task.WaitAll(DiscoveryService, ListenService, PublishService);
+
                     _discoveryMonitor.Dispose();
                     _discoveryMonitor = null;
 

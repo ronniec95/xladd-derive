@@ -7,6 +7,8 @@ using AARC.Repository.Interfaces;
 using AARC.Model.Interfaces;
 using System.Linq;
 using Microsoft.Extensions.Logging;
+using System.Threading;
+using AARC.Model;
 
 namespace AARC.Mesh.Dataflow
 {
@@ -14,46 +16,75 @@ namespace AARC.Mesh.Dataflow
     {
         public const string NasdaqTicker = @"^IXIC";
         private readonly IMarketDataRepository _marketDataRepository;
-        private IDictionary<string, IAarcPrice> _marketUniverse;
+        private Dictionary<string, TickerPrices> _marketUniverse;
         private readonly object _sync = new object();
-        private IList<IMeshObserver<IAarcPrice>> _observers;
-        private IList<IMeshObservable<List<string>>> _observerables;
         private readonly HashSet<string> _tickers;
         private readonly ILogger<NasdaqTradableTickers> _logger;
+        private readonly MeshObservable<List<string>> observerable;
+        private readonly MeshObserver<IAarcPrice> observer;
+        private readonly ManualResetEvent _marketLoaded;
 
         public string Name { get { return "nasdaq"; } }
-        public NasdaqTradableTickers(ILogger<NasdaqTradableTickers> logger, IMarketDataRepository marketDataRepository, IMeshObserver<IAarcPrice> observer, IMeshObservable<List<string>> observerable)
+        public NasdaqTradableTickers(ILogger<NasdaqTradableTickers> logger, IMarketDataRepository marketDataRepository)
         {
             _logger = logger;
             _tickers = new HashSet<string>();
             _tickers.Add(NasdaqTicker);
             _tickers.Add("AAPL");
             _marketDataRepository = marketDataRepository;
-            _observers = new List<IMeshObserver<IAarcPrice>> { observer };
-            _observerables = new List<IMeshObservable<List<string>>> { observerable };
+            _marketLoaded = new ManualResetEvent(false);
 
-            ChannelRouters = new List < IRouteRegister < MeshMessage >> { observer as IRouteRegister<MeshMessage>, observerable as IRouteRegister<MeshMessage> };
+            observerable = new MeshObservable<List<string>>("nasdaqtestin");
+            observer = new MeshObserver<IAarcPrice>("nasdaqtestout");
 
-            foreach (var observable in _observerables)
-                observable.Subscribe((tickers) =>
+            ChannelRouters = new List<IRouteRegister<MeshMessage>> { observer as IRouteRegister<MeshMessage>, observerable as IRouteRegister<MeshMessage> };
+
+            observerable.Subscribe((tickers) =>
                 {
                     _logger.LogInformation($"Received an update request {string.Join("", tickers)}");
                     // Should update by Ticker
                     _tickers.Union(tickers);
                     Update();
                 });
-            Update();
+
+            observer.OnConnect += (transportUrl) =>
+            {
+                _marketLoaded.WaitOne();
+                lock (_sync)
+                    if (_marketUniverse != null)
+                        foreach (var kvp in _marketUniverse)
+                            observer?.OnNext(kvp.Value, transportUrl);
+            };
         }
 
         public IList<IRouteRegister<MeshMessage>> ChannelRouters { get; private set; }
 
+        public void Start()
+        {
+            try
+            {
+                // Todo: Probably need a manualevent to hold off clients the connect before we have data
+                Update();
+            }
+            catch(Exception)
+            {
+                throw;
+            }
+            finally
+            {
+                _marketLoaded.Set();
+            }
+        }
+
         private void Update()
         {
-            var changes = _marketDataRepository?.GetClosingPrices(_tickers.ToArray(), 19700101, DateTime.Now.ToUYYYYMMDD());
+            Dictionary<string, TickerPrices> changes;
+
+            lock(_marketDataRepository)
+                changes= _marketDataRepository?.GetClosingPrices(_tickers.ToArray(), 19700101, DateTime.Now.ToUYYYYMMDD());
 
             foreach (var kvp in changes)
-                    foreach (var observer in _observers)
-                        observer?.OnNext(kvp.Value);
+                   observer?.OnNext(kvp.Value);
 
             lock (_sync)
                 if (_marketUniverse != null)

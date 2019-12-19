@@ -14,19 +14,19 @@ namespace AARC.Service.Hosted
     {
         private readonly ILogger<MeshHostedService> _logger;
         private readonly MeshServiceManager _msm;
-        private readonly Uri _discoveryAddress;
+        private readonly Uri _discoveryUri;
+        private readonly IMeshReactor<MeshMessage> _meshClient;
 
         public MeshHostedService(ILogger<MeshHostedService> logger, MeshServiceManager meshServiceManager, IMeshReactor<MeshMessage> queueClient, IConfiguration configuration)
         {
             _msm = meshServiceManager;
-            _discoveryAddress = new Uri(configuration.GetValue<string>("ds", "tcp://localhost:9999"));
+            _discoveryUri = new Uri(configuration.GetValue<string>("ds", "tcp://localhost:9999"));
 
             _logger = logger;
             // Todo: Bit of a hack as DS should supply port
             _msm.ListeningPort = configuration.GetValue<Int32>("port", 0);
 
-            foreach (var route in queueClient.ChannelRouters)
-                _msm.RegisterChannels(route);
+            _meshClient = queueClient;
         }
 
         /// <summary>
@@ -38,17 +38,14 @@ namespace AARC.Service.Hosted
         {
             _logger?.LogInformation($"Starting {this.GetType().Name}");
 
-            // Connect to Discovery Service
-            var t1 = _msm.StartDiscoveryServices(_discoveryAddress.ToString(), cancellationToken);
-            //return t1;
-            // Listen for subscibers for output Qs
-            var t2 = _msm.StartListeningServices(cancellationToken);
+            var tasks = _msm.StartService(_discoveryUri, cancellationToken);
 
-            //return Task.WhenAll(t1, t2);
-            // Connect to publishers of the data we want
-            var t3 = _msm.StartPublisherConnections(cancellationToken);
+            foreach (var route in _meshClient.ChannelRouters)
+                _msm.RegisterChannels(route);
 
-            return Task.WhenAll(t1, t2, t3);
+            _meshClient.Start();
+
+            return tasks;
         }
 
         public Task StopAsync(CancellationToken cancellationToken)

@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 using AARC.Mesh.Interface;
 using Microsoft.Extensions.Logging;
@@ -18,7 +18,7 @@ namespace AARC.Mesh.TCP
     {
         private readonly CancellationTokenSource _localCancelSource;
         private readonly CancellationToken _localct;
-
+        private readonly Channel<byte[]> _parentReceiver;
         private readonly ManualResetEvent _listenAcceptEvent;
 
         private readonly ConcurrentDictionary<string, IMeshServiceTransport> _meshServices;
@@ -29,11 +29,12 @@ namespace AARC.Mesh.TCP
 
         public int MonitorPeriod { get; set; }
 
-        //public Action<T> Subscribe { get; set; }
-
         private Uri _url;
 
         public string Url { get { return _url?.ToString(); } }
+
+        private Task ChannelReceiverProcessor;
+        private Task MonitorServices;
 
         public SocketServerTransport(ILogger<SocketServerTransport<T>> logger, IMeshTransportFactory qServiceFactory)
         {
@@ -41,9 +42,27 @@ namespace AARC.Mesh.TCP
             _listenAcceptEvent = new ManualResetEvent(false);
             _logger = logger;
             _qServiceFactory = qServiceFactory;
+            _parentReceiver = Channel.CreateUnbounded<byte[]>();
             _meshServices = new ConcurrentDictionary<string, IMeshServiceTransport>();
             MonitorPeriod = 15000;
             _localct = _localCancelSource.Token;
+
+            ChannelReceiverProcessor = Task.Factory.StartNew(async () =>
+            {
+                var reader = _parentReceiver.Reader;
+                try
+                {
+                    while (!_localCancelSource.IsCancellationRequested)
+                    {
+                        var bytes = await reader.ReadAsync(_localCancelSource.Token);
+                        OnPublish(bytes);
+                    }
+                }
+                finally
+                {
+                    _logger.LogInformation("Parent Reader complete");
+                }
+            });
         }
 
         public async Task StartListeningServices(int port, CancellationToken cancellationToken) => await Task.Factory.StartNew(() => Listen(port, cancellationToken));
@@ -63,13 +82,14 @@ namespace AARC.Mesh.TCP
         /// </summary>
         /// <param name="servicedetails"></param>
         /// <param name="cancellationToken"></param>
-        public void ServiceConnect(string servicedetails, CancellationToken cancellationToken)
+        /// <returns>new connection && connected</returns>
+        public bool ServiceConnect(string servicedetails, CancellationToken cancellationToken)
         {
             if (_meshServices.ContainsKey(servicedetails))
             {
                 var service = _meshServices[servicedetails];
                 if (service.ConnectionAlive())
-                    return;
+                    return false;
 
                 if (_meshServices.TryRemove(servicedetails, out service))
                     service.Dispose();
@@ -78,6 +98,7 @@ namespace AARC.Mesh.TCP
             _logger.LogInformation($"Creating a connecting to {servicedetails}");
             var qss = _qServiceFactory.Create(servicedetails);
             _meshServices[servicedetails] = qss;
+            return qss.Connected;
         }
 
         public void Listen(int port, CancellationToken cancellationToken)
@@ -97,7 +118,7 @@ namespace AARC.Mesh.TCP
                     // listen for incoming connections.  
                     listener.Bind(localEndPoint);
                     listener.Listen(10);
-                    _ = MonitorStaleConnectedServices();
+                    MonitorServices = MonitorStaleConnectedServices();
                     // Start an asynchronous socket to listen for connections.
                     while (!linkedCts.IsCancellationRequested)
                     {
@@ -137,7 +158,7 @@ namespace AARC.Mesh.TCP
             var service = _qServiceFactory.Create(socket);
             socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
             _logger?.LogInformation($"[{service.Url}]: New Connection");
-            service.Subscribe(this);
+            service.ReceiverChannel = _parentReceiver.Writer;
         }
 
         /// <summary>
@@ -206,38 +227,34 @@ namespace AARC.Mesh.TCP
             throw new NotImplementedException();
         }
 
+        public void OnPublish(byte[] value)
+        {
+            var m = new T();
+            m.Decode(value);
+            foreach (var observer in _observers)
+                observer.OnNext(m);
+        }
+
         public void OnNext(T value)
         {
             var bytes = value.Encode();
             foreach (var transportId in value.Routes)
                 if (_meshServices.ContainsKey(transportId))
-                    if (_meshServices.ContainsKey(transportId))
-                    {
-                        var service = _meshServices[transportId];
-                        if (service.Connected)
-                            _meshServices[transportId].OnPublish(bytes);
-                        else
-                        {
-                            // Todo: What if we cant remove?
-                            _logger.LogInformation($"{transportId}: Disconnected - Removing");
-                            if (_meshServices.TryRemove(transportId, out service))
-                                service.Dispose();
-                        }
-                    }
+                {
+                    var service = _meshServices[transportId];
+                    if (service.Connected)
+                        _meshServices[transportId].SenderChannel.WriteAsync(bytes);
                     else
+                    {
+                        // Todo: What if we cant remove?
+                        _logger.LogInformation($"{transportId}: Disconnected - Removing");
+                        if (_meshServices.TryRemove(transportId, out service))
+                            service.Dispose();
+                    }
+                }
+                else
                     _logger.LogInformation($"{transportId}: NO ROUTES available");
         }
-
-        #region Subscriber
-        public List<IPublisher<byte[]>> _publishers = new List<IPublisher<byte[]>>();
-
-        public IDisposable Subscribe(IPublisher<byte[]> publisher)
-        {
-            if (!_publishers.Contains(publisher))
-                _publishers.Add(publisher);
-            return new Unsubscriber<IPublisher<byte[]>>(_publishers, publisher);
-        }
-        #endregion
 
         #region IDisposable Support
         private bool disposedValue = false; // To detect redundant calls
@@ -249,6 +266,9 @@ namespace AARC.Mesh.TCP
                 if (disposing)
                 {
                     _localCancelSource.Cancel();
+                    Task.WaitAll(ChannelReceiverProcessor, MonitorServices);
+                    ChannelReceiverProcessor = Task.CompletedTask;
+                    MonitorServices = Task.CompletedTask;
                 }
 
                 // TODO: free unmanaged resources (unmanaged objects) and override a finalizer below.
@@ -272,14 +292,6 @@ namespace AARC.Mesh.TCP
             Dispose(true);
             // TODO: uncomment the following line if the finalizer is overridden above.
             // GC.SuppressFinalize(this);
-        }
-
-        public void OnPublish(byte[] value)
-        {
-            var m = new T();
-            m.Decode(value);
-            foreach (var observer in _observers)
-                observer.OnNext(m);
         }
         #endregion
     }
