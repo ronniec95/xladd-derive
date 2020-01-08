@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace AARC.Service.Hosted
 {
+    using AARC.Mesh.Dataflow;
     using AARC.Mesh.Interface;
     using AARC.Mesh.Model;
     using AARC.Mesh.SubService;
@@ -55,12 +56,10 @@ namespace AARC.Service.Hosted
 
                     // Add our Market Data Repository
                     services.AddScoped<IMarketDataRepository, Repository.EF.MarketDataRepository>();
-                    // Might be worth doing this as a factory with type and suppliying name for more configurability
-                    //                    services.AddSingleton<IMeshReactor<MeshMessage>, Mesh.Dataflow.NasdaqTradableTickers>();
-
                     services.AddScoped<IStockRepository, Repository.EF.StockRepository>();
-                    services.AddSingleton<IMeshReactor<MeshMessage>, Mesh.Dataflow.BiggestStocksReactor>();
 
+                    //                    services.AddSingleton<IMeshReactor<MeshMessage>, Mesh.Dataflow.BiggestStocksReactor>();
+                    services.AddScoped<DataFlowFactory>();
                     services.AddHostedService<MeshHostedService>();
                 })
                 .ConfigureLogging((hostContext, logging) =>

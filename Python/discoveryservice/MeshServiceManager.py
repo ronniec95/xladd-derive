@@ -3,6 +3,7 @@ import time
 from typing import List
 from datetime import datetime
 import json
+import jsonpickle
 import threading
 import socketserver
 import functools
@@ -10,6 +11,8 @@ import logging
 from DiscoveryStates import DiscoveryStates
 from DiscoveryMessage import DiscoveryMessage
 from VisNode import VisNode
+from GraphNode import GraphNode
+from GraphNodeConnector import GraphNodeConnector
 
 class SetEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -25,6 +28,7 @@ class MeshServiceManager:
         self._servers = dict()
         self._usedPorts = set()
         self.currentPort = 6000
+        jsonpickle.set_preferred_backend('json')
 
     def RegisterInputs(self, ipaddress: str, inputs: list):
         for q in inputs:
@@ -129,6 +133,47 @@ class MeshServiceManager:
                 else:
                         serverIds[s].connections.append(serverIds[queuename].id)
 
+        return id
+    #
+    # GraphNode
+    #
+    def CreateGraphNodes(self):
+        channelNodes = dict()
+        jsonstr = None
+        try:
+            id = 0
+            self._lock.acquire()
+            id = self.CreateNodeConnectors(id,self.inputQs, True, channelNodes)
+            id = self.CreateNodeConnectors(id,self.outputQs, False, channelNodes)
+            for k,v in channelNodes.items():
+                if jsonstr is None:
+                    jsonstr = "[ "
+                else:
+                    jsonstr += ","
+                tmp = jsonpickle.encode(v, False)
+                logging.info ("type is %s", (type(tmp)))
+                jsonstr += tmp
+        except Exception as e:
+            logging.error ("ER MeshMessage: %r" % e)
+            logging.exception(e)
+        finally:
+            self._lock.release()
+        if jsonstr is None:
+            jsonstr = "["
+        jsonstr += "]"
+        return jsonstr
+
+    def CreateNodeConnectors(self, id: int, channels: dict, dir: bool, nodes : dict):
+        for c,v in channels.items():
+            for s in v:
+                if s not in nodes.keys():
+                    newnode = GraphNode(id, s, s, [], [])
+                    nodes[s] = newnode
+                    id+=1
+                
+                node = nodes[s]
+                connector = GraphNodeConnector(c, dir, c, node)
+                node.addConnector(connector)
         return id
 
     def MeshNodesRoutes(self):

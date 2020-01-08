@@ -7,6 +7,8 @@ using Microsoft.Extensions.Configuration;
 using AARC.Mesh.SubService;
 using AARC.Mesh.Model;
 using AARC.Mesh.Interface;
+using AARC.Mesh.Dataflow;
+using System.Collections.Generic;
 
 namespace AARC.Service.Hosted
 {
@@ -15,9 +17,9 @@ namespace AARC.Service.Hosted
         private readonly ILogger<MeshHostedService> _logger;
         private readonly MeshServiceManager _msm;
         private readonly Uri _discoveryUri;
-        private readonly IMeshReactor<MeshMessage> _meshClient;
+        private readonly List<IMeshReactor<MeshMessage>> _meshServices;
 
-        public MeshHostedService(ILogger<MeshHostedService> logger, MeshServiceManager meshServiceManager, IMeshReactor<MeshMessage> queueClient, IConfiguration configuration)
+        public MeshHostedService(ILogger<MeshHostedService> logger, MeshServiceManager meshServiceManager, DataFlowFactory dfFactory, IConfiguration configuration)
         {
             _msm = meshServiceManager;
             _discoveryUri = new Uri(configuration.GetValue<string>("ds", "tcp://localhost:9999"));
@@ -26,7 +28,17 @@ namespace AARC.Service.Hosted
             // Todo: Bit of a hack as DS should supply port
             _msm.ListeningPort = configuration.GetValue<Int32>("port", 0);
 
-            _meshClient = queueClient;
+            var rawservices = configuration.GetValue<string>("services", null);
+
+            var services = rawservices?.Split(',');
+
+            if (services != null)
+            {
+                _meshServices = new List<IMeshReactor<MeshMessage>>();
+                foreach (var service in services)
+                    _meshServices.Add(dfFactory.Get(service));
+            }
+            else throw new ArgumentException(@"Missing Services");
         }
 
         /// <summary>
@@ -40,10 +52,18 @@ namespace AARC.Service.Hosted
 
             var tasks = _msm.StartService(_discoveryUri, cancellationToken);
 
-            foreach (var route in _meshClient.ChannelRouters)
-                _msm.RegisterChannels(route);
+            foreach (var service in _meshServices)
+                try
+                {
+                    foreach (var route in service.ChannelRouters)
+                        _msm.RegisterChannels(route);
 
-            _meshClient.Start();
+                    service.Start();
+                }
+                catch(Exception ex)
+                {
+                    _logger?.LogError(ex, $"Error with service {service.Name}");
+                }
 
             return tasks;
         }

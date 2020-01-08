@@ -104,9 +104,7 @@ class MeshDSHandler(socketserver.BaseRequestHandler):
     def readPacket(self):
         bytesMsgLen = self.request.recv(4)
         msgLen = int.from_bytes(bytesMsgLen, byteorder = 'little')
-        bmsgLen = int.from_bytes(bytesMsgLen, byteorder = 'big')
-        logging.debug ("Rx [%s]: MsgLen %i %i" % (self.client_address, msgLen, bmsgLen))
-        print(bytesMsgLen)
+        logging.debug ("Rx [%s]: %i bytes" % (self.client_address, msgLen))
         packet = b''
         bytes_recd = 0
         while bytes_recd < msgLen:
