@@ -21,7 +21,7 @@ namespace AARC.Mesh.Model
             _channelProxy = external;
         }
 
-        public MeshObservable(string qname) : this(new MeshChannelProxy<T>(inputChannelName: qname)) { }
+        public MeshObservable(string chname) : this(new MeshChannelProxy<T>(inputChannelName: chname)) { }
 
         public IDisposable Subscribe(IObserver<T> observer) => _channelProxy.Subscribe(observer);
 
