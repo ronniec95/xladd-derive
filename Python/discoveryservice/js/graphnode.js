@@ -600,7 +600,9 @@ class GraphNodeConnector {
         var textInset = 12;
 
         // for output:
-        let txt = this.Name;
+        let tagType = this.Tag.replace('System.', '');
+        tagType = tagType.replace('Collections.Generic.', '');
+        let txt = this.Name + '(' + tagType + ')'
         let textLeft = this.Node.Left + this.Position.X;
         
         if (!this.Input) {

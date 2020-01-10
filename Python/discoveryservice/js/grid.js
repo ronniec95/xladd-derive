@@ -156,12 +156,14 @@ function parseFunctionPrototype(prototype, left = 200, top = 50) {
     
     if (paramParts[0].length > 0)
         for (i = 0; i < paramParts.length / 2; i++) {
-            connector = new GraphNodeConnector(paramParts[i*2+1].replace(',', ''), true, paramParts[i*2], node);
+            let paramName = paramParts[i*2+1].replace(',', '');
+            let paramType = paramParts[i*2];
+            connector = new GraphNodeConnector(paramName, true, paramType, node);
             node.addConnector(connector);
         }
     
     if (returnType != "void") {
-        connector = new GraphNodeConnector("return", false, returnType, node);
+        connector = new GraphNodeConnector(returnType.replace('System.', ''), false, returnType, node);
         node.addConnector(connector);
     }
     

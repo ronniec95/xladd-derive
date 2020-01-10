@@ -58,13 +58,13 @@ namespace AARC.Mesh.SubService
         /// <param name="route"></param>
         public void RegisterChannels(IRouteRegister<MeshMessage> route)
         {
-            route.RegisterReceiverChannels(_dssmc.inputChannels);
+            route.RegisterReceiverChannels(_dssmc.LocalInputChannels);
             route.RegistePublisherChannels(_dssmc.LocalOutputChannels);
 
             route.PublishChannel += OnNext;
         }
 
-        public ManualResetEvent RegistrationComplition { get { return _dssmc.RegistrationComplete;  } }
+        public ManualResetEvent RegistrationComplition { get { return _dssmc.RegistrationComplete; } }
         /// <summary>
         /// We are looking to see if there is an input route for our output for'channel'
         /// </summary>
@@ -95,11 +95,11 @@ namespace AARC.Mesh.SubService
                         {
                             var intersection = message.Routes.Intersect(routes);
                             if (intersection.Any())
-                                _logger.LogWarning($"ROUTE CONFIRMED Message GraphId={message.GraphId}, Xid={message.XId}, Channel={channel} Routes={string.Join(",",intersection)}");
+                                _logger.LogWarning($"ROUTE CONFIRMED Message GraphId={message.GraphId}, Xid={message.XId}, Channel={channel} Routes={string.Join(",", intersection)}");
                             else
                                 _logger.LogWarning($"ROUTE NOT FOUND Message GraphId={message.GraphId}, Xid={message.XId}, Channel={channel} Routes={string.Join(",", message.Routes)}");
                         }
-                         _transportServer.OnNext(message);
+                        _transportServer.OnNext(message);
                     }
                 }
                 else
@@ -122,9 +122,9 @@ namespace AARC.Mesh.SubService
             // Todo: Has the message come from a known external source? If not what to do?
             var known = _dssmc.RegisteredInputSource(message.Channel, message.Service);
 
-            if (_dssmc.inputChannels.ContainsKey(message.Channel))
+            if (_dssmc.LocalInputChannels.ContainsKey(message.Channel))
             {
-                _dssmc.inputChannels[message.Channel].Add(message);
+                _dssmc.LocalInputChannels[message.Channel].Add(message);
             }
         }
 
@@ -182,7 +182,7 @@ namespace AARC.Mesh.SubService
                                     //_dssmc.OutputChannelRoutes[]
                                     var channels = _dssmc.OutputQRoutes.Where(r => r.Item2.Contains(transportUrl)).Select(r => r.Item1);
                                     _logger?.LogInformation($"{transportUrl} OnConnect {string.Join(",", channels)}");
-                                    foreach(var c in channels)
+                                    foreach (var c in channels)
                                     {
                                         if (_dssmc.LocalOutputChannels.ContainsKey(c))
                                         {
@@ -265,7 +265,7 @@ namespace AARC.Mesh.SubService
         /// <param name="value"></param>
         public void OnNext(MeshMessage value)
         {
-            _dssmc.inputChannels[value.Channel].Add(value);
+            _dssmc.LocalInputChannels[value.Channel].Add(value);
         }
         #endregion
     }

@@ -94,7 +94,7 @@ class MeshDSHandler(socketserver.BaseRequestHandler):
         self.sendPacket(raw)
     
     def sendPacket(self, b:bytearray):
-        logging.debug ("Tx [%s]: %i bytes" % (self.client_address[0], len(b)))
+        #logging.debug ("Tx [%s]: %i bytes" % (self.client_address[0], len(b)))
         self.request.sendall(b)
 
     def sendMeshjsonPacket(self, message: DiscoveryMessage):
@@ -104,7 +104,7 @@ class MeshDSHandler(socketserver.BaseRequestHandler):
     def readPacket(self):
         bytesMsgLen = self.request.recv(4)
         msgLen = int.from_bytes(bytesMsgLen, byteorder = 'little')
-        logging.debug ("Rx [%s]: %i bytes" % (self.client_address, msgLen))
+        #logging.debug ("Rx [%s]: %i bytes (chunk)" % (self.client_address, msgLen))
         packet = b''
         bytes_recd = 0
         while bytes_recd < msgLen:
@@ -113,7 +113,7 @@ class MeshDSHandler(socketserver.BaseRequestHandler):
                     return None
             packet += chunk
             bytes_recd = bytes_recd + len(chunk)
-        logging.debug ("Rx [%s]: %s bytes" % (self.client_address, len(packet)))
+        #logging.debug ("Rx [%s]: %s bytes" % (self.client_address, len(packet)))
         return packet
 
     def readMeshjsonPacket(self):

@@ -23,7 +23,7 @@ namespace AARC.Mesh.Model
 
         private MeshChannelProxy()
         {
-            _metrics = new ChannelMetrics();
+            _metrics = new ChannelMetrics { ReturnType = typeof(T) };
             _observers = new List<IObserver<T>>();
             this.InputChannelNames = new List<string>();
             this.OutputChannelNames = new List<string>();
@@ -32,15 +32,16 @@ namespace AARC.Mesh.Model
         public MeshChannelProxy(string inputChannelName = null, string outputChannelName = null)
             : this()
         {
+            var channelType = typeof(T);
             if (!string.IsNullOrEmpty(inputChannelName))
             {
-                this.InputChannelNames.Add(inputChannelName);
-                _metrics.Name = inputChannelName;
+                _metrics.Name = $"{inputChannelName}({channelType})";
+                this.InputChannelNames.Add(_metrics.Name);
             }
             if (!string.IsNullOrEmpty(outputChannelName))
             {
-                this.OutputChannelNames.Add(outputChannelName);
-                _metrics.Name = outputChannelName;
+                _metrics.Name = $"{outputChannelName}({channelType})";
+                this.OutputChannelNames.Add(_metrics.Name);
             }
         }
 

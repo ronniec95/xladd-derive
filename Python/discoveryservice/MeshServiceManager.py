@@ -172,7 +172,12 @@ class MeshServiceManager:
                     id+=1
                 
                 node = nodes[s]
-                connector = GraphNodeConnector(c, dir, c, node)
+                si = c.rfind('(')
+                ei = c.rfind(')') # should be end
+                channelType = c[si+1:ei]
+                #si -= 1
+                method = c[0:si]
+                connector = GraphNodeConnector(method, dir, channelType, node)
                 node.addConnector(connector)
         return id
 

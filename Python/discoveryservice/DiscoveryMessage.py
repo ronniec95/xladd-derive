@@ -1,5 +1,3 @@
-
-
 class DiscoveryMessage:
     def __init__(self, State: int, Port: int, HostServer: str, PayLoad: str):
         self.State = State

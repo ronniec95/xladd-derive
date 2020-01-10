@@ -1,14 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using AARC.Mesh.Model;
 
 namespace AARC.Mesh.Interface
 {
-    public interface IChannelProxy
-    {
-        Action<string> OnConnect { get; set; }
-    }
-
     public interface IRouteRegister<T> where T: class
     {
         /// <summary>
@@ -26,10 +20,6 @@ namespace AARC.Mesh.Interface
 
         MeshChannelResult<T> PublishChannel { get; set; }
     }
-
-    public interface IMeshObserver<T> : IObserver<T>, IRouteRegister<MeshMessage> where T: class { }
-
-    public interface IMeshObservable<T> : IObservable<T>, IRouteRegister<MeshMessage> where T: class, new() { }
 
     public delegate void MeshChannelResult<T>(string action, T message) where T : class;
 }

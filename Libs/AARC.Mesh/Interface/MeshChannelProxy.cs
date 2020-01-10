@@ -80,6 +80,7 @@ namespace AARC.Mesh.Interface
 
         public void OnError(Exception error)
         {
+            // Todo: Must implement
             //throw new NotImplementedException();
         }
 

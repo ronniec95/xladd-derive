@@ -6,7 +6,7 @@ namespace AARC.Mesh.Model
 {
     public class MeshNetChannel<T> : IChannelObservable<T> where T: class
     {
-        private List<IObserver<T>> observers;
+        private readonly List<IObserver<T>> observers;
         private IChannelProxy onConnectCallbackProxy = null;
 
         public MeshNetChannel()

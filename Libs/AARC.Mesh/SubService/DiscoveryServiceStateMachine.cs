@@ -19,11 +19,11 @@ namespace AARC.Mesh.SubService
         /// </summary>
         public int Port;
         /// <summary>
-        /// Service named input Qs
+        /// Service name of exposed Input Channels
         /// </summary>
-        public MeshDictionary<T> inputChannels { get; private set; }
+        public MeshDictionary<T> LocalInputChannels { get; private set; }
         /// <summary>
-        /// Service named output Qs
+        /// Service named of exposed Output Channels
         /// </summary>
         public MeshDictionary<T> LocalOutputChannels { get; private set; }
 
@@ -35,7 +35,7 @@ namespace AARC.Mesh.SubService
         public DiscoveryServiceStateMachine()
         {
             RegistrationComplete = new ManualResetEvent(false);
-            inputChannels = new MeshDictionary<T>();
+            LocalInputChannels = new MeshDictionary<T>();
             LocalOutputChannels = new MeshDictionary<T>();
             ExternalSubscriberChannels = new ConcurrentDictionary<string, HashSet<string>>();
             OutputChannelRoutes = new ConcurrentDictionary<string, HashSet<string>>();
@@ -56,10 +56,10 @@ namespace AARC.Mesh.SubService
         public bool RegisteredInputSource(string action, string endpoint)
             => ExternalSubscriberChannels.Where(iq => string.Equals(iq.Key, action, StringComparison.OrdinalIgnoreCase)).Where(kvp => kvp.Value.Contains(endpoint)).Any();
 
-        public IEnumerable<string> RoutableInputChannels() => OutputChannelRoutes.Keys.Intersect(inputChannels.Keys);
+        public IEnumerable<string> RoutableInputChannels() => OutputChannelRoutes.Keys.Intersect(LocalInputChannels.Keys);
         public IEnumerable<string> RoutableOutputChannels() => ExternalSubscriberChannels.Keys.Intersect(LocalOutputChannels.Keys);
 
-        public IEnumerable<string> RoutableInputChannelEndpoints() => OutputChannelRoutes.Keys.Intersect(inputChannels.Keys).Select(key => OutputChannelRoutes[key].ToList()).SelectMany(t => t).Distinct();
+        public IEnumerable<string> RoutableInputChannelEndpoints() => OutputChannelRoutes.Keys.Intersect(LocalInputChannels.Keys).Select(key => OutputChannelRoutes[key].ToList()).SelectMany(t => t).Distinct();
 
         public IEnumerable<string> RoutableOutputChannelEndpoints() => LocalOutputChannels.Keys.Intersect(ExternalSubscriberChannels.Keys).Select(key => ExternalSubscriberChannels[key].ToList()).SelectMany(t => t).Distinct();
 
@@ -128,10 +128,10 @@ namespace AARC.Mesh.SubService
                     break;
                 case DiscoveryStates.GetInputQs:
 #if NETSTANDARD2_0
-                    message.Payload = inputChannels.Keys.Any() ? string.Join(",", inputChannels.Keys) : null;
+                    message.Payload = LocalInputChannels.Keys.Any() ? string.Join(",", LocalInputChannels.Keys) : null;
 #endif
 #if NETSTANDARD2_1 // Targets .netcore 3.0
-                    message.Payload = inputChannels.Keys.Any() ? string.Join(',', inputChannels.Keys) : string.Empty;
+                    message.Payload = LocalInputChannels.Keys.Any() ? string.Join(',', LocalInputChannels.Keys) : string.Empty;
 #endif
                     break;
                 case DiscoveryStates.GetOutputQs:
