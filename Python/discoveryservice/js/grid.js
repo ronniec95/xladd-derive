@@ -108,7 +108,68 @@ class GraphPainter {
 
 // *** Event stuff
 
+function addCombo() {
+
+    let p = prompt("Enter name of new node");
+    
+    let nodes = getNodesFromText();
+    let id = graph.getNextId();
+    let sNode = new SuperNode(id, p, 300, 40, nodes);
+    graph.add(sNode);
+    graph.draw(ctx);
+}
+
 function addNode() {
+
+    let nodes = getNodesFromText();
+    for (let n of nodes) {
+        graph.add(n);
+    }
+    graph.draw(ctx);
+}
+
+function addJson(){
+    let text = document.getElementById("nodeDef").value;
+    addJsonFromText(text);
+}
+
+function addJsonFromText(text){
+    let data = JSON.parse(text);
+    data.forEach(json => {
+        let node = GraphNode.fromJson(json)
+        graph.add(node);
+    });
+    graph.draw(ctx);
+}
+
+function loadJsonFromFile() {
+        //document.getElementById('file-input').click();
+    
+        var input = document.createElement('input');
+        input.type = 'file';
+    
+        input.onchange = e => {
+    
+            /*
+                file.name // the file's name including extension
+                file.size // the size in bytes
+                file.type // file type ex. 'application/pdf'    
+            */
+    
+            // TODO: check it's valid xml etc?
+            var file = e.target.files[0];
+    
+            try {
+                var content = ProcessFileContent(file, addJsonFromText);
+            } catch(err) {
+                alert("Unable to load graph from " + file);
+            }
+        }
+    
+        input.click();
+}
+
+function getNodesFromText() {
     // get the text from the textArea
     let text = document.getElementById("nodeDef").value;
     
@@ -117,22 +178,26 @@ function addNode() {
     console.log(fns);
     let left = 200;
     let top = 50;
+    
+    let newNodes = [];
+    let id = graph.getNextId();
+    
     for (let nodestring of fns) {
 
         nodestring = nodestring.trim();
         if (nodestring.length > 0) {
             // parse the node text
             let newNode = parseFunctionPrototype(nodestring, left, top);
-            // add the node to the graph
-            graph.add(newNode);
-            
+            newNode.Id = id++;
+            newNodes.push(newNode);
+
             // cascade
             left += 10;
             top += 10;
         }
     }
-    
-    graph.draw(ctx);
+
+    return newNodes;
 }
 
 function parseFunctionPrototype(prototype, left = 200, top = 50) {
@@ -156,14 +221,12 @@ function parseFunctionPrototype(prototype, left = 200, top = 50) {
     
     if (paramParts[0].length > 0)
         for (i = 0; i < paramParts.length / 2; i++) {
-            let paramName = paramParts[i*2+1].replace(',', '');
-            let paramType = paramParts[i*2];
-            connector = new GraphNodeConnector(paramName, true, paramType, node);
+            connector = new GraphNodeConnector(paramParts[i*2+1].replace(',', ''), true, paramParts[i*2], node);
             node.addConnector(connector);
         }
     
     if (returnType != "void") {
-        connector = new GraphNodeConnector(returnType.replace('System.', ''), false, returnType, node);
+        connector = new GraphNodeConnector("return " + returnType.replace('System.', ''), false, returnType, node);
         node.addConnector(connector);
     }
     
@@ -513,6 +576,8 @@ function doMouseMove(event, mouse) {
 // the graph.draw function draws nodes and edges etc, based on their states
 
 function init() {
+    
+    //console.log("initializing");
 
     // set our config variables
     canvas = document.getElementById('canvasBase')
@@ -532,22 +597,7 @@ function init() {
 }
 
 function init2() {
-    //var svgel = d3.select("body").append("svg").attr("width", 500).attr("height", 500);
-    //var svgel = d3.select("canvasBase");
-    //var circle = svgel.append("circle").attr("cx", 50).attr("cy", 50).attr("r", 25);
-
-    //    var data = [];
-    //    var value = 200;
-    //    var colourScale;        
-    //    var canvasD3 = d3.select("body").append("canvas").attr("width", 500).attr("height", 500);
-    //    d3.range(value).forEach(function(el) {
-    //        data.push({ value: el });
-    //    });
-
-    //window.onload= start(graph);
-
     // so this is the "draw canvas" method - all the objects of the graph
-    var ctx = document.getElementById("canvasBase").getContext("2d");
 
     try {
         let fn = "ChartTickerDistribution.xml"; // try: Simplified_Sims.xml or ChartTickerDistribution.xml
@@ -556,21 +606,21 @@ function init2() {
         fetch(fn)
           .then(response => response.text())
           .then((data) => {
-            loadGraphFromXml(data)
+            loadGraphFromXml(data);
           });
     }
     catch(err) {
         console.log(err);
     }
 
-    // listeners for keydown
-    d3.select('body').on('keydown', function () {
+    document.body.onkeydown = function(e){
+        //alert(String.fromCharCode(e.keyCode)+" --> "+e.keyCode);
 
         if (canvasFocus)
-            console.log(d3.event.keyCode);
+            console.log(e.keyCode);
 
         // http://gcctech.org/csc/javascript/javascript_keycodes.htm
-        switch (d3.event.keyCode) {
+        switch (e.keyCode) {
             case 46: // delete
                 // only want to do this when the canvas has focus!
                 if (canvasFocus) {
@@ -585,8 +635,8 @@ function init2() {
             case 17: // ctrl
                 break;
         }
-
-    }); // text input listener/handler
+        
+    };
 
 //    document.addEventListener('readystatechange', event => {
 //
@@ -688,6 +738,7 @@ function init2() {
         graph.draw(ctx);
     }
 
+    console.log("Initialisation completed");
 }
 
 function loadGraphFromXml(xmlText) {
@@ -696,7 +747,7 @@ function loadGraphFromXml(xmlText) {
     graph.draw(ctx);
 }
 
-function loadFromFile(file) {
+function ProcessFileContent(file, useProcessor) {
 
     // setting up the reader
     var reader = new FileReader();
@@ -705,13 +756,17 @@ function loadFromFile(file) {
     // here we tell the reader what to do when it's done reading...
     reader.onload = readerEvent => {
         var content = readerEvent.target.result; // this is the content!
+        useProcessor(content);
+    }
+}
+
+function loadFromFile(file) {
         try {
-            loadGraphFromXml(content);
+            ProcessFileContent(file, loadGraphFromXml);
         } catch(err) {
             alert("Unable to load graph from " + file);
         }
     }
-}
 
 function loadXml() {
     //document.getElementById('file-input').click();

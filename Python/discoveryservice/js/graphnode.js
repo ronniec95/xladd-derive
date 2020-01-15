@@ -12,6 +12,8 @@ if(typeof CanvasRenderingContext2D.prototype.isPointInStroke == "undefined"){
 
 class Point2D {
     constructor(x = 0, y = 0) {
+        if (typeof x !== 'number' || typeof y !== 'number')
+            throw('not sure what to do with no number');
         this.X = x;
         this.Y = y;
     }
@@ -181,7 +183,7 @@ class AarcGraph {
         // check that it's a drawable
         if (obj !== null && typeof obj === 'object')
         {
-            if (obj instanceof GraphNode) {
+            if (obj instanceof GraphNode || obj instanceof SuperNode) {
                 this.Nodes.push(obj);
                 //console.log("Node.add succeeded. length=" + this.Nodes.length);
             }
@@ -721,28 +723,24 @@ class GraphNodeConnector {
 
 // drawing a node - wwe need a decorator - or css styles
 class GraphNode {
-
-    constructor(id, name, x, y, inputs = [], outputs = []) {
+    constructor(id, name, x, y) {
 
         this.Hover = false;
         this.Selected = false;
         // connector map
         this.Connectors = {};
-
+        this.Inputs = [];
+        this.Outputs = [];
         // Empty constructor
         if (id==undefined)
         {
             this.Left = 200;
             this.Top = 50;
-            this.Inputs = [];
-            this.Outputs = [];
         }
         else
         {
             // push
             this.Id = id;
-            this.Inputs = inputs;
-            this.Outputs = outputs;
             this.Name = name;
 
             // it's about 22 px per input/output
@@ -751,19 +749,13 @@ class GraphNode {
             this.Left = x;
             this.Top = y;
             this.resize();
-            
-            let i;
-            for (i =0; i < this.Inputs.length; i++) {
-                let n = this.Inputs[i];
-                this.Connectors[n] = new GraphNodeConnector(n, true, 0, GraphNode.headerHeight() + i * GraphNode.itemHeight(), this);
-            }
-            for (i =0; i < this.Outputs.length; i++) {
-                let n = this.Outputs[i];
-                this.Connectors[n] = new GraphNodeConnector(n, false, this.Width, GraphNode.headerHeight() + (i + this.Inputs.length) * GraphNode.itemHeight(), this);
-            }
+        this.Longest = name.length;
+        this.Width = 15 + this.Longest * 7; // todo: if a context is supplied, could determine width based on text font?
+        this.Height = GraphNode.headerHeight() + (1) * GraphNode.itemHeight() + 1; // 22 x 3 = 66 112 - 66 = 46
+        this.Connectors = {}
         }
     }
-
+        
     static fromJson(json){
 
         let jsonConnector = json["Connectors"];
@@ -779,7 +771,6 @@ class GraphNode {
                     let connector = GraphNodeConnector.fromJson(item, node);
                     node.addConnector(connector);
                 });
-
         return node;
     }
 
@@ -801,6 +792,18 @@ class GraphNode {
             this.Inputs.push(connector.Name);
         else
             this.Outputs.push(connector.Name);
+
+        // when we change the width - must change all connector positions!
+        if (connector.Name.length > this.Longest) {
+            this.Longest = connector.Name.length;
+            this.Width = 15 + this.Longest * 7;
+            
+            for (let cn in this.Connectors) {
+                let c = this.Connectors[cn];
+                if (!c.Input)
+                    c.Position.X = this.Width;
+            }
+        }
         
         // TODO: Consider - re-ordering so that inputs are before outputs ??
         this.Connectors[connector.Name] = connector;
@@ -818,8 +821,8 @@ class GraphNode {
         // !Important(!) set the position
         connector.Position.X = connector.Input ? 0 : this.Width;
         
-         // 22 x 3 = 66 112 - 66 = 46
-        this.Height = GraphNode.headerHeight() + (this.Inputs.length + this.Outputs.length) * GraphNode.itemHeight() + 1;
+        let len = this.Inputs.length + this.Outputs.length;
+        this.Height = 1 + GraphNode.headerHeight() + len * GraphNode.itemHeight();
     }
     
     // create a connector map - position to point, and 
@@ -840,6 +843,7 @@ class GraphNode {
         return (rc.Left <= this.Left + this.Width && this.Left <= rc.Right && rc.Top <= this.Top + this.Height && this.Top <= rc.Bottom);
     }
     
+    // do we need the context? perhaps due to scale?
     isPointInObject(ctx, x, y) {
 
         // first check connectors ... 
@@ -860,11 +864,12 @@ class GraphNode {
     }
     
     draw(ctx) {
-        //super.draw();
-        this.drawNode(ctx, this);
+        GraphNode.drawNode(ctx, this);
     }
 
-    drawNode(ctx, node) {
+    static drawNode(ctx, node) {
+
+        // draw the box, title, connectors, divider
         
         const titleTop = 15;
         const separatorLineTop = 23;
@@ -967,6 +972,43 @@ class GraphNode {
         ctx.stroke();
 
         ctx.restore();
+    }
+    
+}
+
+class SuperNode extends GraphNode {
+    //constructor(id, name, x, y, inputs = [], outputs = []) {
+
+    constructor(id, name, x, y, nodes) {
+
+        // must call super before accessing 'this' or returning from derived constructor
+        super(id, name, x, y);
+
+        // add connectors
+        for (let n of nodes) {
+            for (let cn in n.Connectors) {
+                let c = n.Connectors[cn];
+                let ci = new GraphNodeConnector(n.Name + '_' + c.Name, c.Input, c.Tag, this);
+                this.addConnector(ci);
+            }
+        }
+        
+        this.Nodes = nodes;
+        
+        //this.Id = id;
+        //this.Name = name;
+
+        //this.Left = x;
+        //this.Top = y;
+        
+         // todo: if a context is supplied, could determine width based on text font?
+//        this.Width = 10 + name.length * 9;
+//        this.Height = 1 + GraphNode.headerHeight() + this.Connectors.length * GraphNode.itemHeight();
+    }
+
+    draw(ctx) {
+        //console.log("Super node draw: ", this);
+        GraphNode.drawNode(ctx, this);
     }
     
 }

@@ -8,7 +8,7 @@ namespace AARC.Mesh.Model
     /// A publisher of T as in IObserver<typeparamref name="T"/>
     /// </summary>
     /// <typeparam name="T"></typeparam>
-    public class MeshObserver<T> : IMeshObserver<T> where T : class
+    public class MeshObserver<T> : IMeshObserver<T>
     {
         public Action<string> OnConnect { get { return _channelProxy?.OnConnect; } set { _channelProxy.OnConnect = value; } }
 

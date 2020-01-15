@@ -35,8 +35,10 @@ namespace AARC.Service.Hosted
             if (services != null)
             {
                 _meshServices = new List<IMeshReactor<MeshMessage>>();
-                foreach (var service in services)
-                    _meshServices.Add(dfFactory.Get(service));
+                //                foreach (var service in services)
+                //                    _meshServices.Add(dfFactory.Get(service));
+
+                _meshServices.Add(new AARC.Graph.Test.MeshMethodWireUp());
             }
             else throw new ArgumentException(@"Missing Services");
         }

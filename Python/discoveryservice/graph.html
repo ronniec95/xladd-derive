@@ -22,11 +22,11 @@
     <h1>Aarc Graph</h1>
 
     <div class="buttonStuff" style="width: 1200px;">
-        <button type="button" class="aarcButton" onclick="loadXml()"><span>Load</span></button>
-        <button type="button" class="aarcButton" onclick="saveXml()"><span>Save</span></button>
+        <button type="button" class="aarcButton" onclick="loadXml()"><span>Load Xml</span></button>
+        <button type="button" class="aarcButton" onclick="saveXml()"><span>Save Xml</span></button>
         <button type="button" class="aarcButton" onclick="deselectAll()"><span>Deselect All</span></button>
-        <button type="button" class="aarcButton" onclick="addMeshNode()"><span>Mesh Node</span></button>
-        <button type="button" class="aarcButton" onclick="updateNodes()"><span>Update Nodes</span></button>
+        <button type="button" class="aarcButton" onclick="loadJsonFromFile()"><span>Load Json</span></button>
+        <button type="button" class="aarcButton" onclick="updateNodes()"><span>DS Nodes</span></button>
         <input id="file-input" type="file" name="name" style="display: none;" />
     </div>
 
@@ -53,6 +53,7 @@
                     <textarea id="nodeDef" autocorrect="off" autocapitalize="off" spellcheck="false" style="position: absolute; padding: 0px; width: 1000px; height: 80px; outline: none; resize: none; white-space: nowrap;" tabindex="0">System.Double[] GetVols(System.String ticker, System.DateTime from, System.DateTime to)</textarea>
                 </div>
                 <button type="button" class="aarcButton" onclick="addNode()" style="margin-left: 20px; margin-top: 5px;"><span>Add Node</span></button>
+                <button type="button" class="aarcButton" onclick="addJson()"><span>Add Json</span></button>
                 <button type="button" class="aarcButton" onclick="nodeText()"><span>Get Selected</span></button>
 
                 <div style="padding: 10px 20px; font-family: consolas; font-size: 12px">
@@ -92,20 +93,6 @@
             handle: '#dragHandle',
             axis: 'y'
         });
-
-        function addMeshNode()
-{
-    let optionService = new GraphNode(graph.getNextId(), "OptionPrices[tcp://localhost:5000]", 200, 50);
-    optionService.addConnector(new GraphNodeConnector("IObserver<ticker>", true, "IObserver<string>", optionService));
-    optionService.addConnector(new GraphNodeConnector("IObserverable<TickerPrices>", false, "IObserverable<T>", optionService));
-
-    let stockService = new GraphNode(graph.getNextId(), "StockPrices[tcp://localhost:5000]", 200, 50);
-    stockService.addConnector(new GraphNodeConnector("IObserver<ticker>", true, "IObserver<string>", stockService));
-    stockService.addConnector(new GraphNodeConnector("IObserverable<StockPrice>", false, "IObserverable<T>", stockService));
-    graph.add(optionService);
-    graph.add(stockService);
-    graph.draw(ctx);
-}
 
 function updateNodes()
 {
