@@ -6,8 +6,8 @@ class DSRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if (self.path == "/") or (self.path == "/index.html"):
             self.MainPage()
-        elif self.path == "/test.html":
-            self.TestPage()
+        elif self.path == "/graph.html" or (self.path == "graph"):
+            self.GraphPage()
         elif self.path.startswith("http"):
             if self.path.endswith("js"):
                 self.RenderPage('application/javascript', self.path)
@@ -85,7 +85,7 @@ class DSRequestHandler(BaseHTTPRequestHandler):
         badhtml = open("./html/bad.html", 'rb')
         self.wfile.write(badhtml.read())
 
-    def TestPage(self):
+    def GraphPage(self):
         aarcheader = open("./graph.html", 'rb')
         self.send_response(200)
         self.send_header('Content-type',    'text/html')

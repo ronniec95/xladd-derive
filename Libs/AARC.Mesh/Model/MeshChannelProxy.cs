@@ -12,36 +12,42 @@ namespace AARC.Mesh.Model
         /// <summary>
         /// Input Channel Names are past to the discovery service to help client/servers find matches
         /// </summary>
-        public IList<string> InputChannelNames { get; }
+        public string IputChannelAlias { get; }
 
         /// <summary>
         ///Output Channel Names are past to the discovery service to help client/servers find matches
         /// </summary>
-        public IList<string> OutputChannelNames { get; }
+        public string OutputChannelAlias { get; }
 
+        /// <summary>
+        /// Used to notifed the a new connection has been made.
+        /// </summary>
         public Action<string> OnConnect { get; set; }
+
+        public int ClusterType { get; }
 
         private MeshChannelProxy()
         {
             _metrics = new ChannelMetrics { ReturnType = typeof(T) };
             _observers = new List<IObserver<T>>();
-            this.InputChannelNames = new List<string>();
-            this.OutputChannelNames = new List<string>();
         }
 
-        public MeshChannelProxy(string inputChannelName = null, string outputChannelName = null)
+        public MeshChannelProxy(string inputChannelName = null, string outputChannelName = null, int clusterType = 0)
             : this()
         {
             var channelType = typeof(T);
+
+            ClusterType = clusterType;
+
             if (!string.IsNullOrEmpty(inputChannelName))
             {
                 _metrics.Name = $"{inputChannelName}({channelType})";
-                this.InputChannelNames.Add(_metrics.Name);
+                this.IputChannelAlias = _metrics.Name;
             }
             if (!string.IsNullOrEmpty(outputChannelName))
             {
                 _metrics.Name = $"{outputChannelName}({channelType})";
-                this.OutputChannelNames.Add(_metrics.Name);
+                this.OutputChannelAlias = _metrics.Name;
             }
         }
 
@@ -70,21 +76,19 @@ namespace AARC.Mesh.Model
         public void RegisterReceiverChannels(MeshDictionary<MeshMessage> inputChannels)
         {
             if (inputChannels != null)
-                foreach (var route in InputChannelNames)
-                    if (!inputChannels.ContainsKey(route))
+                    if (!inputChannels.ContainsKey(IputChannelAlias))
                     {
-                        inputChannels[route] = new MeshNetChannel<MeshMessage>();
-                        Subscribe(inputChannels[route]);
+                        inputChannels[IputChannelAlias] = new MeshNetChannel<MeshMessage>();
+                        Subscribe(inputChannels[IputChannelAlias]);
                     }
         }
 
         public void RegistePublisherChannels(MeshDictionary<MeshMessage> outputChannels)
         {
             if (outputChannels != null)
-                foreach (var route in OutputChannelNames)
-                    if (!outputChannels.ContainsKey(route))
+                    if (!outputChannels.ContainsKey(OutputChannelAlias))
                     {
-                        outputChannels[route] = new MeshNetChannel<MeshMessage>(this);
+                        outputChannels[OutputChannelAlias] = new MeshNetChannel<MeshMessage>(this);
                     }
         }
 
@@ -131,8 +135,7 @@ namespace AARC.Mesh.Model
             var message = new MeshMessage { GraphId = 1, XId = xid, PayLoad = jpayload };
             if (!string.IsNullOrEmpty(transportUrl))
                 message.Routes = new List<string> { transportUrl };
-            foreach (var channel in this.OutputChannelNames)
-                PublishChannel?.Invoke(channel, message);
+            PublishChannel?.Invoke(this.OutputChannelAlias, message);
         }
     }
 }

@@ -12,9 +12,9 @@ namespace AARC.Mesh.Model
     {
         public Action<string> OnConnect { get { return _channelProxy?.OnConnect; } set { _channelProxy.OnConnect = value; } }
 
-        public IList<string> InputChannelNames { get { return _channelProxy.InputChannelNames; } }
+        public string IputChannelAlias { get { return _channelProxy.IputChannelAlias; } }
 
-        public IList<string> OutputChannelNames { get { return _channelProxy.OutputChannelNames; } }
+        public string OutputChannelAlias { get { return _channelProxy.OutputChannelAlias; } }
 
         private readonly MeshChannelProxy<T> _channelProxy;
 
@@ -23,7 +23,7 @@ namespace AARC.Mesh.Model
             _channelProxy = external;
         }
 
-        public MeshObserver(string channelName): this(new MeshChannelProxy<T>(outputChannelName: channelName)) { }
+        public MeshObserver(string channelName, int clusterType = 0): this(new MeshChannelProxy<T>(outputChannelName: channelName, clusterType: clusterType)) { }
 
         public MeshChannelResult<MeshMessage> PublishChannel { get { return _channelProxy.PublishChannel; } set { _channelProxy.PublishChannel += value; } }
 

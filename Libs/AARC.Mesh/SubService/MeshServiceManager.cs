@@ -23,10 +23,6 @@ namespace AARC.Mesh.SubService
         private IMeshTransport<MeshMessage> _transportServer;
         private DiscoveryMonitor<DiscoveryMessage> _discoveryMonitor;
 
-        public delegate void MeshMessagePublisherDelegate(string transportId, MeshMessage message);
-
-        public MeshMessagePublisherDelegate ServicePublisher { get; set; }
-
         public int ListeningPort { get { return _dssmc.Port; } set { _dssmc.Port = value; } }
 
         public Task DiscoveryService { get; private set; }
@@ -65,6 +61,7 @@ namespace AARC.Mesh.SubService
         }
 
         public ManualResetEvent RegistrationComplition { get { return _dssmc.RegistrationComplete; } }
+
         /// <summary>
         /// We are looking to see if there is an input route for our output for'channel'
         /// </summary>

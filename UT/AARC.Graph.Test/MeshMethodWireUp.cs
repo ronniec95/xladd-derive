@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using AARC.Mesh.Interface;
 using AARC.Mesh.Model;
 using Microsoft.Extensions.Logging;
@@ -14,7 +15,7 @@ namespace AARC.Graph.Test
         {
             return input1 + input2;
         }
-/*
+
         public static int IntMethod(int input1, int input2)
         {
             return input1 + input2;
@@ -35,7 +36,7 @@ namespace AARC.Graph.Test
             if (string.IsNullOrEmpty(input4))
                 return 0;
             return input1 + input2 + input3;
-        }*/
+        }
     }
 
     public class MeshMethodWireUp : IMeshReactor<MeshMessage>
@@ -69,6 +70,25 @@ namespace AARC.Graph.Test
                     var tmp = onNext.Invoke(observer, new[] { result });
                 }
         }
+
+        public void Subscriber<T>(T s)
+        {
+
+        }
+        private void SubscribeMethod(object observerable, Type payloadType)
+        {
+            Type observableType = observerable.GetType();
+
+            var Subscribe = observableType.GetMethod("Subscriber");
+
+            Type type = typeof(Action<>).MakeGenericType(new Type[] { payloadType });
+            Delegate del = Delegate.CreateDelegate(type, observerable, "Subscribe"); // target is the instance of the object for which methodName will be invoked
+
+//            del a = (s) => { Console.WriteLine("Hello World"); };
+
+//            Expression<Action<t>> a = (s) => { Console.WriteLine("Hello World"); }
+            var tmp = Subscribe.Invoke(observerable, new[] { del });
+        }
         public object CreateObservable(Type t, string method, string pName)
         {
             var fullNameParameter = $"{method}.{pName}";
@@ -86,6 +106,18 @@ namespace AARC.Graph.Test
                         ExecuteMethod(method);
 
                     });
+                return observerable;
+            }
+            else if (t == typeof(DateTime))
+            {
+                var observerable = new MeshObservable<DateTime>(fullNameParameter);
+                observerable.Subscribe((s) =>
+                {
+                    Console.WriteLine($"Received an update {fullNameParameter} {s}");
+                    paramResults[pName] = s;
+                    ExecuteMethod(method);
+
+                });
                 return observerable;
             }
             else if (t == typeof(int))
@@ -125,6 +157,7 @@ namespace AARC.Graph.Test
             {
                 var constructed = GetConstructorType(t, typeof(MeshObservable<>));
                 var observerable = Activator.CreateInstance(constructed, fullNameParameter);
+                SubscribeMethod(observerable, t);
                 return observerable;
             }
         }
@@ -139,6 +172,8 @@ namespace AARC.Graph.Test
                 return new MeshObserver<long>(method);
             else if (t == typeof(double))
                 return new MeshObserver<double>(method);
+            else if (t == typeof(DateTime))
+                return new MeshObserver<DateTime>(method);
             else
             {
                 var constructed = GetConstructorType(t, typeof(MeshObserver<>));
