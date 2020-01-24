@@ -8,7 +8,7 @@ namespace AARC.Mesh.Interface
         /// <summary>
         /// Readable name of the input channels we wish to subscribe to.
         /// </summary>
-        string IputChannelAlias { get; }
+        string InputChannelAlias { get; }
         /// <summary>
         /// Readable name of the output channels we wish to publish to.
         /// </summary>

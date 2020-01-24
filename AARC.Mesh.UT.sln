@@ -1,0 +1,47 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AARC.MeshTests", "UT\AARC.MeshTests\AARC.MeshTests.csproj", "{5A21B0AB-DFCF-4857-A8D1-FE9DC3ACAE36}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AARC.Mesh", "Libs\AARC.Mesh\AARC.Mesh.csproj", "{5A6F9101-FF71-4EDE-9A6B-C6773F999DD5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AARC.Model", "Libs\AARC.Model\AARC.Model.csproj", "{2727300F-0074-4E6E-8FB5-3F39162AAC07}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AARC.Graph.Test", "UT\AARC.Graph.Test\AARC.Graph.Test.csproj", "{7C0DAA72-81E6-422B-8D11-1F9BF7482967}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AARC.Mesh.Reflection", "Libs\AARC.Mesh.Reflection\AARC.Mesh.Reflection.csproj", "{0115B4BD-AD57-4A23-A1A9-98C01A8C2A6E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AARC.Compression", "Libs\AARC.Compression\AARC.Compression.csproj", "{98C4832B-806C-4797-B752-740C2DD22393}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{5A21B0AB-DFCF-4857-A8D1-FE9DC3ACAE36}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5A21B0AB-DFCF-4857-A8D1-FE9DC3ACAE36}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5A21B0AB-DFCF-4857-A8D1-FE9DC3ACAE36}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5A21B0AB-DFCF-4857-A8D1-FE9DC3ACAE36}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5A6F9101-FF71-4EDE-9A6B-C6773F999DD5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5A6F9101-FF71-4EDE-9A6B-C6773F999DD5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5A6F9101-FF71-4EDE-9A6B-C6773F999DD5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5A6F9101-FF71-4EDE-9A6B-C6773F999DD5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2727300F-0074-4E6E-8FB5-3F39162AAC07}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2727300F-0074-4E6E-8FB5-3F39162AAC07}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2727300F-0074-4E6E-8FB5-3F39162AAC07}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2727300F-0074-4E6E-8FB5-3F39162AAC07}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7C0DAA72-81E6-422B-8D11-1F9BF7482967}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7C0DAA72-81E6-422B-8D11-1F9BF7482967}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7C0DAA72-81E6-422B-8D11-1F9BF7482967}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7C0DAA72-81E6-422B-8D11-1F9BF7482967}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0115B4BD-AD57-4A23-A1A9-98C01A8C2A6E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0115B4BD-AD57-4A23-A1A9-98C01A8C2A6E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0115B4BD-AD57-4A23-A1A9-98C01A8C2A6E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0115B4BD-AD57-4A23-A1A9-98C01A8C2A6E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{98C4832B-806C-4797-B752-740C2DD22393}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{98C4832B-806C-4797-B752-740C2DD22393}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{98C4832B-806C-4797-B752-740C2DD22393}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{98C4832B-806C-4797-B752-740C2DD22393}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

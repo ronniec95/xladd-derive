@@ -1,13 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
-using AARC.Mesh.Model;
-using AARC.Mesh.SubService;
 using AARC.Mesh.TCP;
 using AARC.Model;
 using System.Linq;

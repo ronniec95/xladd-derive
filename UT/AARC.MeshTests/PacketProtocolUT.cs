@@ -1,10 +1,7 @@
 using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Text;
 using AARC.Mesh.Model;
-using AARC.Mesh.TCP;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace AARC.MeshTests
@@ -62,68 +59,6 @@ namespace AARC.MeshTests
                     var formatedBytes = PacketProtocol.WrapMessage(bytes);
                     packetizer.DataReceived(formatedBytes, formatedBytes.Length);
                 }
-        }
-
-        [TestMethod]
-        public void TestGetInputQsFileToJson()
-        {
-            byte[] bytes1 = File.ReadAllBytes("register.bin");
-
-            Assert.IsNotNull(bytes1);
-
-            byte[] bytes2 = File.ReadAllBytes("getinputqs.bin");
-
-            Assert.IsNotNull(bytes2);
-
-            var rawmessahes = new List<byte[]>{ bytes1, bytes2 };
-            var packetizer = new PacketProtocol(2000);
-            var q = new Queue<string>();
-
-            packetizer.MessageArrived += message =>
-            {
-                var s = Encoding.UTF8.GetString(message);
-                q.Enqueue(s);
-            };
-
-            var iterations = 1000;
-            for (var i = 0; i < iterations; i++)
-            {
-                foreach (var raw in rawmessahes)
-                    packetizer.DataReceived(raw, raw.Length);
-            }
-
-            Assert.AreEqual<int>(q.Count, iterations * rawmessahes.Count);
-        }
-
-        [TestMethod]
-        public void TestGetInputQsFileToMeshMessage()
-        {
-            byte[] bytes1 = File.ReadAllBytes("register.bin");
-
-            Assert.IsNotNull(bytes1);
-
-            byte[] bytes2 = File.ReadAllBytes("getinputqs.bin");
-
-            Assert.IsNotNull(bytes2);
-
-            var rawmessahes = new List<byte[]> { bytes1, bytes2 };
-            var packetizer = new PacketProtocol(2000);
-            var q = new Queue<MeshMessage>();
-
-            packetizer.MessageArrived += bytes =>
-            {
-                var mm = MeshMessage.Deserialise(bytes);
-                q.Enqueue(mm);
-            };
-
-            var iterations = 1000;
-            for (var i = 0; i < iterations; i++)
-            {
-                foreach (var raw in rawmessahes)
-                    packetizer.DataReceived(raw, raw.Length);
-            }
-
-            Assert.AreEqual<int>(q.Count, iterations * rawmessahes.Count);
         }
     }
 }

@@ -12,5 +12,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Libs\AARC.Mesh\AARC.Mesh.csproj" />
+    <ProjectReference Include="..\..\Libs\AARC.Mesh.Reflection\AARC.Mesh.Reflection.csproj" />
   </ItemGroup>
 </Project>

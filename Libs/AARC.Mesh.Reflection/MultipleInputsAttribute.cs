@@ -1,5 +1,5 @@
 ﻿using System;
-namespace AARC.Graph.Test
+namespace AARC.Mesh.Reflection
 {
     [AttributeUsage(AttributeTargets.Method)]//AttributeTargets.All)]
     public class MultipleInputsAttribute : Attribute

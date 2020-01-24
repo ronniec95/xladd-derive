@@ -34,8 +34,9 @@ namespace AARC.Mesh.SubService
             _dssmc = discoveryServiceState;
             _logger = logger;
             _discoveryMonitor = discoveryMonitor;
-            _discoveryMonitor.DiscoveryReceive = _dssmc.Receive;
-            _discoveryMonitor.DiscoverySend = _dssmc.Send;
+            _discoveryMonitor.DiscoveryReceiveMessage += _dssmc.CreateReceiveMessage;
+            _discoveryMonitor.DiscoverySendMessage += _dssmc.CreateSendMessage;
+            _discoveryMonitor.DiscoveryErrorMessage += _dssmc.CreateErrorMessage;
 
             _transportServer = meshTransport;
 
@@ -246,14 +247,15 @@ namespace AARC.Mesh.SubService
             // GC.SuppressFinalize(this);
         }
 
+        // ToDo: Send to DS
         public void OnCompleted()
         {
             throw new NotImplementedException();
         }
-
+        // Todo: Send to DS
         public void OnError(Exception error)
         {
-            throw new NotImplementedException();
+            this._discoveryMonitor.OnError(error.Message, _transportServer.Url);
         }
 
         /// <summary>

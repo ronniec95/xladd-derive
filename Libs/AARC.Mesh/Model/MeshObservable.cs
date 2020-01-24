@@ -10,7 +10,7 @@ namespace AARC.Mesh.Model
     /// <typeparam name="T"></typeparam>
     public class MeshObservable<T> : IMeshObservable<T> // where T : class, new()
     {
-        public string IputChannelAlias { get { return _channelProxy.IputChannelAlias; } }
+        public string InputChannelAlias { get { return _channelProxy.InputChannelAlias; } }
 
         public string OutputChannelAlias { get { return _channelProxy.OutputChannelAlias; } }
 

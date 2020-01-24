@@ -12,7 +12,7 @@ namespace AARC.Mesh.Model
         /// <summary>
         /// Input Channel Names are past to the discovery service to help client/servers find matches
         /// </summary>
-        public string IputChannelAlias { get; }
+        public string InputChannelAlias { get; }
 
         /// <summary>
         ///Output Channel Names are past to the discovery service to help client/servers find matches
@@ -42,7 +42,7 @@ namespace AARC.Mesh.Model
             if (!string.IsNullOrEmpty(inputChannelName))
             {
                 _metrics.Name = $"{inputChannelName}({channelType})";
-                this.IputChannelAlias = _metrics.Name;
+                this.InputChannelAlias = _metrics.Name;
             }
             if (!string.IsNullOrEmpty(outputChannelName))
             {
@@ -76,35 +76,40 @@ namespace AARC.Mesh.Model
         public void RegisterReceiverChannels(MeshDictionary<MeshMessage> inputChannels)
         {
             if (inputChannels != null)
-                    if (!inputChannels.ContainsKey(IputChannelAlias))
-                    {
-                        inputChannels[IputChannelAlias] = new MeshNetChannel<MeshMessage>();
-                        Subscribe(inputChannels[IputChannelAlias]);
-                    }
+                if (!inputChannels.ContainsKey(InputChannelAlias))
+                {
+                    inputChannels[InputChannelAlias] = new MeshNetChannel<MeshMessage>();
+                    Subscribe(inputChannels[InputChannelAlias]);
+                }
         }
 
         public void RegistePublisherChannels(MeshDictionary<MeshMessage> outputChannels)
         {
             if (outputChannels != null)
-                    if (!outputChannels.ContainsKey(OutputChannelAlias))
-                    {
-                        outputChannels[OutputChannelAlias] = new MeshNetChannel<MeshMessage>(this);
-                    }
+                if (!outputChannels.ContainsKey(OutputChannelAlias))
+                {
+                    outputChannels[OutputChannelAlias] = new MeshNetChannel<MeshMessage>(this);
+                }
         }
 
+        /// <summary>
+        /// Transport errors should be sent to the DS
+        /// </summary>
+        /// <param name="error"></param>
         public void OnError(Exception error)
         {
             ++_metrics.Errors;
+            // Todo: Send to DS
             //throw new NotImplementedException();
         }
 
         public void OnNext(MeshMessage item)
         {
+            // Message convertion we send throw to the user
             T payload = default;
-            // If the payload fails to serialize then throw it to the user
-            // Todo: If the transport fails....
             payload = JsonConvert.DeserializeObject<T>(item.PayLoad);
 
+            // Transport errors we throw to DS
             ++_metrics.NoMsgReceived;
             try
             {

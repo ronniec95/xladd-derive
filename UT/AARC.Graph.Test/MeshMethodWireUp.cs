@@ -5,6 +5,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using AARC.Mesh.Interface;
 using AARC.Mesh.Model;
+using AARC.Mesh.Reflection;
 using Microsoft.Extensions.Logging;
 
 namespace AARC.Graph.Test
@@ -189,7 +190,7 @@ namespace AARC.Graph.Test
             observers = new ConcurrentDictionary<string, object>();
             ChannelRouters = new List<IRouteRegister<MeshMessage>>();
 
-            var transforms = DataFlowReflectionHelper.GetTransforms(typeof(Dumb));
+            var transforms = ReflectionHelper.GetTransforms(typeof(Dumb));
             Name = typeof(Dumb).Name;
             foreach(var m in transforms)
             if (m != null)

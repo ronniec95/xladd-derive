@@ -19,9 +19,11 @@ namespace AARC.Mesh.SubService
 
         private IMeshServiceTransport _discoveryService;
 
-        public Action<T> DiscoveryReceive { get; set; }
+        public Action<T> DiscoveryReceiveMessage { get; set; }
 
-        public Action<T, string> DiscoverySend { get; set; }
+        public Action<T, string> DiscoverySendMessage { get; set; }
+
+        public Action<T, string, string> DiscoveryErrorMessage { get; set; }
 
         public DiscoveryMonitor(ILogger<DiscoveryMonitor<T>> logger, IMeshTransportFactory qServiceFactory)
         {
@@ -70,12 +72,9 @@ namespace AARC.Mesh.SubService
                             if (_discoveryService.Connected)
                             {
                                 var message = new T();
-                                DiscoverySend.Invoke(message, serviceUrl);
+                                DiscoverySendMessage.Invoke(message, serviceUrl);
 
-                                var obytes = message.Encode();
-                                // Todo: Not sure I like this
-                                _discoveryService.SenderChannel.WriteAsync(obytes);
-                                _logger?.LogDebug($"DS Tx {obytes.Length}");
+                                OnSend(message);
                             }
                             else
                             {
@@ -108,7 +107,21 @@ namespace AARC.Mesh.SubService
             _logger?.LogDebug($"DS Rx {ibytes.Length}");
             var message = new T();
             message.Decode(ibytes);
-            DiscoveryReceive?.Invoke(message);
+            DiscoveryReceiveMessage?.Invoke(message);
+        }
+
+        public void OnError(string errorMessage, string url)
+        {
+            var message = new T();
+            DiscoveryErrorMessage?.Invoke(message, url, errorMessage);
+            OnSend(message);
+        }
+        public void OnSend(T message)
+        {
+            var obytes = message.Encode();
+            // Todo: Not sure I like this
+            _discoveryService.SenderChannel.WriteAsync(obytes);
+            _logger?.LogDebug($"DS Tx {obytes.Length}");
         }
 
         #region IDisposable Support

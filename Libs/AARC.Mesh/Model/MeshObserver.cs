@@ -12,7 +12,7 @@ namespace AARC.Mesh.Model
     {
         public Action<string> OnConnect { get { return _channelProxy?.OnConnect; } set { _channelProxy.OnConnect = value; } }
 
-        public string IputChannelAlias { get { return _channelProxy.IputChannelAlias; } }
+        public string InputChannelAlias { get { return _channelProxy.InputChannelAlias; } }
 
         public string OutputChannelAlias { get { return _channelProxy.OutputChannelAlias; } }
 

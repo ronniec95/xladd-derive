@@ -3,7 +3,7 @@ using System.Reflection;
 
 // Used by DataTransforms (MultipleInputsAttribute)
 // Also used by OptioniserForm ()
-namespace AARC.Graph.Test
+namespace AARC.Mesh.Reflection
 {
     public class ReflectionTransform
     {

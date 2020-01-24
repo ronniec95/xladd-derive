@@ -5,6 +5,9 @@ using AARC.Mesh.Interface;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Concurrent;
+using AARC.Mesh;
+using Microsoft.Extensions.Logging;
+using System.Threading.Channels;
 
 namespace AARC.MeshTests
 {
@@ -13,9 +16,24 @@ namespace AARC.MeshTests
     {
         private readonly ConcurrentDictionary<string, IMeshServiceTransport> _meshServices = new ConcurrentDictionary<string, IMeshServiceTransport>();
 
-        public MockTransportServer()
-        {
+        public int MonitorPeriod { get; }
+        private CancellationTokenSource _localCancelSource;
+        private ManualResetEvent _listenAcceptEvent;
+        private ILogger<MockTransportServer> _logger;
+        private IMeshTransportFactory _qServiceFactory;
+        private readonly Channel<byte[]> _parentReceiver;
+        private CancellationToken _localct;
 
+        public MockTransportServer(ILogger<MockTransportServer> logger, IMeshTransportFactory qServiceFactory)
+        {
+            _localCancelSource = new CancellationTokenSource();
+            _listenAcceptEvent = new ManualResetEvent(false);
+            _logger = logger;
+            _qServiceFactory = qServiceFactory;
+            _parentReceiver = Channel.CreateUnbounded<byte[]>();
+            _meshServices = new ConcurrentDictionary<string, IMeshServiceTransport>();
+            MonitorPeriod = 15000;
+            _localct = _localCancelSource.Token;
         }
 
         public string Url => "localhost:0";
@@ -45,25 +63,13 @@ namespace AARC.MeshTests
                 {
                     var service = _meshServices[transportId];
                     if (service.Connected)
-                        _meshServices[transportId].OnPublish(bytes);
+                        _meshServices[transportId].SenderChannel.WriteAsync(bytes);
                     else
                     {
                         _meshServices.Remove(transportId, out service);
                     }
                 }
-        }
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="service"></param>
-        public void RegisterService(IMeshServiceTransport service)
-        {
-            if (!_meshServices.ContainsKey(service.Url))
-                _meshServices[service.Url] = service;
-
-            service.Subscribe(this);
-            Subscribe(service);
+                else throw new EntryPointNotFoundException($"No Route to {transportId}");
         }
 
         public void OnPublish(byte[] value)
@@ -74,9 +80,22 @@ namespace AARC.MeshTests
                 o.OnNext(m);
         }
 
-        public void ServiceConnect(string serverDetails, CancellationToken cancellationToken)
+        public bool ServiceConnect(string servicedetails, CancellationToken cancellationToken)
         {
-            throw new NotImplementedException();
+            if (_meshServices.ContainsKey(servicedetails))
+            {
+                var service = _meshServices[servicedetails];
+                if (service.ConnectionAlive())
+                    return false;
+
+                if (_meshServices.TryRemove(servicedetails, out service))
+                    service.Dispose();
+            }
+
+            _logger.LogInformation($"Creating a connecting to {servicedetails}");
+            var qss = _qServiceFactory.Create(servicedetails);
+            _meshServices[servicedetails] = qss;
+            return qss.Connected;
         }
 
         public Task StartListeningServices(int port, CancellationToken cancellationToken)
