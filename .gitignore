@@ -1,0 +1,5 @@
+/target
+**/*.rs.bk
+/.history
+/.vscode
+Cargo.lock
