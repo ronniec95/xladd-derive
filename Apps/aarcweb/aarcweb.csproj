@@ -1,0 +1,54 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp2.2</TargetFramework>
+    <AspNetCoreHostingModel>InProcess</AspNetCoreHostingModel>
+  </PropertyGroup>
+
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.AspNetCore.Razor.Design" Version="2.2.0" PrivateAssets="All" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="2.2.4" />
+    <PackageReference Include="log4net" Version="2.0.8" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Log4Net.AspNetCore" Version="2.2.10" />
+    <PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="2.2.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Models\MarketData\" />
+    <Folder Include="wwwroot\views\" />
+    <Folder Include="wwwroot\views\home\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Remove="Models\MarketData\StockInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Remove="wwwroot\views\home\History.js" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Update="log4net.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="wwwroot\views\home\History.js" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="Data\EURUSD\DAT_ASCII_EURUSD_T_201901.csv">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Data\EURUSD\DAT_ASCII_EURUSD_T_201901.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Libs\AARC.Utilities\AARC.Utilities.csproj" />
+    <ProjectReference Include="..\..\Libs\AARC.Model\AARC.Model.csproj" />
+    <ProjectReference Include="..\..\Libs\AARC.Repository.EF\AARC.Repository.EF.csproj" />
+    <ProjectReference Include="..\..\Libs\AARC.RDS\AARC.RDS.csproj" />
+    <ProjectReference Include="..\..\Libs\AARC.Controllers\AARC.Controllers.csproj" />
+    <ProjectReference Include="..\..\Libs\AARC.Repository.Interfaces\AARC.Repository.Interfaces.csproj" />
+    <ProjectReference Include="..\..\Libs\AARC.Repository.ORM\AARC.Repository.ORM.csproj" />
+  </ItemGroup>
+</Project>

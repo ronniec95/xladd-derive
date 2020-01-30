@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp3.0</TargetFramework>
+    <DockerComposeProjectPath>../ReactSample/docker-compose.dcproj</DockerComposeProjectPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Update="log4net.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="Microsoft.Extensions.DependencyInjection">
+      <HintPath>..\..\..\..\..\..\..\usr\local\share\dotnet\sdk\NuGetFallbackFolder\microsoft.extensions.dependencyinjection\2.2.0\lib\netcoreapp2.0\Microsoft.Extensions.DependencyInjection.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="log4net" Version="2.0.8" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="3.1.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="3.1.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="3.1.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.CommandLine" Version="3.1.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="3.1.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="3.1.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="3.1.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="3.1.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="3.1.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Log4Net.AspNetCore" Version="3.0.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Libs\AARC.Mesh\AARC.Mesh.csproj" />
+    <ProjectReference Include="..\..\Libs\AARC.Mesh.TCP\AARC.Mesh.TCP.csproj" />
+    <ProjectReference Include="..\..\Libs\AARC.Mesh.Dataflow\AARC.Mesh.Dataflow.csproj" />
+    <ProjectReference Include="..\..\Libs\AARC.RDS\AARC.RDS.csproj" />
+    <ProjectReference Include="..\..\Libs\AARC.Model\AARC.Model.csproj" />
+    <ProjectReference Include="..\..\Libs\AARC.Repository.EF\AARC.Repository.EF.csproj" />
+    <ProjectReference Include="..\..\Libs\AARC.Repository.Interfaces\AARC.Repository.Interfaces.csproj" />
+    <ProjectReference Include="..\..\Libs\AARC.Utilities\AARC.Utilities.csproj" />
+    <ProjectReference Include="..\..\UT\AARC.Graph.Test\AARC.Graph.Test.csproj" />
+  </ItemGroup>
+</Project>

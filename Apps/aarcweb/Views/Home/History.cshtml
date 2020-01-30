@@ -1,0 +1,49 @@
+﻿@{
+    ViewData["Title"] = "History";
+}
+
+<div class="text-center">
+    <h1 class="display-4">Historic Data</h1>
+</div>
+
+<div>
+    <link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/smoothness/jquery-ui.css">
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+    <link type="text/css" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jsgrid/1.5.3/jsgrid.min.css" />
+    <link type="text/css" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jsgrid/1.5.3/jsgrid-theme.min.css" />
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jsgrid/1.5.3/jsgrid.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style type="text/css">
+        .divLeft {
+            width: 100px;
+            display: block;
+            float: left;
+        }
+
+        .divRight {
+            width: 100px;
+            display: block;
+            float: right;
+        }
+    </style>
+    <div>
+        <span class="divLeft">
+            <link href="https://cdnjs.cloudflare.com/ajax/libs/multi-select/0.9.12/css/multi-select.min.css" media="screen" rel="stylesheet" type="text/css">
+
+            <select multiple="multiple" id="my-select" name="my-select[]">
+                <option value='elem_1'>AAPL</option>
+                <option value='elem_2'>MSFT</option>
+                <option value='elem_3'>INTL</option>
+                <option value='elem_4'>SB</option>
+            </select>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/multi-select/0.9.12/js/jquery.multi-select.min.js" type="text/javascript"></script>
+            <script>$('#my-select').multiSelect()</script>
+        </span>
+        <span class="divRight">
+            <input type="text" id="startdatepicker"><input type="text" id="enddatepicker">
+        </span>
+    </div>
+    <div id="myDiv"><!-- Plotly chart will be drawn inside this DIV --></div>
+    <div id="jsGrid"></div>
+    <script src="~/views/home/History.js"></script>
+</div>
