@@ -1,5 +1,4 @@
-﻿using System.Collections.Generic;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -8,11 +7,8 @@ using Microsoft.Extensions.Logging;
 namespace AARC.Service.Hosted
 {
     using AARC.Mesh.Dataflow;
-    using AARC.Mesh.Interface;
-    using AARC.Mesh.Model;
     using AARC.Mesh.SubService;
     using AARC.Mesh.TCP;
-    using AARC.Model.Interfaces;
     using AARC.Repository.Interfaces;
     /// <summary>
     /// Draft Service

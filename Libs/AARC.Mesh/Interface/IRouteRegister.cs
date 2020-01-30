@@ -6,13 +6,13 @@ namespace AARC.Mesh.Interface
     public interface IRouteRegister<T> where T: class
     {
         /// <summary>
-        /// Names of the input queues we wish to subscribe to.
+        /// Readable name of the input channels we wish to subscribe to.
         /// </summary>
-        IList<string> InputChannelNames { get; }
+        string InputChannelAlias { get; }
         /// <summary>
-        /// Names of the output queues we wish to publish to.
+        /// Readable name of the output channels we wish to publish to.
         /// </summary>
-        IList<string> OutputChannelNames { get; }
+        string OutputChannelAlias { get; }
 
         void RegisterReceiverChannels(MeshDictionary<MeshMessage> inputQChannels);
 

@@ -80,7 +80,7 @@ namespace AARC.Mesh.SubService
         ///  Connect -> register -> send inputQs -> send outputQs -> register
         ///  If disconnected then back to connect
         /// </summary>
-        public void Receive(DiscoveryMessage message)
+        public void CreateReceiveMessage(DiscoveryMessage message)
         {
             if (message != null)
             {
@@ -115,7 +115,7 @@ namespace AARC.Mesh.SubService
         /// The main purpose is to send the input and output q names to the discovery service.
         /// </summary>
         /// <returns></returns>
-        public void Send(DiscoveryMessage message, string hostName)
+        public void CreateSendMessage(DiscoveryMessage message, string hostName)
         {
             message.State = _state;
             message.HostServer = hostName;
@@ -146,6 +146,13 @@ namespace AARC.Mesh.SubService
                     message.State = DiscoveryMessage.DiscoveryStates.Error;
                     break;
             }
+        }
+
+        public void CreateErrorMessage(DiscoveryMessage message, string url, string errorMessage)
+        {
+            message.State = DiscoveryStates.Error;
+            message.Payload = errorMessage;
+            message.HostServer = url;
         }
     }
 }

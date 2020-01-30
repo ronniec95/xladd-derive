@@ -6,10 +6,10 @@ using System.Text;
 
 // Used by DataTransforms (MultipleInputsAttribute)
 // Also used by OptioniserForm ()
-namespace AARC.Graph.Test
+namespace AARC.Mesh.Reflection
 {
 
-    public class DataFlowReflectionHelper
+    public class ReflectionHelper
     {
         public static void TestReflectionStuff<T>()
         {

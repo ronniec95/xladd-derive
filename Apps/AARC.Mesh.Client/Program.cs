@@ -1,13 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
-using AARC.Mesh.Model;
-using AARC.Mesh.SubService;
 using AARC.Mesh.TCP;
 using AARC.Model;
 using System.Linq;
@@ -25,15 +20,28 @@ namespace AARC.Mesh.Client
         {
             //ManualResetEvent dsConnectEvent = new ManualResetEvent(false);
             log4net.GlobalContext.Properties["LogFileName"] = $"MeshTestClient";
-
             var msm = new MeshClient(args);
 
+            var logger = msm.ServiceProvider.GetService<ILoggerFactory>()
+    .CreateLogger<Program>();
+
+            var o = msm.CreateObserver<string>(args[0]);
+            for (; ; )
+            {
+                var data = Console.ReadLine();
+                o.OnNext(data);
+            }
+        }
+
+        public static void Test1(MeshClient msm)
+        {
             var logger = msm.ServiceProvider.GetService<ILoggerFactory>()
                 .CreateLogger<Program>();
 
             logger.LogDebug("Starting subscribers to nasdaqtestout");
             try
             {
+
                 var nasdaqTickers = msm.CreateObservable<TickerPrices>("nasdaqtestout");
                 //                var nasdaqUpdater = msm.CreateObserver<List<string>>("nasdaqtestin");
                 var biggeststocks = msm.CreateObservable<List<Stock>>("biggeststocks");

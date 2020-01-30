@@ -10,9 +10,9 @@ namespace AARC.Mesh.Model
     /// <typeparam name="T"></typeparam>
     public class MeshObservable<T> : IMeshObservable<T> // where T : class, new()
     {
-        public IList<string> InputChannelNames { get { return _channelProxy.InputChannelNames; } }
+        public string InputChannelAlias { get { return _channelProxy.InputChannelAlias; } }
 
-        public IList<string> OutputChannelNames { get { return _channelProxy.OutputChannelNames; } }
+        public string OutputChannelAlias { get { return _channelProxy.OutputChannelAlias; } }
 
         private MeshChannelProxy<T> _channelProxy;
 
@@ -21,7 +21,7 @@ namespace AARC.Mesh.Model
             _channelProxy = external;
         }
 
-        public MeshObservable(string chname) : this(new MeshChannelProxy<T>(inputChannelName: chname)) { }
+        public MeshObservable(string channelName, int clusterType = 0) : this(new MeshChannelProxy<T>(inputChannelName: channelName, clusterType: clusterType)) { }
 
         public IDisposable Subscribe(IObserver<T> observer) => _channelProxy.Subscribe(observer);
 

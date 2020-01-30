@@ -8,9 +8,10 @@
     <Compile Remove="Class1.cs" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="System.Reactive" Version="4.3.1" />
+    <PackageReference Include="System.Reactive" Version="4.3.2" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Libs\AARC.Mesh\AARC.Mesh.csproj" />
+    <ProjectReference Include="..\..\Libs\AARC.Mesh.Reflection\AARC.Mesh.Reflection.csproj" />
   </ItemGroup>
 </Project>

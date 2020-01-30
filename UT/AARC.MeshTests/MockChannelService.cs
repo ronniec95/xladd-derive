@@ -1,17 +1,21 @@
 ﻿using System;
-using AARC.Mesh.Model;
 using System.Collections.Generic;
-using AARC.Mesh.Interface;
 using System.Collections.Concurrent;
 using Newtonsoft.Json;
-using AARC.Model;
+
 
 namespace AARC.MeshTests
 {
-    class MockQueueService : SubscriberPattern<byte[]>, IMeshServiceTransport
+    using AARC.Mesh.Model;
+    using AARC.Model;
+    using AARC.Mesh.Interface;
+    using AARC.Mesh;
+    using System.Threading.Channels;
+
+    class MockChannelService : SubscriberPattern<byte[]>, IMeshServiceTransport
     {
         public ConcurrentQueue<byte[]> messagesin = new ConcurrentQueue<byte[]>();
-        public MockQueueService(string url)
+        public MockChannelService(string url)
         {
             Url = url;
         }
@@ -19,6 +23,9 @@ namespace AARC.MeshTests
 
 
         public string Url { get; private set; }
+        public ChannelWriter<byte[]> ReceiverChannel { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+
+        public ChannelWriter<byte[]> SenderChannel => throw new NotImplementedException();
 
         public bool ConnectionAlive()
         {

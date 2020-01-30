@@ -8,3 +8,8 @@ obj
 /MeshClientLibrary
 /packages
 /Python/discoveryservice/__pycache__
+/target
+**/*.rs.bk
+/.history
+/.vscode
+Cargo.lock

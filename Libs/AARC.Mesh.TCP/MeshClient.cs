@@ -59,7 +59,7 @@ namespace AARC.Mesh.TCP
             return observable;
         }
 
-        public IObserver<T> CreateObserver<T>(string channel) where T : class, new()
+        public IObserver<T> CreateObserver<T>(string channel)// where T : class, new()
         {
             var observer = new MeshObserver<T>(channel);
             msm.RegisterChannels(observer);
