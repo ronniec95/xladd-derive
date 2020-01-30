@@ -16,4 +16,9 @@ byteorder = "1"
 rand = "0.7.0"
 rmp="^0.8"
 pico-args="^0.3"
-#kv
+chrono="^0.4"
+toml = "0.5.6"
+
+[dependencies.rusqlite]
+version = "0.21.0"
+features = ["bundled","chrono","blob"]

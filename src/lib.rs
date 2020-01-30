@@ -11,13 +11,10 @@
 // Multiplex data
 mod discovery_msg;
 pub mod discovery_service;
-
 mod error;
+mod messages;
 pub mod queues;
-//mod service;
-
+pub mod smart_monitor;
+mod smart_monitor_sqlite;
+pub mod utils;
 pub use error::MeshError;
-
-pub fn register() {
-    //   service::register_services().unwrap();
-}
