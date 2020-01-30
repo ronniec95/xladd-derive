@@ -82,7 +82,7 @@ namespace AARC.MeshTests
             sender.RegistePublisherChannels(outMyStringObserver);
             marshal.PublishChannel += (action, msg) =>
             {
-                Assert.AreEqual<string>("testout", action);
+                Assert.AreEqual<string>("testout(System.Collections.Generic.List`1[System.String])", action);
                 messages.Enqueue(msg);
             };
 

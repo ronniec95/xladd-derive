@@ -25,6 +25,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AARC.Mesh.Client", "Apps\AA
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AARC.Compression", "Libs\AARC.Compression\AARC.Compression.csproj", "{FB388780-AB83-4A0D-A60A-C4D0F1E696A0}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AARC.Mesh.Reflection", "Libs\AARC.Mesh.Reflection\AARC.Mesh.Reflection.csproj", "{A95E5899-0A99-463B-9978-F73465BF6D51}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -79,5 +81,9 @@ Global
 		{FB388780-AB83-4A0D-A60A-C4D0F1E696A0}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FB388780-AB83-4A0D-A60A-C4D0F1E696A0}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{FB388780-AB83-4A0D-A60A-C4D0F1E696A0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A95E5899-0A99-463B-9978-F73465BF6D51}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A95E5899-0A99-463B-9978-F73465BF6D51}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A95E5899-0A99-463B-9978-F73465BF6D51}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A95E5899-0A99-463B-9978-F73465BF6D51}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
