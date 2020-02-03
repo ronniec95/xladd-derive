@@ -1,5 +1,7 @@
 use crate::error::*;
+use crate::messages::*;
 use crate::smart_monitor::*;
+use crate::utils::*;
 use async_std::net::{TcpListener, TcpStream};
 use async_std::stream::StreamExt;
 use futures::channel::mpsc::{channel, Receiver, Sender};
@@ -8,7 +10,6 @@ use futures::io::{AsyncReadExt, AsyncWriteExt};
 use futures::lock::Mutex;
 use futures::Future;
 use serde::{Deserialize, Serialize};
-use std::borrow::Borrow;
 use std::borrow::BorrowMut;
 use std::clone::Clone;
 use std::collections::{BTreeMap, BTreeSet};
@@ -16,13 +17,6 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-type ChannelID = u32;
-
-thread_local! {static LOGGER: SmartMonitorClient = SmartMonitorClient::new() }
-
-fn logger() -> &'static std::thread::LocalKey<SmartMonitorClient> {
-    return LOGGER.borrow();
-}
 
 enum MsgType<T> {
     Update(SocketAddr),
@@ -81,28 +75,29 @@ where
         }
     }
 
-    pub fn lv_pull_queue(&mut self) -> &LastValueQueue<T> {
-        self.last_value_consumers.push(LastValueQueue::new());
+    pub fn lv_pull_queue(&mut self, channel_id: ChannelId) -> &LastValueQueue<T> {
+        self.last_value_consumers
+            .push(LastValueQueue::new(channel_id));
         self.last_value_consumers.last().unwrap()
     }
 
-    pub fn burst_pull_queue(&mut self) -> &BurstQueue<T> {
-        self.burst_consumers.push(BurstQueue::new());
+    pub fn burst_pull_queue(&mut self, channel_id: ChannelId) -> &BurstQueue<T> {
+        self.burst_consumers.push(BurstQueue::new(channel_id));
         self.burst_consumers.last().unwrap()
     }
 
-    pub fn tcp_scalar_pull_queue(&mut self, channel_id: ChannelID) -> &TcpScalarQueue<T> {
+    pub fn tcp_scalar_pull_queue(&mut self, channel_id: ChannelId) -> &TcpScalarQueue<T> {
         let (sender, receiver) = channel(10);
         std::thread::spawn(move || PushQueue::tcp_stream_sender(channel_id, receiver));
         self.sink_consumers.push(TcpScalarQueue {
             sender,
-            sm_log: logger().with(|logger| logger.create_sender::<T>()),
+            sm_log: logger().create_sender::<T>(channel_id),
         });
         self.sink_consumers.last().unwrap()
     }
 
     async fn tcp_stream_sender(
-        channel_id: ChannelID,
+        channel_id: ChannelId,
         mut receiver: Receiver<MsgType<T>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut tcp_stream: Option<TcpStream> = None;
@@ -113,7 +108,7 @@ where
                         if let Some(tcp_stream) = &mut tcp_stream {
                             let err = bincode::serialize(&item).and_then(|bytes| {
                                 block_on(async {
-                                    tcp_stream.write(&u32::to_be_bytes(channel_id)).await?;
+                                    tcp_stream.write(&usize::to_be_bytes(channel_id)).await?;
                                     tcp_stream.write(&bytes).await?;
                                     Ok(())
                                 })
@@ -161,10 +156,10 @@ impl<T> BurstQueue<T>
 where
     T: Serialize + for<'de> Deserialize<'de>,
 {
-    fn new() -> Self {
+    fn new(channel_id: ChannelId) -> Self {
         Self {
             values: Arc::new(Mutex::new(Vec::new())),
-            sm_log: logger().with(|logger| logger.create_sender::<T>()),
+            sm_log: logger().create_sender::<T>(channel_id),
         }
     }
 
@@ -206,10 +201,10 @@ impl<T> LastValueQueue<T>
 where
     T: Serialize + for<'de> Deserialize<'de> + std::fmt::Debug,
 {
-    fn new() -> Self {
+    fn new(channel_id: ChannelId) -> Self {
         Self {
             value: Arc::new(Mutex::new(None)),
-            sm_log: logger().with(|logger| logger.create_sender::<T>()),
+            sm_log: logger().create_sender::<T>(channel_id),
         }
     }
 
@@ -279,7 +274,7 @@ where
 ///
 pub struct TcpService {
     port: u16,
-    input_queue_map: BTreeMap<ChannelID, Vec<Box<dyn ByteDeSerialiser>>>,
+    input_queue_map: BTreeMap<ChannelId, Vec<Box<dyn ByteDeSerialiser>>>,
 }
 
 impl TcpService {
@@ -306,11 +301,11 @@ impl TcpService {
     /// * 'id' - channel id
     /// * 'sink' - queue that implments byteDeserialiser
     ///
-    pub fn register_input_queue(&mut self, id: ChannelID, sink: Box<dyn ByteDeSerialiser>) {
+    pub fn register_input_queue(&mut self, id: ChannelId, sink: Box<dyn ByteDeSerialiser>) {
         self.input_queue_map.entry(id).or_insert(vec![]).push(sink);
     }
 
-    pub fn unregister_input_queue(&mut self, id: &ChannelID) {
+    pub fn unregister_input_queue(&mut self, id: &ChannelId) {
         self.input_queue_map.remove(&id);
     }
 
@@ -323,11 +318,11 @@ impl TcpService {
         let mut incoming = listener.incoming();
         while let Some(stream) = incoming.next().await {
             let reader = &mut &stream?;
-            let mut channel_id = [0u8; 4];
+            let mut channel_id = [0u8; 8];
             let mut byte_len = [0u8; 4];
             reader.read_exact(&mut channel_id).await?;
             reader.read_exact(&mut byte_len).await?;
-            let channel_id = u32::from_be_bytes(channel_id);
+            let channel_id = usize::from_be_bytes(channel_id);
             let mut buffer = Vec::with_capacity(u32::from_be_bytes(byte_len) as usize);
             reader.read_exact(&mut buffer).await?;
             if let Some(sinks) = self.input_queue_map.get_mut(&channel_id) {
@@ -349,14 +344,14 @@ impl TcpService {
 mod tests {
     use super::*;
     use async_std::task;
-    use futures::executor::{block_on, LocalPool};
+    use futures::executor::LocalPool;
     use futures::task::SpawnExt;
     use std::time::Duration;
 
     #[test]
     fn fifo_queue() {
         let mut pool = LocalPool::new();
-        let queue = BurstQueue::<i32>::new();
+        let queue = BurstQueue::<i32>::new(str_radix("channel1"));
         let spawner = pool.spawner();
         let mut l_queue = queue.clone();
         spawner
@@ -387,7 +382,7 @@ mod tests {
     #[test]
     fn last_value_queue() {
         let mut pool = LocalPool::new();
-        let queue = LastValueQueue::<i32>::new();
+        let queue = LastValueQueue::<i32>::new(str_radix("channel1"));
         let spawner = pool.spawner();
         let mut l_queue = queue.clone();
         spawner
@@ -422,7 +417,7 @@ mod tests {
     impl ProducerService {
         fn new() -> Self {
             Self {
-                q1: BurstQueue::<i32>::new(),
+                q1: BurstQueue::<i32>::new(str_radix("channel1")),
             }
         }
 
@@ -497,7 +492,7 @@ mod tests {
     impl ComputeNode {
         fn new(oq: &mut PushQueue<i32>) -> Self {
             Self {
-                q1: oq.burst_pull_queue().clone(),
+                q1: oq.burst_pull_queue(str_radix("channel1")).clone(),
             }
         }
 
@@ -519,7 +514,7 @@ mod tests {
     impl ComputeNode2 {
         fn new(oq: &mut PushQueue<i32>) -> Self {
             Self {
-                q1: oq.burst_pull_queue().clone(),
+                q1: oq.burst_pull_queue(str_radix("channel1")).clone(),
             }
         }
 

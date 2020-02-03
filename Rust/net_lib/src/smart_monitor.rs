@@ -1,7 +1,7 @@
 use crate::messages::*;
 use crate::smart_monitor_sqlite;
 use crate::utils::*;
-use async_std::io::ReadExt;
+use async_std::io::prelude::*;
 use async_std::net::SocketAddr;
 use async_std::net::{TcpListener, TcpStream};
 use async_std::stream::StreamExt;
@@ -9,15 +9,16 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::executor::ThreadPool;
 use futures::task::SpawnExt;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex, Once};
 
 //
 // Server Implmentation
 //
 pub struct SmartMonitor {
     pool: ThreadPool,
-    senders: BTreeMap<ChannelId, Sender<Message>>,
+    senders: Arc<Mutex<BTreeMap<ChannelId, Sender<Message>>>>,
 }
 
 #[derive(Clone)]
@@ -35,6 +36,7 @@ pub enum MsgFormat {
 
 #[derive(Clone)]
 pub struct Message {
+    pub channel_name: ChannelId,
     pub adj_time_stamp: NaiveDateTime,
     pub msg_format: MsgFormat,
     pub payload: Payload,
@@ -45,6 +47,9 @@ where
     R: ReadExt + Unpin,
 {
     let mut buf = [0u8; 8];
+
+    reader.read_exact(&mut buf).await.unwrap();
+    let channel_name = usize::from_le_bytes(buf);
 
     reader.read_exact(&mut buf).await?;
     let date = i64::from_le_bytes(buf);
@@ -73,6 +78,7 @@ where
         _ => Err("Unexpected 0 size payload received".into()),
     };
     Ok(Message {
+        channel_name,
         adj_time_stamp: NaiveDateTime::from_timestamp(date, time),
         msg_format,
         payload: payload?,
@@ -83,7 +89,7 @@ impl SmartMonitor {
     pub fn new() -> Self {
         Self {
             pool: ThreadPool::new().unwrap(),
-            senders: BTreeMap::new(),
+            senders: Arc::new(Mutex::new(BTreeMap::new())),
         }
     }
     async fn consume(
@@ -106,18 +112,27 @@ impl SmartMonitor {
                 Err(_) => eprintln!("failed saving to database"),
             }
         })?;
-        self.senders.insert(ch, sender);
+        if let Ok(mut senders) = self.senders.try_lock() {
+            senders.insert(ch, sender);
+        }
         Ok(())
     }
 
     async fn handle_monitoring(
         stream: &mut TcpStream,
-        mut sender: Sender<Message>,
+        sender_map: Arc<Mutex<BTreeMap<ChannelId, Sender<Message>>>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         loop {
-            let msg = try_from_message(stream)
-                .await
-                .and_then(|msg: Message| Ok(sender.try_send(msg)?))?;
+            if let Ok(msg) = try_from_message(stream).await {
+                loop {
+                    if let Ok(mut sender_map) = sender_map.try_lock() {
+                        if let Some(sender) = sender_map.get_mut(&msg.channel_name) {
+                            sender.try_send(msg)?;
+                        }
+                        break;
+                    }
+                }
+            }
         }
     }
 
@@ -129,21 +144,13 @@ impl SmartMonitor {
             // Latency measurement using https://en.wikipedia.org/wiki/Network_Time_Protocol
             // Measure clock difference
             // Send adjustment to client
-
-            // Channel Id
-            let mut buf = [0u8; 8];
-            stream.read_exact(&mut buf).await.unwrap();
-            let channel = usize::from_le_bytes(buf);
-            eprintln!("Connected as ChannelID: {}", channel);
-            if let Some(sender) = self.senders.get(&channel) {
-                let sender = sender.clone();
-                self.pool.spawn(async move {
-                    match SmartMonitor::handle_monitoring(&mut stream, sender).await {
-                        Ok(_) => (),
-                        Err(e) => eprintln!("error {:?}", e),
-                    }
-                })?;
-            }
+            let sender_map = self.senders.clone();
+            self.pool.spawn(async move {
+                match SmartMonitor::handle_monitoring(&mut stream, sender_map).await {
+                    Ok(_) => (),
+                    Err(e) => eprintln!("error {:?}", e),
+                }
+            })?;
         }
         Ok(())
     }
@@ -157,12 +164,25 @@ pub struct SmartMonitorClient {
     receiver: Receiver<Message>,
 }
 
+pub fn logger() -> &'static SmartMonitorClient {
+    static mut SINGLETON: *const SmartMonitorClient = 0 as *const SmartMonitorClient;
+    static ONCE: Once = Once::new();
+    unsafe {
+        ONCE.call_once(|| {
+            let singleton = SmartMonitorClient::new();
+            SINGLETON = std::mem::transmute(Box::new(singleton));
+        });
+        &(*SINGLETON)
+    }
+}
+
 #[derive(Clone)]
 pub struct SMLogger<T>
 where
     T: Serialize,
 {
     sender: Sender<Message>,
+    channel: ChannelId,
     _phantom: std::marker::PhantomData<T>,
 }
 
@@ -172,24 +192,41 @@ impl SmartMonitorClient {
         Self { sender, receiver }
     }
 
-    pub fn create_sender<T>(&self) -> SMLogger<T>
+    pub fn create_sender<T>(&self, channel: ChannelId) -> SMLogger<T>
     where
         T: Serialize,
     {
         SMLogger {
             sender: self.sender.clone(),
+            channel,
             _phantom: std::marker::PhantomData,
         }
     }
 
     async fn run(mut self, addr: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
-        let conn = TcpStream::connect(addr).await?;
+        let mut conn = TcpStream::connect(addr).await?;
         // single connection to server, multiple senders, one per channel
         // Write binary
         loop {
             if let Some(msg) = self.receiver.try_next().unwrap() {
                 let date = msg.adj_time_stamp.timestamp_millis();
                 let time = msg.adj_time_stamp.timestamp_subsec_nanos();
+                let msg_format = match msg.msg_format {
+                    MsgFormat::Bincode => 0u32,
+                    MsgFormat::MsgPack => 1u32,
+                    MsgFormat::Json => 2u32,
+                };
+                let (msg_type, sz, payload) = match msg.payload {
+                    Payload::Entry(payload) => (1u8, payload.len(), payload),
+                    Payload::Exit => (2u8, 0, vec![]),
+                };
+                conn.write(&usize::to_le_bytes(msg.channel_name)).await?;
+                conn.write(&i64::to_le_bytes(date)).await?;
+                conn.write(&u32::to_le_bytes(time)).await?;
+                conn.write(&u32::to_le_bytes(msg_format)).await?;
+                conn.write(&u8::to_le_bytes(msg_type)).await?;
+                conn.write(&usize::to_le_bytes(sz)).await?;
+                conn.write(&payload).await?;
             }
         }
     }
@@ -203,6 +240,7 @@ where
         let now = Utc::now();
         let bytes = bincode::serialize(&item).unwrap();
         let msg = Message {
+            channel_name: self.channel,
             adj_time_stamp: now.naive_utc(),
             msg_format: MsgFormat::Bincode,
             payload: Payload::Entry(bytes),
@@ -214,6 +252,7 @@ where
         let now = Utc::now();
         let bytes = bincode::serialize(&item).unwrap();
         let msg = Message {
+            channel_name: self.channel,
             adj_time_stamp: now.naive_utc(),
             msg_format: MsgFormat::Bincode,
             payload: Payload::Entry(bytes),
@@ -224,6 +263,7 @@ where
     pub fn exit(&mut self) {
         let now = Utc::now();
         let msg = Message {
+            channel_name: self.channel,
             adj_time_stamp: now.naive_utc(),
             msg_format: MsgFormat::Bincode,
             payload: Payload::Exit,
