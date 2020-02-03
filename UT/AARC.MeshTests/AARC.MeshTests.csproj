@@ -19,6 +19,7 @@
     <ProjectReference Include="..\..\Libs\AARC.Mesh\AARC.Mesh.csproj" />
     <ProjectReference Include="..\..\Libs\AARC.Model\AARC.Model.csproj" />
     <ProjectReference Include="..\AARC.Graph.Test\AARC.Graph.Test.csproj" />
+    <ProjectReference Include="..\..\Libs\AARC.Mesh.AutoWireUp\AARC.Mesh.AutoWireUp.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="TestData\" />

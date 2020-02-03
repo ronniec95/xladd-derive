@@ -23,6 +23,8 @@ namespace AARC.Mesh.Model
             _channelProxy = external;
         }
 
+        public MeshObserver(string channelName) : this(channelName, 0) { }
+
         public MeshObserver(string channelName, int clusterType = 0): this(new MeshChannelProxy<T>(outputChannelName: channelName, clusterType: clusterType)) { }
 
         public MeshChannelResult<MeshMessage> PublishChannel { get { return _channelProxy.PublishChannel; } set { _channelProxy.PublishChannel += value; } }

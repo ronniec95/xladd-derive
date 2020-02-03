@@ -15,6 +15,12 @@ namespace AARC.Mesh.Reflection
         public Type Type;
         public bool Optional;
 
+        public int Position;
+        public object DefaultValue;
+        public bool ByRef;
+        public bool Out;
+        public bool Return;
+
         public static string ShortType(Type type)
         {
             // let's try to make the Type look a bit better for display purposes?
