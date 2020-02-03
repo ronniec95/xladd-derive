@@ -1,4 +1,5 @@
 use crate::error::*;
+use crate::smart_monitor::*;
 use async_std::net::{TcpListener, TcpStream};
 use async_std::stream::StreamExt;
 use futures::channel::mpsc::{channel, Receiver, Sender};
@@ -7,14 +8,21 @@ use futures::io::{AsyncReadExt, AsyncWriteExt};
 use futures::lock::Mutex;
 use futures::Future;
 use serde::{Deserialize, Serialize};
+use std::borrow::Borrow;
+use std::borrow::BorrowMut;
 use std::clone::Clone;
 use std::collections::{BTreeMap, BTreeSet};
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-
 type ChannelID = u32;
+
+thread_local! {static LOGGER: SmartMonitorClient = SmartMonitorClient::new() }
+
+fn logger() -> &'static std::thread::LocalKey<SmartMonitorClient> {
+    return LOGGER.borrow();
+}
 
 enum MsgType<T> {
     Update(SocketAddr),
@@ -23,13 +31,21 @@ enum MsgType<T> {
 }
 
 #[derive(Clone)]
-struct BurstQueue<T> {
+struct BurstQueue<T>
+where
+    T: Serialize,
+{
     values: Arc<Mutex<Vec<T>>>,
+    sm_log: SMLogger<T>,
 }
 
 #[derive(Clone)]
-struct LastValueQueue<T> {
+struct LastValueQueue<T>
+where
+    T: Serialize,
+{
     value: Arc<Mutex<Option<T>>>,
+    sm_log: SMLogger<T>,
 }
 
 #[derive(Clone)]
@@ -44,6 +60,7 @@ where
     T: Serialize + Send + 'static,
 {
     sender: Sender<MsgType<T>>,
+    sm_log: SMLogger<T>,
 }
 
 struct PushQueue<T: Clone + Serialize + Send + 'static> {
@@ -77,7 +94,10 @@ where
     pub fn tcp_scalar_pull_queue(&mut self, channel_id: ChannelID) -> &TcpScalarQueue<T> {
         let (sender, receiver) = channel(10);
         std::thread::spawn(move || PushQueue::tcp_stream_sender(channel_id, receiver));
-        self.sink_consumers.push(TcpScalarQueue { sender });
+        self.sink_consumers.push(TcpScalarQueue {
+            sender,
+            sm_log: logger().with(|logger| logger.create_sender::<T>()),
+        });
         self.sink_consumers.last().unwrap()
     }
 
@@ -139,11 +159,12 @@ where
 
 impl<T> BurstQueue<T>
 where
-    T: for<'de> Deserialize<'de>,
+    T: Serialize + for<'de> Deserialize<'de>,
 {
     fn new() -> Self {
         Self {
             values: Arc::new(Mutex::new(Vec::new())),
+            sm_log: logger().with(|logger| logger.create_sender::<T>()),
         }
     }
 
@@ -158,26 +179,37 @@ where
     }
 }
 
-impl<T> Future for BurstQueue<T> {
+impl<T> Future for BurstQueue<T>
+where
+    T: Serialize + Unpin + Copy + Clone,
+{
     type Output = Vec<T>;
-    fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        let mut data = self.values.try_lock().unwrap();
-        if data.is_empty() {
+    fn poll(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
+        if let Some(res) = if let Some(mut data) = self.values.try_lock() {
+            if !data.is_empty() {
+                Some(data.drain(..).collect())
+            } else {
+                None
+            }
+        } else {
+            None
+        } {
+            Poll::Ready(res)
+        } else {
             ctx.waker().wake_by_ref();
             Poll::Pending
-        } else {
-            Poll::Ready(data.drain(..).collect())
         }
     }
 }
 
 impl<T> LastValueQueue<T>
 where
-    T: for<'de> Deserialize<'de> + std::fmt::Debug,
+    T: Serialize + for<'de> Deserialize<'de> + std::fmt::Debug,
 {
     fn new() -> Self {
         Self {
             value: Arc::new(Mutex::new(None)),
+            sm_log: logger().with(|logger| logger.create_sender::<T>()),
         }
     }
 
@@ -194,13 +226,13 @@ where
 
 impl<T> Future for LastValueQueue<T>
 where
-    T: std::marker::Unpin + Copy,
+    T: Serialize + std::marker::Unpin + Copy + for<'de> Deserialize<'de> + std::fmt::Debug,
 {
     type Output = T;
-    fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        let data = self.value.try_lock().unwrap();
-        if data.is_some() {
-            Poll::Ready(data.unwrap())
+    fn poll(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
+        if let Some(value) = { self.value.try_lock().map_or_else(|| None, |v| v.or(None)) } {
+            self.borrow_mut().sm_log.entry(&value);
+            Poll::Ready(value)
         } else {
             ctx.waker().wake_by_ref();
             Poll::Pending
@@ -227,7 +259,7 @@ pub trait ByteDeSerialiser {
 
 impl<T> ByteDeSerialiser for BurstQueue<T>
 where
-    T: for<'de> Deserialize<'de> + std::fmt::Debug + Send,
+    T: Serialize + for<'de> Deserialize<'de> + std::fmt::Debug + Send,
 {
     fn push_data(&mut self, v: &[u8]) {
         self.push_bytes(&v);
@@ -236,7 +268,7 @@ where
 
 impl<T> ByteDeSerialiser for LastValueQueue<T>
 where
-    T: for<'de> Deserialize<'de> + std::fmt::Debug + Send,
+    T: Serialize + for<'de> Deserialize<'de> + std::fmt::Debug + Send,
 {
     fn push_data(&mut self, v: &[u8]) {
         self.push_bytes(&v);

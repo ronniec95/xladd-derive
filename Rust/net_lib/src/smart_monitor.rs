@@ -5,27 +5,78 @@ use async_std::io::ReadExt;
 use async_std::net::SocketAddr;
 use async_std::net::{TcpListener, TcpStream};
 use async_std::stream::StreamExt;
-use chrono::NaiveDateTime;
+use chrono::{DateTime, NaiveDateTime, Utc};
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::executor::ThreadPool;
 use futures::task::SpawnExt;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+//
+// Server Implmentation
+//
 pub struct SmartMonitor {
     pool: ThreadPool,
     senders: BTreeMap<ChannelId, Sender<Message>>,
 }
 
 #[derive(Clone)]
-pub enum MessageType {
+pub enum Payload {
     Entry(Vec<u8>),
     Exit,
 }
 
 #[derive(Clone)]
+pub enum MsgFormat {
+    Bincode,
+    MsgPack,
+    Json,
+}
+
+#[derive(Clone)]
 pub struct Message {
     pub adj_time_stamp: NaiveDateTime,
-    pub message_type: MessageType,
+    pub msg_format: MsgFormat,
+    pub payload: Payload,
+}
+
+async fn try_from_message<R>(reader: &mut R) -> Result<Message, Box<dyn std::error::Error>>
+where
+    R: ReadExt + Unpin,
+{
+    let mut buf = [0u8; 8];
+
+    reader.read_exact(&mut buf).await?;
+    let date = i64::from_le_bytes(buf);
+
+    let mut buf_small = [0u8; 4];
+    reader.read_exact(&mut buf_small).await?;
+    let time = u32::from_le_bytes(buf_small);
+
+    let mut byte = [0u8; 1];
+    reader.read(&mut byte).await?;
+    let msg_format = match byte[0] {
+        0 => MsgFormat::Bincode,
+        1 => MsgFormat::MsgPack,
+        _ => MsgFormat::Json,
+    };
+
+    reader.read_exact(&mut buf).await?;
+    let msg_payload = i64::from_le_bytes(buf);
+    let payload: Result<Payload, Box<dyn std::error::Error>> = match msg_payload {
+        -1 => Ok(Payload::Exit),
+        n if n > 0 => {
+            let mut buf = vec![0u8; n as usize];
+            reader.read_exact(&mut buf).await?;
+            Ok(Payload::Entry(buf))
+        }
+        _ => Err("Unexpected 0 size payload received".into()),
+    };
+    Ok(Message {
+        adj_time_stamp: NaiveDateTime::from_timestamp(date, time),
+        msg_format,
+        payload: payload?,
+    })
 }
 
 impl SmartMonitor {
@@ -64,34 +115,9 @@ impl SmartMonitor {
         mut sender: Sender<Message>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         loop {
-            let mut buf = [0u8; 8];
-            stream.read_exact(&mut buf).await?;
-            let dt = i64::from_le_bytes(buf);
-            stream.read_exact(&mut buf).await?;
-            let msg_sz = i64::from_le_bytes(buf);
-            match msg_sz {
-                -1 => Ok(Message {
-                    adj_time_stamp: NaiveDateTime::from_timestamp(
-                        dt / 1000000,
-                        (dt % 1000000) as u32,
-                    ),
-                    message_type: MessageType::Exit,
-                }),
-                any if any > 0 => {
-                    let mut msg_buffer = vec![0u8; msg_sz as usize];
-                    stream.read_exact(&mut msg_buffer[..]).await?;
-                    Ok(Message {
-                        adj_time_stamp: NaiveDateTime::from_timestamp(
-                            dt / 1000000,
-                            (dt % 1000000) as u32,
-                        ),
-                        message_type: MessageType::Entry(msg_buffer),
-                    })
-                }
-                _ => Err("Unexpected size of message received".into())
-                    as Result<Message, Box<dyn std::error::Error>>,
-            }
-            .and_then(|msg: Message| Ok(sender.try_send(msg)?))?;
+            let msg = try_from_message(stream)
+                .await
+                .and_then(|msg: Message| Ok(sender.try_send(msg)?))?;
         }
     }
 
@@ -120,5 +146,88 @@ impl SmartMonitor {
             }
         }
         Ok(())
+    }
+}
+
+//
+// Client implmentation
+//
+pub struct SmartMonitorClient {
+    sender: Sender<Message>,
+    receiver: Receiver<Message>,
+}
+
+#[derive(Clone)]
+pub struct SMLogger<T>
+where
+    T: Serialize,
+{
+    sender: Sender<Message>,
+    _phantom: std::marker::PhantomData<T>,
+}
+
+impl SmartMonitorClient {
+    pub fn new() -> Self {
+        let (sender, receiver) = channel(10);
+        Self { sender, receiver }
+    }
+
+    pub fn create_sender<T>(&self) -> SMLogger<T>
+    where
+        T: Serialize,
+    {
+        SMLogger {
+            sender: self.sender.clone(),
+            _phantom: std::marker::PhantomData,
+        }
+    }
+
+    async fn run(mut self, addr: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
+        let conn = TcpStream::connect(addr).await?;
+        // single connection to server, multiple senders, one per channel
+        // Write binary
+        loop {
+            if let Some(msg) = self.receiver.try_next().unwrap() {
+                let date = msg.adj_time_stamp.timestamp_millis();
+                let time = msg.adj_time_stamp.timestamp_subsec_nanos();
+            }
+        }
+    }
+}
+
+impl<T> SMLogger<T>
+where
+    T: Serialize,
+{
+    pub fn entry(&mut self, item: &T) {
+        let now = Utc::now();
+        let bytes = bincode::serialize(&item).unwrap();
+        let msg = Message {
+            adj_time_stamp: now.naive_utc(),
+            msg_format: MsgFormat::Bincode,
+            payload: Payload::Entry(bytes),
+        };
+        if let Ok(_) = self.sender.try_send(msg) {}
+    }
+
+    pub fn entry_vec(&mut self, item: &[T]) {
+        let now = Utc::now();
+        let bytes = bincode::serialize(&item).unwrap();
+        let msg = Message {
+            adj_time_stamp: now.naive_utc(),
+            msg_format: MsgFormat::Bincode,
+            payload: Payload::Entry(bytes),
+        };
+        if let Ok(_) = self.sender.try_send(msg) {}
+    }
+
+    pub fn exit(&mut self) {
+        let now = Utc::now();
+        let msg = Message {
+            adj_time_stamp: now.naive_utc(),
+            msg_format: MsgFormat::Bincode,
+            payload: Payload::Exit,
+        };
+        if let Ok(_) = self.sender.try_send(msg) {}
     }
 }

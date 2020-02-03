@@ -1,4 +1,4 @@
-use crate::smart_monitor::{Message, MessageType};
+use crate::smart_monitor::{Message, Payload};
 use rusqlite::{params, Connection, DatabaseName, OpenFlags};
 use std::io::Write;
 
@@ -16,8 +16,8 @@ pub fn create_channel_table(name: &str) -> Result<Connection, Box<dyn std::error
 }
 
 pub fn insert(conn: &Connection, msg: &Message) -> Result<usize, Box<dyn std::error::Error>> {
-    match &msg.message_type {
-        MessageType::Entry(data) => {
+    match &msg.payload {
+        Payload::Entry(data) => {
             conn.execute(
                 "INSERT INTO TS_DATA (Timestamp,Enter) VALUES (?1,?2)",
                 params![msg.adj_time_stamp, 1,],
@@ -27,7 +27,7 @@ pub fn insert(conn: &Connection, msg: &Message) -> Result<usize, Box<dyn std::er
             blob.write(&data)?;
             Ok(1)
         }
-        MessageType::Exit => Ok(conn.execute(
+        Payload::Exit => Ok(conn.execute(
             "INSERT INTO TS_DATA (Timestamp,Enter) VALUES (?1,?2)",
             params![msg.adj_time_stamp, 1],
         )?),
