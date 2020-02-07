@@ -1,7 +1,0 @@
-struct Context {
-    
-}
-
-impl Context {
-    
-}

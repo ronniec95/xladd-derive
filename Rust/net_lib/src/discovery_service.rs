@@ -8,7 +8,7 @@ use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::executor::ThreadPool;
 use futures::task::SpawnExt;
 use std::borrow::Cow;
-use std::collections::{BTreeMap};
+use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
 enum Discover {
@@ -34,7 +34,6 @@ async fn send_msg<'a>(
     stream.write_all(&bytes_msg).await?;
     Ok(())
 }
-
 
 async fn recv_msg<'local>(
     stream: &mut TcpStream,
@@ -73,7 +72,9 @@ impl<'a> DiscoveryClient<'a> {
         loop {
             match self.connect_to_server().await {
                 Ok(_) => println!("OK"),
-                Err(_) => eprintln!("Lost connection to discovery server...waiting 5 seconds to reconnect"),
+                Err(_) => eprintln!(
+                    "Lost connection to discovery server...waiting 5 seconds to reconnect"
+                ),
             }
             sleep(std::time::Duration::from_secs(5)).await;
         }
@@ -133,7 +134,7 @@ impl DiscoveryServer {
             if let Some(mut channel_list) = channel_list.try_lock() {
                 let msg = recv_msg(&mut stream).await?;
                 dbg!(&msg);
-                    let msgs = match msg.state {
+                let msgs = match msg.state {
                     DiscoveryState::Connect => {
                         let addr = stream.peer_addr()?;
                         for ch in msg.channels {
@@ -191,20 +192,22 @@ impl DiscoveryServer {
                 match DiscoveryServer::handle_msgs(stream, ch_list.clone()).await {
                     Ok(_) => (),
                     Err(e) => {
-                        eprintln!("Failed connection {:?} {:?}",e, peer_addr);
+                        eprintln!("Failed connection {:?} {:?}", e, peer_addr);
                         let delete_channels = ch_list.clone();
                         loop {
                             if let Some(mut delete_channels) = delete_channels.try_lock() {
-                                let to_delete =
-                                    delete_channels.iter().filter_map(|(channel, addr)| {
+                                let to_delete = delete_channels
+                                    .iter()
+                                    .filter_map(|(channel, addr)| {
                                         return if *addr == peer_addr {
                                             Some(channel.clone())
                                         } else {
                                             None
                                         };
-                                    }).collect::<Vec<_>>();
+                                    })
+                                    .collect::<Vec<_>>();
                                 for ch in to_delete {
-                                    eprintln!("Deleting channels {:?}",ch);
+                                    eprintln!("Deleting channels {:?}", ch);
                                     delete_channels.remove(&ch);
                                 }
                             }
@@ -221,7 +224,7 @@ impl DiscoveryServer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::executor::{block_on};
+    use futures::executor::block_on;
     #[test]
     fn protocol() {
         let pool = ThreadPool::new().expect("Could not create threadpool");
@@ -232,13 +235,13 @@ mod tests {
                 Ok(_) => (),
                 Err(e) => eprintln!("{:?}", e),
             }
-        }).expect("Could not spawn");
+        })
+        .expect("Could not spawn");
 
         let ms1_channels = vec![
             Cow::Owned(Channel::with_str_name("channel1", 13, ChannelType::Output)),
             Cow::Owned(Channel::with_str_name("channel2", 13, ChannelType::Output)),
         ];
-
 
         let addr = SocketAddr::from(([0, 0, 0, 0], 3257));
         let mut micro_service1_receiver = DiscoveryClient::new(addr, ms1_channels);
@@ -292,7 +295,8 @@ mod tests {
             while let Ok(channel) = micro_service1_receiver.receivers[0].try_next() {
                 println!("{:?}", channel);
             }
-        }).expect("Could not spawn awaiting thread pool");
+        })
+        .expect("Could not spawn awaiting thread pool");
 
         block_on(async move {
             micro_service2_receiver.manage_protocol().await;

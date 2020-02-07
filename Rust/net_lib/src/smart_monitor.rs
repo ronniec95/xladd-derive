@@ -5,7 +5,7 @@ use async_std::io::prelude::*;
 use async_std::net::SocketAddr;
 use async_std::net::{TcpListener, TcpStream};
 use async_std::stream::StreamExt;
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{NaiveDateTime, Utc};
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::executor::ThreadPool;
 use futures::task::SpawnExt;
@@ -42,40 +42,43 @@ pub struct Message {
     pub payload: Payload,
 }
 
-async fn try_from_message<R>(reader: &mut R) -> Result<Message, Box<dyn std::error::Error>>
+fn try_from_message<R>(reader: &mut R) -> Result<Message, Box<dyn std::error::Error>>
 where
-    R: ReadExt + Unpin,
+    R: std::io::Read,
 {
     let mut buf = [0u8; 8];
 
-    reader.read_exact(&mut buf).await.unwrap();
+    reader.read_exact(&mut buf)?;
     let channel_name = usize::from_le_bytes(buf);
 
-    reader.read_exact(&mut buf).await?;
+    reader.read_exact(&mut buf)?;
     let date = i64::from_le_bytes(buf);
 
     let mut buf_small = [0u8; 4];
-    reader.read_exact(&mut buf_small).await?;
+    reader.read_exact(&mut buf_small)?;
     let time = u32::from_le_bytes(buf_small);
 
     let mut byte = [0u8; 1];
-    reader.read(&mut byte).await?;
+    reader.read(&mut byte)?;
     let msg_format = match byte[0] {
         0 => MsgFormat::Bincode,
         1 => MsgFormat::MsgPack,
         _ => MsgFormat::Json,
     };
 
-    reader.read_exact(&mut buf).await?;
-    let msg_payload = i64::from_le_bytes(buf);
-    let payload: Result<Payload, Box<dyn std::error::Error>> = match msg_payload {
-        -1 => Ok(Payload::Exit),
-        n if n > 0 => {
-            let mut buf = vec![0u8; n as usize];
-            reader.read_exact(&mut buf).await?;
+    reader.read(&mut byte)?;
+    let msg_type = u8::from_le_bytes(byte);
+
+    reader.read_exact(&mut buf)?;
+    let msg_payload = usize::from_le_bytes(buf);
+    let payload: Result<Payload, Box<dyn std::error::Error>> = match msg_type {
+        0 => Ok(Payload::Exit),
+        1 => {
+            let mut buf = vec![0u8; msg_payload];
+            reader.read_exact(&mut buf)?;
             Ok(Payload::Entry(buf))
         }
-        _ => Err("Unexpected 0 size payload received".into()),
+        _ => Err("Unexpected message type, not an entry or exit queue message".into()),
     };
     Ok(Message {
         channel_name,
@@ -83,6 +86,32 @@ where
         msg_format,
         payload: payload?,
     })
+}
+
+impl From<Message> for Vec<u8> {
+    fn from(msg: Message) -> Vec<u8> {
+        let date = msg.adj_time_stamp.timestamp_millis();
+        let time = msg.adj_time_stamp.timestamp_subsec_nanos();
+        let msg_format = match msg.msg_format {
+            MsgFormat::Bincode => 0u8,
+            MsgFormat::MsgPack => 1u8,
+            MsgFormat::Json => 2u8,
+        };
+        let (msg_type, sz, payload) = match msg.payload {
+            Payload::Entry(payload) => (1u8, payload.len(), payload),
+            Payload::Exit => (2u8, 0, vec![]),
+        };
+        let mut bytes = Vec::with_capacity(payload.len() + 30);
+        bytes.extend(&usize::to_le_bytes(payload.len() + 30));
+        bytes.extend(&usize::to_le_bytes(msg.channel_name));
+        bytes.extend(&i64::to_le_bytes(date));
+        bytes.extend(&u32::to_le_bytes(time));
+        bytes.extend(&u8::to_le_bytes(msg_format));
+        bytes.extend(&u8::to_le_bytes(msg_type));
+        bytes.extend(&usize::to_le_bytes(sz));
+        bytes.extend(&payload);
+        bytes
+    }
 }
 
 impl SmartMonitor {
@@ -109,7 +138,7 @@ impl SmartMonitor {
         self.pool.spawn(async move {
             match SmartMonitor::consume(&radix_str(ch as u64), receiver).await {
                 Ok(_) => (),
-                Err(_) => eprintln!("failed saving to database"),
+                Err(e) => eprintln!("failed creating database {:?}", e),
             }
         })?;
         if let Ok(mut senders) = self.senders.try_lock() {
@@ -123,7 +152,12 @@ impl SmartMonitor {
         sender_map: Arc<Mutex<BTreeMap<ChannelId, Sender<Message>>>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         loop {
-            if let Ok(msg) = try_from_message(stream).await {
+            let mut buf = [0u8; 8];
+            stream.read_exact(&mut buf).await?;
+            let msg_size = usize::from_le_bytes(buf);
+            let mut buf = vec![0u8; msg_size];
+            stream.read_exact(&mut buf).await?;
+            if let Ok(msg) = try_from_message(&mut std::io::Cursor::new(buf)) {
                 loop {
                     if let Ok(mut sender_map) = sender_map.try_lock() {
                         if let Some(sender) = sender_map.get_mut(&msg.channel_name) {
@@ -164,15 +198,15 @@ pub struct SmartMonitorClient {
     receiver: Receiver<Message>,
 }
 
-pub fn logger() -> &'static SmartMonitorClient {
-    static mut SINGLETON: *const SmartMonitorClient = 0 as *const SmartMonitorClient;
+pub fn logger() -> &'static mut SmartMonitorClient {
+    static mut SINGLETON: *mut SmartMonitorClient = 0 as *mut SmartMonitorClient;
     static ONCE: Once = Once::new();
     unsafe {
         ONCE.call_once(|| {
             let singleton = SmartMonitorClient::new();
             SINGLETON = std::mem::transmute(Box::new(singleton));
         });
-        &(*SINGLETON)
+        &mut (*SINGLETON)
     }
 }
 
@@ -203,30 +237,26 @@ impl SmartMonitorClient {
         }
     }
 
-    async fn run(mut self, addr: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
-        let mut conn = TcpStream::connect(addr).await?;
-        // single connection to server, multiple senders, one per channel
-        // Write binary
+    pub async fn run_auto_reconnect(&mut self, addr: SocketAddr) {
         loop {
-            if let Some(msg) = self.receiver.try_next().unwrap() {
-                let date = msg.adj_time_stamp.timestamp_millis();
-                let time = msg.adj_time_stamp.timestamp_subsec_nanos();
-                let msg_format = match msg.msg_format {
-                    MsgFormat::Bincode => 0u32,
-                    MsgFormat::MsgPack => 1u32,
-                    MsgFormat::Json => 2u32,
-                };
-                let (msg_type, sz, payload) = match msg.payload {
-                    Payload::Entry(payload) => (1u8, payload.len(), payload),
-                    Payload::Exit => (2u8, 0, vec![]),
-                };
-                conn.write(&usize::to_le_bytes(msg.channel_name)).await?;
-                conn.write(&i64::to_le_bytes(date)).await?;
-                conn.write(&u32::to_le_bytes(time)).await?;
-                conn.write(&u32::to_le_bytes(msg_format)).await?;
-                conn.write(&u8::to_le_bytes(msg_type)).await?;
-                conn.write(&usize::to_le_bytes(sz)).await?;
-                conn.write(&payload).await?;
+            match self.run(addr).await {
+                Ok(_) => (),
+                Err(e) => eprintln!("Socket disconnected, retrying after a few seconds {:?}", e),
+            }
+            async_std::task::sleep(std::time::Duration::from_secs(5)).await;
+        }
+    }
+    async fn run(&mut self, addr: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
+        let mut conn = TcpStream::connect(addr).await?;
+        loop {
+            if let Ok(msg) = self.receiver.try_next() {
+                if let Some(msg) = msg {
+                    let bytes: Vec<u8> = msg.into();
+                    conn.write_all(&bytes).await?;
+                }
+            } else {
+                eprintln!("No message to receive, waiting 2s");
+                async_std::task::sleep(std::time::Duration::from_secs(2)).await;
             }
         }
     }
@@ -237,6 +267,10 @@ where
     T: Serialize,
 {
     pub fn entry(&mut self, item: &T) {
+        if cfg!(test) {
+            return;
+        }
+
         let now = Utc::now();
         let bytes = bincode::serialize(&item).unwrap();
         let msg = Message {
@@ -269,5 +303,42 @@ where
             payload: Payload::Exit,
         };
         if let Ok(_) = self.sender.try_send(msg) {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures::executor::block_on;
+
+    #[test]
+    fn msg_parsing() {
+        use std::io::Read;
+        let msg = Message {
+            channel_name: 45236784,
+            adj_time_stamp: Utc::now().naive_utc(),
+            msg_format: MsgFormat::Bincode,
+            payload: Payload::Entry(b"123456".to_vec()),
+        };
+        let mut bytes = Vec::<u8>::from(msg.clone());
+
+        // Read header first
+        let mut cursor = std::io::Cursor::new(&mut bytes);
+        let mut buf = [0u8; 8];
+        cursor.read_exact(&mut buf).unwrap();
+        let sz = usize::from_le_bytes(buf);
+        assert_eq!(sz, 36);
+        let msg2 = try_from_message(&mut cursor).unwrap();
+        assert_eq!(msg.channel_name, msg2.channel_name);
+    }
+
+    #[test]
+    fn no_server() {
+        let smc = logger();
+        //let sm = smc.create_sender::<i32>(123).clone();
+        block_on(async {
+            smc.run_auto_reconnect(SocketAddr::from(([127, 0, 0, 1], 3574)))
+                .await;
+        });
     }
 }

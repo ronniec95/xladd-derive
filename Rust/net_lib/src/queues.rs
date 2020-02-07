@@ -1,7 +1,8 @@
+use crate::discovery_service::DiscoveryClient;
 use crate::error::*;
 use crate::messages::*;
 use crate::smart_monitor::*;
-use crate::utils::*;
+use crate::utils::str_radix;
 use async_std::net::{TcpListener, TcpStream};
 use async_std::stream::StreamExt;
 use futures::channel::mpsc::{channel, Receiver, Sender};
@@ -34,7 +35,7 @@ where
 }
 
 #[derive(Clone)]
-struct LastValueQueue<T>
+pub struct LastValueQueue<T>
 where
     T: Serialize,
 {
@@ -49,7 +50,7 @@ struct SetPullQueue<T> {
     deleted: BTreeSet<T>,
 }
 
-struct TcpScalarQueue<T>
+pub struct TcpScalarQueue<T>
 where
     T: Serialize + Send + 'static,
 {
@@ -164,6 +165,7 @@ where
     }
 
     fn push(&mut self, item: T) {
+        self.sm_log.entry(&item);
         let mut data = self.values.try_lock().unwrap();
         data.push(item);
     }
@@ -180,7 +182,7 @@ where
 {
     type Output = Vec<T>;
     fn poll(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        if let Some(res) = if let Some(mut data) = self.values.try_lock() {
+        let res = if let Some(mut data) = self.values.try_lock() {
             if !data.is_empty() {
                 Some(data.drain(..).collect())
             } else {
@@ -188,11 +190,17 @@ where
             }
         } else {
             None
-        } {
-            Poll::Ready(res)
-        } else {
-            ctx.waker().wake_by_ref();
-            Poll::Pending
+        };
+
+        match res {
+            Some(res) => {
+                self.borrow_mut().sm_log.exit();
+                Poll::Ready(res)
+            }
+            None => {
+                ctx.waker().wake_by_ref();
+                Poll::Pending
+            }
         }
     }
 }
@@ -201,7 +209,7 @@ impl<T> LastValueQueue<T>
 where
     T: Serialize + for<'de> Deserialize<'de> + std::fmt::Debug,
 {
-    fn new(channel_id: ChannelId) -> Self {
+    pub fn new(channel_id: ChannelId) -> Self {
         Self {
             value: Arc::new(Mutex::new(None)),
             sm_log: logger().create_sender::<T>(channel_id),
@@ -214,6 +222,7 @@ where
     }
 
     fn push(&mut self, item: T) {
+        self.sm_log.entry(&item);
         let mut data = self.value.try_lock().unwrap();
         *data = Some(item);
     }
@@ -226,7 +235,7 @@ where
     type Output = T;
     fn poll(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
         if let Some(value) = { self.value.try_lock().map_or_else(|| None, |v| v.or(None)) } {
-            self.borrow_mut().sm_log.entry(&value);
+            self.borrow_mut().sm_log.exit();
             Poll::Ready(value)
         } else {
             ctx.waker().wake_by_ref();
@@ -272,12 +281,12 @@ where
 
 /// Implements a tcp external connection for channels
 ///
-pub struct TcpService {
+pub struct TcpPullQueueMgr {
     port: u16,
     input_queue_map: BTreeMap<ChannelId, Vec<Box<dyn ByteDeSerialiser>>>,
 }
 
-impl TcpService {
+impl TcpPullQueueMgr {
     /// Creates a listener on a port
     /// # Arguments
     /// * 'port' - A port number
@@ -542,4 +551,7 @@ mod tests {
         pool.run();
         assert!(true);
     }
+
+    #[test]
+    fn disovery_integration() {}
 }
