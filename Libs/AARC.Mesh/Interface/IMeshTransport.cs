@@ -5,14 +5,6 @@ using System.Threading.Tasks;
 
 namespace AARC.Mesh.Interface
 {
-    public interface IMeshMessage
-    {
-        IEnumerable<string> Routes { get; }
-        byte[] Encode();
-
-        IMeshMessage Decode(byte[] bytes);
-    }
-
     public interface IMeshTransport<T> : IObservable<T>, IObserver<T>, IDisposable where T: IMeshMessage
     {
         /// <summary>

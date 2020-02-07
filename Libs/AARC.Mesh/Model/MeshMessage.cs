@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using AARC.Mesh.Interface;
-using Microsoft.Extensions.Logging;
 
 namespace AARC.Mesh.Model
 {
@@ -17,18 +16,6 @@ namespace AARC.Mesh.Model
         public string PayLoad { get; set; }
         public bool IsValid() => !string.IsNullOrWhiteSpace(Service) && !string.IsNullOrWhiteSpace(Channel) && XId > 0;
         public IEnumerable<string> Routes { get; set; }
-
-        public byte[] Serialize()
-        {
-            var bytes = this.Encode();
-            return bytes;
-        }
-        public static MeshMessage Deserialise(byte[] bytes)
-        {
-            var m = new MeshMessage();
-            m.Decode(bytes);
-            return m;
-        }
     }
 
 
@@ -36,9 +23,10 @@ namespace AARC.Mesh.Model
     {
         public override string ToString() => Service;
 
-        public byte[] Encode()
+        public byte[] Encode(byte msgType)
         {
             var bytes = new List<byte>();
+            bytes.Add((byte)0);
             // GraphId
             bytes.AddRange(BitConverter.GetBytes(this.GraphId));
             // Xid
@@ -63,6 +51,9 @@ namespace AARC.Mesh.Model
         {
             // GraphId
             var msgPtr = 0;
+            var msgType = bytes[msgPtr++];
+            if (msgType != 0) throw new NotSupportedException();
+
             this.GraphId = BitConverter.ToUInt32(bytes, msgPtr);
             msgPtr += sizeof(uint);
             // Xid
@@ -81,49 +72,6 @@ namespace AARC.Mesh.Model
             // PayLoad
             this.PayLoad = AARC.Compression.Compression.DecompressString(bytes, msgPtr);
             return this;
-        }
-
-        public static MeshMessage DeserializeMeshMessage(byte[] bytes, ILogger _logger = null)
-        {
-            // Zero bytes is a keep alive message
-            if (bytes.Length == 0)
-                return null;
-
-            _logger?.LogDebug($"MSM Rx Received bytes {bytes.Length}");
-            //var data = System.Text.Encoding.ASCII.GetString(bytes, 0, bytes.Length);
-
-            //if (data.ValidateJSON())
-            {
-                var message = MeshMessage.Deserialise(bytes);
-                if (!message.IsValid())
-                {
-                    _logger?.LogWarning($"MSM Invalid message");
-                    if (message.GraphId == 0)
-                        _logger?.LogWarning($"System Message GraphId");
-                    else
-                        _logger?.LogInformation($"GraphId {message.GraphId} OK");
-
-                    if (message.XId > 0)
-                        _logger?.LogWarning($"Missing XId");
-                    else
-                        _logger?.LogInformation($"XId {message.XId} OK");
-
-                    if (string.IsNullOrWhiteSpace(message.Service))
-                        _logger?.LogWarning($"Missing Service");
-                    else
-                        _logger?.LogInformation($"Service {message.Service} OK");
-                    if (string.IsNullOrWhiteSpace(message.Channel))
-                        _logger?.LogWarning($"Missing Queue Name");
-                    else
-                        _logger?.LogInformation($"Action {message.Channel} OK");
-
-                    _logger?.LogInformation($"PayLoad {message.PayLoad}");
-                }
-                else return message;
-            }
-            //else
-            //    _logger?.LogWarning($"Bad format {data}");
-            return null;
         }
     }
 }

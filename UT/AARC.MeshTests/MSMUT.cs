@@ -74,7 +74,7 @@ namespace AARC.MeshTests
                     PayLoad = JsonConvert.SerializeObject(i)
                 };
 
-                var message = mm.Encode();
+                var message = mm.Encode(0);
 
                 transport.OnPublish(message);
             }
@@ -179,7 +179,7 @@ foreach (var ticker in message.Item2)
                     PayLoad = JsonConvert.SerializeObject(payload)
                 };
 
-                var message = mm.Encode();
+                var message = mm.Encode(0);
 
                 transport.OnPublish(message);
 
@@ -245,7 +245,7 @@ foreach (var ticker in message.Item2)
                     PayLoad = JsonConvert.SerializeObject(payload)
                 };
 
-                var message = mm.Encode();
+                var message = mm.Encode(0);
 
                 transport.OnPublish(message);
 

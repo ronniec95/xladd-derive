@@ -23,7 +23,7 @@ namespace AARC.MeshTests
         private IMeshTransportFactory _qServiceFactory;
         private readonly Channel<byte[]> _parentReceiver;
         private CancellationToken _localct;
-
+        protected byte _msgEncoderType;
         public MockTransportServer(ILogger<MockTransportServer> logger, IMeshTransportFactory qServiceFactory)
         {
             _localCancelSource = new CancellationTokenSource();
@@ -34,6 +34,7 @@ namespace AARC.MeshTests
             _meshServices = new ConcurrentDictionary<string, IMeshServiceTransport>();
             MonitorPeriod = 15000;
             _localct = _localCancelSource.Token;
+            _msgEncoderType = 0;
         }
 
         public string Url => "localhost:0";
@@ -57,7 +58,7 @@ namespace AARC.MeshTests
 
         public void OnNext(MeshMessage value)
         {
-            var bytes = value.Encode();
+            var bytes = value.Encode(_msgEncoderType);
             foreach (var transportId in value.Routes)
                 if (_meshServices.ContainsKey(transportId))
                 {

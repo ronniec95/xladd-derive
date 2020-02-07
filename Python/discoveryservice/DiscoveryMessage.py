@@ -7,8 +7,10 @@ class DiscoveryMessage:
 
     @staticmethod
     def fromBytes(byteMessage: bytearray):
-        state = byteMessage[0]
+        msgType = byteMessage[0] # msgType 0 = simple
         msgPtr = 1 #(8bits)
+        state = byteMessage[msgPtr]
+        msgPtr += 1 #(8bits)
         Port = int.from_bytes(byteMessage[msgPtr:msgPtr+2], byteorder = 'little')
         msgPtr += 2 #(16bits)
         serviceLen = int.from_bytes(byteMessage[msgPtr : msgPtr+1], byteorder = 'little')
@@ -26,7 +28,8 @@ class DiscoveryMessage:
 
     @staticmethod
     def toBytes(message):
-        byteMessage = message.State.to_bytes(1, byteorder = 'little')
+        byteMessage = bytes([0]) # msgType 0 = simple
+        byteMessage += message.State.to_bytes(1, byteorder = 'little')
         byteMessage += message.Port.to_bytes(2, byteorder = 'little')
         # 8 Bytes
         # Length of Service

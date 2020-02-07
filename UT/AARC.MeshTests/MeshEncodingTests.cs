@@ -24,7 +24,7 @@ namespace AARC.MeshTests
                 PayLoad = "TestPayLoad"
             };
 
-            var bytes = test.Encode();
+            var bytes = test.Encode(0);
             Assert.IsNotNull(bytes);
             Assert.AreNotEqual<int>(0, bytes.Length);
         }
@@ -41,7 +41,7 @@ namespace AARC.MeshTests
                 PayLoad = null
             };
 
-            var bytes = test.Encode();
+            var bytes = test.Encode(0);
             Assert.IsNotNull(bytes);
             Assert.AreNotEqual<int>(0, bytes.Length);
         }
@@ -58,7 +58,7 @@ namespace AARC.MeshTests
                 PayLoad = "TestPayLoad"
             };
 
-            var bytes = test.Encode();
+            var bytes = test.Encode(0);
             Assert.IsNotNull(bytes);
             Assert.AreNotEqual<int>(0, bytes.Length);
 
@@ -84,7 +84,7 @@ namespace AARC.MeshTests
                 PayLoad = null
             };
 
-            var bytes = test.Encode();
+            var bytes = test.Encode(0);
             Assert.IsNotNull(bytes);
             Assert.AreNotEqual<int>(0, bytes.Length);
             var test2 = new MeshMessage();
@@ -102,7 +102,7 @@ namespace AARC.MeshTests
         public void TestMeshMessageDecodeReadonlySequence()
         {
             var m = new MeshMessage { GraphId = 0, XId = 1, Channel = "channel1", Service = "localhost:1234", PayLoad = "[]" };
-            var bmsg = m.Encode();
+            var bmsg = m.Encode(0);
             var refmsgLen = bmsg.Length;
             var bytes = PacketProtocol.WrapMessage(bmsg);
 

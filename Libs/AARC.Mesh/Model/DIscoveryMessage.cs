@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using AARC.Mesh.Interface;
+using MsgPack;
+using MsgPack.Serialization;
 
 namespace AARC.Mesh.Model
 {
@@ -17,23 +20,36 @@ namespace AARC.Mesh.Model
 
     public partial class DiscoveryMessage : IMeshMessage
     {
-        public byte[] Encode()
+        public byte[] Encode(byte msgType)
+        {
+            if (msgType == 0)
+                EncodeDisoveryMessageType0(this);
+            else if (msgType == 1)
+                EncodeDisoveryMessageType1(this);
+            throw new NotSupportedException();
+        }
+
+        protected static byte[] EncodeDisoveryMessageType0(DiscoveryMessage dm)
         {
             var bytes = new List<byte>();
+            // MessageTypes (byte)
+            // 0 = Simple
+            // 1 = MsgPak
+            bytes.Add((byte)0);
             // State (8bits)
-            bytes.Add((byte)this.State);
+            bytes.Add((byte)dm.State);
             // Port (16bits)
-            bytes.AddRange(BitConverter.GetBytes((UInt16)this.Port));
+            bytes.AddRange(BitConverter.GetBytes((UInt16)dm.Port));
             // HostService len (8bits)
-            bytes.Add((byte)this.HostServer.Length);
-            bytes.AddRange(System.Text.Encoding.ASCII.GetBytes(this.HostServer));
+            bytes.Add((byte)dm.HostServer.Length);
+            bytes.AddRange(System.Text.Encoding.ASCII.GetBytes(dm.HostServer));
             // PayLoad len (64bits)
-            if (string.IsNullOrEmpty(this.Payload))
+            if (string.IsNullOrEmpty(dm.Payload))
                 bytes.AddRange(BitConverter.GetBytes((UInt64)0));
             else
             {
-                bytes.AddRange(BitConverter.GetBytes((UInt64)this.Payload.Length));
-                bytes.AddRange(System.Text.Encoding.ASCII.GetBytes(this.Payload));
+                bytes.AddRange(BitConverter.GetBytes((UInt64)dm.Payload.Length));
+                bytes.AddRange(System.Text.Encoding.ASCII.GetBytes(dm.Payload));
             }
             return bytes.ToArray();
         }
@@ -43,8 +59,25 @@ namespace AARC.Mesh.Model
             return Decode(bytes);
         }
 
-        public DiscoveryMessage Decode (byte[] bytes)
+        public DiscoveryMessage Decode(byte[] bytes)
         {
+            // Message Type
+            // 0 = Simple
+            // 1 = MsgPak
+
+            var msgType = bytes[0];
+
+            if (msgType == 0)
+                return DecodeDiscoveryMessageType0(bytes);
+            else if (msgType == 1)
+                return DecodeDiscoveryMessageType1(bytes);
+
+            throw new NotSupportedException();
+        }
+
+        protected DiscoveryMessage DecodeDiscoveryMessageType0(byte[] bytes)
+        {
+            int msgPtr = 0;
             // 1 bytes state
             // 2 bytes for port
             // 1 bytes string len host
@@ -52,9 +85,8 @@ namespace AARC.Mesh.Model
             // 4 bytes for len payload
             // payload
 
-            var state = bytes[0];
+            var state = bytes[++msgPtr];
             State = (DiscoveryStates)state;
-            int msgPtr = 1;
             // Port
             Port = BitConverter.ToUInt16(bytes, msgPtr);
             msgPtr += sizeof(UInt16);
@@ -70,8 +102,24 @@ namespace AARC.Mesh.Model
                 msgPtr += sizeof(UInt64);
                 Payload = System.Text.Encoding.ASCII.GetString(bytes, msgPtr, (int)payloadLen);
             }
-
             return this;
+        }
+
+        protected static MessagePackSerializer<DiscoveryMessage> _msgPackSerializer = MessagePackSerializer.Get<DiscoveryMessage>();
+        protected DiscoveryMessage DecodeDiscoveryMessageType1(byte[] bytes)
+        {
+            using (var byteUnpacker = Unpacker.Create(bytes, 1))
+                return _msgPackSerializer.UnpackFrom(byteUnpacker);
+        }
+
+        protected byte[] EncodeDisoveryMessageType1(DiscoveryMessage dm)
+        {
+            var stream = new MemoryStream();
+            stream.WriteByte(1);
+
+            _msgPackSerializer.Pack(stream, dm);
+
+            return stream.ToArray();
         }
     }
 }

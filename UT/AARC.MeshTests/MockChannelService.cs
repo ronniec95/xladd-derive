@@ -15,9 +15,11 @@ namespace AARC.MeshTests
     class MockChannelService : SubscriberPattern<byte[]>, IMeshServiceTransport
     {
         public ConcurrentQueue<byte[]> messagesin = new ConcurrentQueue<byte[]>();
+        protected readonly byte _msgEncoderType;
         public MockChannelService(string url)
         {
             Url = url;
+            _msgEncoderType = 0;
         }
         public bool Connected => throw new NotImplementedException();
 
@@ -46,7 +48,7 @@ namespace AARC.MeshTests
 
             var opayload = JsonConvert.SerializeObject(tickerUniverse);
             var o = new MeshMessage { Service = Url, Channel = "nasdaqtestout", PayLoad = opayload };
-            var obytes = o.Encode();
+            var obytes = o.Encode(0);
             foreach (var p in _publishers)
                 p.OnPublish(obytes);
         }

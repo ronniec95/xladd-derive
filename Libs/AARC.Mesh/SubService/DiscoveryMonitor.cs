@@ -16,6 +16,7 @@ namespace AARC.Mesh.SubService
         private readonly IMeshTransportFactory _qServiceFactory;
         private readonly Channel<byte[]> _parentReceiver;
         private readonly Task ChannelReceiverProcessor;
+        private readonly byte _msgEncoding;
 
         private IMeshServiceTransport _discoveryService;
 
@@ -27,6 +28,7 @@ namespace AARC.Mesh.SubService
 
         public DiscoveryMonitor(ILogger<DiscoveryMonitor<T>> logger, IMeshTransportFactory qServiceFactory)
         {
+            _msgEncoding = 0;
             _localCancelSource = new CancellationTokenSource();
             _logger = logger;
             _qServiceFactory = qServiceFactory;
@@ -118,7 +120,7 @@ namespace AARC.Mesh.SubService
         }
         public void OnSend(T message)
         {
-            var obytes = message.Encode();
+            var obytes = message.Encode(_msgEncoding);
             // Todo: Not sure I like this
             _discoveryService.SenderChannel.WriteAsync(obytes);
             _logger?.LogDebug($"DS Tx {obytes.Length}");

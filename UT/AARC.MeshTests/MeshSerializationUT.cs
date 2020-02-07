@@ -25,7 +25,7 @@ namespace AARC.MeshTests
                 Channel = "TestChannel",
                 PayLoad = null
             };
-            _rawBytes = _refMessage.Encode();
+            _rawBytes = _refMessage.Encode(0);
             _inputBytes = PacketProtocol.WrapMessage(_rawBytes);
         }
 
