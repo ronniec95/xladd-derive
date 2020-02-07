@@ -7,9 +7,8 @@ using Microsoft.Extensions.Logging;
 
 namespace AARC.Mesh.Dataflow
 {
-    public class DataFlowFactory
+    public class DataFlowFactory : IMeshNodeFactory
     {
-        private IServiceCollection _collection;
         private IServiceProvider _provider;
 
         public DataFlowFactory(IServiceProvider provider)

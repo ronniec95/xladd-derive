@@ -6,7 +6,9 @@ using Microsoft.Extensions.Logging;
 
 namespace AARC.Service.Hosted
 {
+    using AARC.Mesh.AutoWireUp;
     using AARC.Mesh.Dataflow;
+    using AARC.Mesh.Interface;
     using AARC.Mesh.SubService;
     using AARC.Mesh.TCP;
     using AARC.Repository.Interfaces;
@@ -54,8 +56,11 @@ namespace AARC.Service.Hosted
                     services.AddScoped<IMarketDataRepository, Repository.EF.MarketDataRepository>();
                     services.AddScoped<IStockRepository, Repository.EF.StockRepository>();
 
-                    //                    services.AddSingleton<IMeshReactor<MeshMessage>, Mesh.Dataflow.BiggestStocksReactor>();
-                    services.AddScoped<DataFlowFactory>();
+                    // Like a bitter way of creating ms from a factory etc.
+                    // services.AddSingleton<IMeshReactor<MeshMessage>, Mesh.Dataflow.BiggestStocksReactor>();
+                    // services.AddScoped<IMeshNodeFactory, DataFlowFactory>();
+                    // services.AddScoped<IMeshNodeFactory, AutoWireUpFactory>();
+                    services.AddScoped<IMeshNodeFactory, DataFlowFactory>();
                     services.AddHostedService<MeshHostedService>();
                 })
                 .ConfigureLogging((hostContext, logging) =>

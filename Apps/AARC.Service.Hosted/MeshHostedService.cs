@@ -19,7 +19,7 @@ namespace AARC.Service.Hosted
         private readonly Uri _discoveryUri;
         private readonly List<IMeshReactor<MeshMessage>> _meshServices;
 
-        public MeshHostedService(ILogger<MeshHostedService> logger, MeshServiceManager meshServiceManager, DataFlowFactory dfFactory, IConfiguration configuration)
+        public MeshHostedService(ILogger<MeshHostedService> logger, MeshServiceManager meshServiceManager, IMeshNodeFactory nodeFactory, IConfiguration configuration)
         {
             _msm = meshServiceManager;
             _discoveryUri = new Uri(configuration.GetValue<string>("ds", "tcp://localhost:9999"));
@@ -35,10 +35,10 @@ namespace AARC.Service.Hosted
             if (services != null)
             {
                 _meshServices = new List<IMeshReactor<MeshMessage>>();
-                //                foreach (var service in services)
-                //                    _meshServices.Add(dfFactory.Get(service));
+                foreach (var service in services)
+                    _meshServices.Add(nodeFactory.Get(service));
 
-                _meshServices.Add(new AARC.Graph.Test.MeshMethodWireUp());
+                //_meshServices.Add(new AARC.Graph.Test.MeshMethodWireUp(typeof());
             }
             else throw new ArgumentException(@"Missing Services");
         }

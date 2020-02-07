@@ -21,7 +21,9 @@ namespace AARC.Mesh.Model
             _channelProxy = external;
         }
 
-        public MeshObservable(string channelName, int clusterType = 0) : this(new MeshChannelProxy<T>(inputChannelName: channelName, clusterType: clusterType)) { }
+        public MeshObservable(string channelName) : this(channelName, 0) { }
+
+        public MeshObservable(string channelName, int clusterType) : this(new MeshChannelProxy<T>(inputChannelName: channelName, clusterType: clusterType)) { }
 
         public IDisposable Subscribe(IObserver<T> observer) => _channelProxy.Subscribe(observer);
 

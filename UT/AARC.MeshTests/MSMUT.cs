@@ -16,6 +16,13 @@ namespace AARC.MeshTests
     [TestClass]
     public class MSMUT
     {
+        [TestMethod]
+        public void CreateStringObserver()
+        {
+            var observerable = new MeshObservable<string>("testchang");
+
+            Assert.IsNotNull(observerable);
+        }
 
         [TestMethod]
         public void TestMsM()

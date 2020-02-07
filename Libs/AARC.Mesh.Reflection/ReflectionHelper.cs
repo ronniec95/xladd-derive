@@ -140,11 +140,29 @@ namespace AARC.Mesh.Reflection
                 }
 
                 var parameters = method.GetParameters();
+                int position = 0;
                 foreach (var param in parameters)
                 {
-                    ReflectionParam p = new ReflectionParam { Name = param.Name, Type = param.ParameterType };
+                    ReflectionParam p = new ReflectionParam { Name = param.Name, Type = param.ParameterType, Position = position++ };
+
+                    // probably, optional and default values go together...
                     if (param.IsOptional)
                         p.Optional = true;
+
+                    if (param.HasDefaultValue)
+                        p.DefaultValue = param.RawDefaultValue;
+
+                    // if it's by ref it can be altered and thus considered an 'out' parameter
+                    // note: in Mesh, there is less danger of modifying one parameter which is ref - since it is likely a copy, but it's still probably best avoided.. so, disallow??
+                    // ie make Mesh more functional style - parameters are immutable, inputs/outputs, and no "side effects"
+                    if (param.ParameterType.IsByRef)
+                        p.Out = true;
+
+                    if (param.IsOut || param.IsRetval)
+                        p.Out = true;
+
+                    if (param.IsRetval)
+                        p.Return = true;
 
                     if (param.IsOut || param.IsRetval)
                         transform.Outputs.Add(p);
@@ -167,10 +185,5 @@ namespace AARC.Mesh.Reflection
 
             return transforms;
         }
-
-        //public static ReflectionTransform GeTransform()
-        //{
-
-        //}
     }
 }
