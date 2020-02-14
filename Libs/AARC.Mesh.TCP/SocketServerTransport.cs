@@ -21,7 +21,7 @@ namespace AARC.Mesh.TCP
         private readonly Channel<byte[]> _parentReceiver;
         private readonly ManualResetEvent _listenAcceptEvent;
 
-        private readonly ConcurrentDictionary<string, IMeshServiceTransport> _meshServices;
+        private readonly ConcurrentDictionary<Uri, IMeshServiceTransport> _meshServices;
 
         private readonly ILogger _logger;
 
@@ -29,12 +29,12 @@ namespace AARC.Mesh.TCP
 
         public int MonitorPeriod { get; set; }
 
-        private Uri _url;
-
-        public string Url { get { return _url?.ToString(); } }
+        public Uri Url { get; private set; }
 
         private Task ChannelReceiverProcessor;
         private Task MonitorServices;
+
+        private Action<byte[]> _messageRelay;
 
         public SocketServerTransport(ILogger<SocketServerTransport<T>> logger, IMeshTransportFactory qServiceFactory)
         {
@@ -43,9 +43,10 @@ namespace AARC.Mesh.TCP
             _logger = logger;
             _qServiceFactory = qServiceFactory;
             _parentReceiver = Channel.CreateUnbounded<byte[]>();
-            _meshServices = new ConcurrentDictionary<string, IMeshServiceTransport>();
+            _meshServices = new ConcurrentDictionary<Uri, IMeshServiceTransport>();
             MonitorPeriod = 15000;
             _localct = _localCancelSource.Token;
+            _messageRelay = qServiceFactory.MessageRelay;
 
             ChannelReceiverProcessor = Task.Factory.StartNew(async () =>
             {
@@ -83,7 +84,7 @@ namespace AARC.Mesh.TCP
         /// <param name="servicedetails"></param>
         /// <param name="cancellationToken"></param>
         /// <returns>new connection && connected</returns>
-        public bool ServiceConnect(string servicedetails, CancellationToken cancellationToken)
+        public bool ServiceConnect(Uri servicedetails, CancellationToken cancellationToken)
         {
             if (_meshServices.ContainsKey(servicedetails))
             {
@@ -104,9 +105,9 @@ namespace AARC.Mesh.TCP
         public void Listen(int port, CancellationToken cancellationToken)
         {
 
-            _url = NetworkExt.GetHostNameUrl(port);
+            Url = NetworkExt.GetHostNameUrl(port);
 
-            var ipAddress = NetworkExt.GetHostIPAddress(_url.Host);
+            var ipAddress = NetworkExt.GetHostIPAddress(Url.Host);
             var localEndPoint = new IPEndPoint(IPAddress.Any, port);
             try
             {
@@ -229,6 +230,7 @@ namespace AARC.Mesh.TCP
 
         public void OnPublish(byte[] value)
         {
+            _messageRelay?.Invoke(value);
             var m = new T();
             m.Decode(value);
             foreach (var observer in _observers)
@@ -237,7 +239,9 @@ namespace AARC.Mesh.TCP
 
         public void OnNext(T value)
         {
-            var bytes = value.Encode();
+            // Todo: Need something to allow encoding switching
+            var bytes = value.Encode(0);
+            _messageRelay?.Invoke(bytes);
             foreach (var transportId in value.Routes)
                 if (_meshServices.ContainsKey(transportId))
                 {

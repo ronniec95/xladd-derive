@@ -25,6 +25,7 @@ namespace AARC.Mesh.SubService
         public Action<T, string> DiscoverySendMessage { get; set; }
 
         public Action<T, string, string> DiscoveryErrorMessage { get; set; }
+        public Action ResetDiscoveryState { get;  set; }
 
         public DiscoveryMonitor(ILogger<DiscoveryMonitor<T>> logger, IMeshTransportFactory qServiceFactory)
         {
@@ -59,7 +60,7 @@ namespace AARC.Mesh.SubService
 
                 var delay = 1000;
 
-                var serviceUrl = $"tcp://{Dns.GetHostName()}";
+                var hostname = $"{Dns.GetHostName()}";
                 using (var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_localCancelSource.Token, cancellationToken))
                     do
                     {
@@ -67,6 +68,7 @@ namespace AARC.Mesh.SubService
                         {
                             if (_discoveryService == null)
                             {
+                                ResetDiscoveryState.Invoke();
                                 _discoveryService = _qServiceFactory.Create(discoveryUrl);
                                 _discoveryService.ReceiverChannel = _parentReceiver.Writer;
                             }
@@ -74,7 +76,7 @@ namespace AARC.Mesh.SubService
                             if (_discoveryService.Connected)
                             {
                                 var message = new T();
-                                DiscoverySendMessage.Invoke(message, serviceUrl);
+                                DiscoverySendMessage.Invoke(message, hostname);
 
                                 OnSend(message);
                             }
@@ -106,7 +108,6 @@ namespace AARC.Mesh.SubService
 
         public void OnPublish(byte[] ibytes)
         {
-            _logger?.LogDebug($"DS Rx {ibytes.Length}");
             var message = new T();
             message.Decode(ibytes);
             DiscoveryReceiveMessage?.Invoke(message);
@@ -118,12 +119,19 @@ namespace AARC.Mesh.SubService
             DiscoveryErrorMessage?.Invoke(message, url, errorMessage);
             OnSend(message);
         }
+
+        public void OnError(string errorMessage, Uri url)
+        {
+            var message = new T();
+            DiscoveryErrorMessage?.Invoke(message, url.AbsoluteUri, errorMessage);
+            OnSend(message);
+        }
+
         public void OnSend(T message)
         {
             var obytes = message.Encode(_msgEncoding);
             // Todo: Not sure I like this
             _discoveryService.SenderChannel.WriteAsync(obytes);
-            _logger?.LogDebug($"DS Tx {obytes.Length}");
         }
 
         #region IDisposable Support

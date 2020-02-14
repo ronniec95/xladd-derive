@@ -143,11 +143,11 @@ namespace AARC.Mesh.TCP
             return addresses.Where(a => a.AddressFamily == AddressFamily.InterNetwork).FirstOrDefault();
         }
 
-        public static string TransportId(this Socket socket)
+        public static Uri TransportId(this Socket socket)
         {
             var endpoint = (IPEndPoint)(socket?.RemoteEndPoint);
             var url = CreateUrl(endpoint.Address.ToString(), endpoint.Port);
-            return url.AbsoluteUri;
+            return url;
         }
 
         public static void DoGetHostAddresses(string hostname)

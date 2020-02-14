@@ -28,7 +28,7 @@ namespace AARC.Mesh.TCP
         // Client  socket.  
         protected Socket _socket { get; private set; }
 
-        private Uri _url;
+        public Uri Url { get; private set; }
 
         // Receive buffer.  
         private readonly byte[] _rawReceiveBuffer;
@@ -46,14 +46,12 @@ namespace AARC.Mesh.TCP
         /// </summary>
         //public Action<string, byte[]> NewMessageBytes { get; set; }
 
-        public string Url { get { return _url.ToString(); } }
-
         public SocketTransport(ILogger logger = null)
         {
             _logger = logger;
             _localCancelSource = new CancellationTokenSource();
             _rawReceiveBuffer = new byte[BufferSize];
-            _url = NetworkExt.GetHostNameUrl();
+            Url = NetworkExt.GetHostNameUrl();
             _senderChannel = Channel.CreateUnbounded<byte[]>();
 
             _packetizer = new PacketProtocol(PacketSize);
@@ -61,6 +59,7 @@ namespace AARC.Mesh.TCP
             // Pass the assembled bytes message to the IMeshObservers (subscriber)
             _packetizer.MessageArrived += async (bytes) =>
             {
+                _logger?.LogDebug($"Rx {bytes.Length}");
                 await ReceiverChannel.WriteAsync(bytes, _localCancelSource.Token);
                 //foreach (var observer in _publishers)
                 //    observer.OnPublish(bytes);
@@ -88,7 +87,7 @@ namespace AARC.Mesh.TCP
         public SocketTransport(Socket socket, ILogger logger = null) : this(logger)
         {
             _socket = socket;
-            _url = socket?.GetServiceHost();
+            Url = socket?.GetServiceHost();
         }
 
         /// <summary>
@@ -114,7 +113,7 @@ namespace AARC.Mesh.TCP
             }
             if (_socket.Connected)
             {
-                _url = new Uri(url.AbsoluteUri);
+                Url = new Uri(url.AbsolutePath);
             }
         }
 
@@ -171,7 +170,7 @@ namespace AARC.Mesh.TCP
         {
             if ((_localCancelSource?.IsCancellationRequested ?? true) || (!_socket?.Connected ?? true))
                 // Need to signal socket is dead if not cancelled
-                _logger?.LogInformation($"[{_url}]: ReadAsync cancelled or not connected");
+                _logger?.LogInformation($"[{Url}]: ReadAsync cancelled or not connected");
             else
             {
                 var result = _socket?.BeginReceive(_rawReceiveBuffer, 0, SocketTransport.BufferSize, 0, new AsyncCallback(ReadCallback), this);
@@ -183,7 +182,7 @@ namespace AARC.Mesh.TCP
         {
             // ToDo : Cancellation token
             _localCancelSource.Cancel();
-            _logger?.LogInformation($"[{_url}]: Closing Socket");
+            _logger?.LogInformation($"[{Url}]: Closing Socket");
             if (_socket?.Connected ?? false)
             {
                 _socket?.Shutdown(SocketShutdown.Both);
@@ -260,14 +259,15 @@ namespace AARC.Mesh.TCP
         /// value is a message encoded in bytes that needs to be wrapped in a length
         /// and sent to the listener on the socket
         /// </summary>
-        /// <param name="value"></param>
-        public void OnPublish(byte[] value)
+        /// <param name="bytes"></param>
+        public void OnPublish(byte[] bytes)
         {
             try
             {
-                var message = PacketProtocol.WrapMessage(value);
+                var message = PacketProtocol.WrapMessage(bytes);
                 if (_socket?.Connected ?? false)
                 {
+                    _logger?.LogDebug($"Tx {bytes.Length}");
                     _socket?.BeginSend(message, 0, message.Length, 0, new AsyncCallback(SendCallback), _socket);
                 }
                 else

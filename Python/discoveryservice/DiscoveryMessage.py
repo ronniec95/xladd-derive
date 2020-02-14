@@ -1,3 +1,5 @@
+import msgpack
+
 class DiscoveryMessage:
     def __init__(self, State: int, Port: int, HostServer: str, PayLoad: str):
         self.State = State
@@ -27,7 +29,14 @@ class DiscoveryMessage:
         return message
 
     @staticmethod
-    def toBytes(message):
+    def toBytes(message, msgType):
+        if msgType == 0:
+            return toBytesMsgType0(message)
+        else:
+            return toBytesMsgType1(message)
+
+    @staticmethod
+    def toBytesMsgType0(message):
         byteMessage = bytes([0]) # msgType 0 = simple
         byteMessage += message.State.to_bytes(1, byteorder = 'little')
         byteMessage += message.Port.to_bytes(2, byteorder = 'little')
@@ -44,3 +53,10 @@ class DiscoveryMessage:
             byteMessage += message.PayLoad.encode()
         # Ignore Split and Monitor
         return byteMessage
+    
+    @staticmethod
+    def toBytesMsgType1(message):
+        packer = Packer()
+        packer.pack(message)
+        return packer.bytes()
+        

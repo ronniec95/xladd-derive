@@ -31,5 +31,7 @@ namespace AARC.Mesh.Interface
         /// <param name="dispose"></param>
         /// <returns></returns>
         IMeshServiceTransport Create(IDisposable dispose);
+
+        void MessageRelay(byte[] bytes);
     }
 }

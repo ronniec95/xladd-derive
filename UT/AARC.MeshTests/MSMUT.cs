@@ -43,19 +43,19 @@ namespace AARC.MeshTests
 
             var routemap = new Dictionary<string, HashSet<string>>();
             routemap[receiveSubscriber.InputChannelAlias] = new HashSet<string> { "remote1:0" };
-            dssm.CreateReceiveMessage(new DiscoveryMessage { State = DiscoveryMessage.DiscoveryStates.GetOutputQs, Payload = JsonConvert.SerializeObject(routemap) });
-
-            routemap.Clear();
             routemap[sendPublisher.OutputChannelAlias] = new HashSet<string> { "remote1:0" };
-            dssm.CreateReceiveMessage(new DiscoveryMessage { State = DiscoveryMessage.DiscoveryStates.GetInputQs, Payload = JsonConvert.SerializeObject(routemap) });
+            dssm.CreateReceiveMessage(new DiscoveryMessage { State = DiscoveryMessage.DiscoveryStates.ChannelData, Channels = new List<MeshChannel>() });
 
-            Assert.AreEqual(dssm.LocalInputChannels.Count, 1);
-            Assert.AreEqual(dssm.OutputChannelRoutes.Count, 1);
+            Assert.AreEqual(1, dssm.LocalInputChannels.Count);
+            Assert.AreEqual(1, dssm.LocalOutputChannels.Count);
 
+            Assert.AreEqual(0, dssm.ExternalSubscriberChannels.Count);
+            Assert.AreEqual(0, dssm.OutputChannelRoutes.Count);
 
             receiveSubscriber.Subscribe(message =>
             {
                 sendPublisher.OnNext($"{message}");
+                Assert.IsInstanceOfType(message, typeof(int));
             },
             e => {
                 // ToDo Should tell DS probably from within the Transport
@@ -69,7 +69,7 @@ namespace AARC.MeshTests
                 {
                     GraphId = 0,
                     XId = MeshUtilities.NewXId,
-                    Service = "tcp:/localhost:1000",
+                    Service = new Uri("tcp:/localhost:1000"),
                     Channel = receiveSubscriber.InputChannelAlias,
                     PayLoad = JsonConvert.SerializeObject(i)
                 };
@@ -101,16 +101,16 @@ namespace AARC.MeshTests
             var sendPublisher = new MeshObserver<Tuple<string, Tuple<string, List<double>>>>("sendchannel");
             msm.RegisterChannels(sendPublisher);
 
-            var routemap = new Dictionary<string, HashSet<string>>();
-            routemap[receiveSubscriber.InputChannelAlias] = new HashSet<string> { "tcp:/localhost:0" };
-            dssm.CreateReceiveMessage(new DiscoveryMessage { State = DiscoveryMessage.DiscoveryStates.GetOutputQs, Payload = JsonConvert.SerializeObject(routemap) });
+            var routemap = new Dictionary<string, HashSet<Uri>>();
+            routemap[receiveSubscriber.InputChannelAlias] = new HashSet<Uri> { new Uri("tcp:/localhost:0") };
+            routemap[sendPublisher.OutputChannelAlias] = new HashSet<Uri> { new Uri("tcp:/localhost:0") };
+            dssm.CreateReceiveMessage(new DiscoveryMessage { State = DiscoveryMessage.DiscoveryStates.ChannelData, Channels = new List<MeshChannel>() });
 
-            routemap.Clear();
-            routemap[sendPublisher.OutputChannelAlias] = new HashSet<string> { "tcp:/localhost:0" };
-            dssm.CreateReceiveMessage(new DiscoveryMessage { State = DiscoveryMessage.DiscoveryStates.GetInputQs, Payload = JsonConvert.SerializeObject(routemap) });
+            Assert.AreEqual(1, dssm.LocalInputChannels.Count);
+            Assert.AreEqual(1, dssm.LocalOutputChannels.Count);
 
-            Assert.AreEqual(dssm.LocalInputChannels.Count, 1);
-            Assert.AreEqual(dssm.OutputChannelRoutes.Count, 1);
+            Assert.AreEqual(0, dssm.ExternalSubscriberChannels.Count);
+            Assert.AreEqual(0, dssm.OutputChannelRoutes.Count);
 
             var dictionarySet = new ConcurrentDictionary<string, HashSet<string>>();
             receiveSubscriber.Subscribe(message =>
@@ -174,7 +174,7 @@ foreach (var ticker in message.Item2)
                 {
                     GraphId = 0,
                     XId = MeshUtilities.NewXId,
-                    Service = "tcp:/localhost:1000",
+                    Service = new Uri("tcp:/localhost:1000"),
                     Channel = receiveSubscriber.InputChannelAlias,                    
                     PayLoad = JsonConvert.SerializeObject(payload)
                 };
@@ -221,15 +221,17 @@ foreach (var ticker in message.Item2)
             var subscriber = new MeshSetObserverable<string>("receivechannel");
             msm.RegisterChannels(subscriber);
 
-            var routemap = new Dictionary<string, HashSet<string>>();
-            routemap[subscriber.InputChannelAlias] = new HashSet<string> { "tcp:/localhost:0" };
-            dssm.CreateReceiveMessage(new DiscoveryMessage { State = DiscoveryMessage.DiscoveryStates.GetOutputQs, Payload = JsonConvert.SerializeObject(routemap) });
+            var routemap = new Dictionary<string, HashSet<string>>
+            {
+                [subscriber.InputChannelAlias] = new HashSet<string> { "tcp:/localhost:0" }
+            };
+            dssm.CreateReceiveMessage(new DiscoveryMessage { State = DiscoveryMessage.DiscoveryStates.ChannelData, Channels = new List<MeshChannel>() });
 
             subscriber.Subscribe((x) =>
             {
-                var changes = subscriber.Changes(x);
-                Console.WriteLine(changes.Added);
-                Console.WriteLine(changes.Deleted);
+                var (Added, Deleted) = subscriber.Changes(x);
+                Console.WriteLine(Added);
+                Console.WriteLine(Deleted);
             });
 
             var tickers = new HashSet<string>(new[] { "AAPL", "MSFT" });
@@ -240,7 +242,7 @@ foreach (var ticker in message.Item2)
                 {
                     GraphId = 0,
                     XId = MeshUtilities.NewXId,
-                    Service = "tcp:/localhost:1000",
+                    Service = new Uri("tcp:/localhost:1000"),
                     Channel = subscriber.InputChannelAlias,
                     PayLoad = JsonConvert.SerializeObject(payload)
                 };

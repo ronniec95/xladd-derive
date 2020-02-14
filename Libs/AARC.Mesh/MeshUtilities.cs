@@ -14,6 +14,34 @@ namespace AARC.Mesh
             return path;
         }
 
+        /// <summary>
+        /// Encode string to bytes as length + bytes encoded string
+        /// </summary>
+        /// <param name="str"></param>
+        /// <returns></returns>
+        public static IEnumerable<byte> EncodeBytes(this string str)
+        {
+            var bytes = new List<byte>();
+            bytes.AddRange(BitConverter.GetBytes(str.Length));
+            bytes.AddRange(System.Text.Encoding.ASCII.GetBytes(str));
+            return bytes;
+        }
+
+        /// <summary>
+        /// Read bytes taking length (int32) and bytes to string encoding
+        /// </summary>
+        /// <param name="bytes"></param>
+        /// <param name="msgPtr">position in byte stream to read from</param>
+        /// <returns></returns>
+        public static string DecodeString(this byte[] bytes, ref int msgPtr)
+        {
+            var len = BitConverter.ToInt32(bytes, msgPtr);
+            msgPtr += sizeof(Int32);
+            var decodedString =  System.Text.Encoding.ASCII.GetString(bytes, msgPtr, len);
+            msgPtr += len;
+            return decodedString;
+        }
+
         public static byte[] CloneReduce(this byte[] byteArray, int len, int index = 0)
         {
             byte[] tmp = new byte[len];

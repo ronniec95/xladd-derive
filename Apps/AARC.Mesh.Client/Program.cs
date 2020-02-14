@@ -1,11 +1,16 @@
 ﻿using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+
 using AARC.Mesh.TCP;
 using AARC.Model;
-using System.Linq;
+using Serilog;
+using Serilog.Events;
+using Serilog.Extensions.Logging;
 
 namespace AARC.Mesh.Client
 {
@@ -18,25 +23,54 @@ namespace AARC.Mesh.Client
     {
         public static void Main(string[] args)
         {
+            var providers = new LoggerProviderCollection();
+
+            Log.Logger = new LoggerConfiguration()
+                        .MinimumLevel.Debug()
+                        .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
+                        .Enrich.FromLogContext()
+                        .WriteTo.Console()
+                        .WriteTo.Providers(providers)
+                        .CreateLogger();
+
             //ManualResetEvent dsConnectEvent = new ManualResetEvent(false);
-            log4net.GlobalContext.Properties["LogFileName"] = $"MeshTestClient";
-            var msm = new MeshClient(args);
+            Log.Information("Starting up");
+            var mc = new MeshClient(args);
 
-            var logger = msm.ServiceProvider.GetService<ILoggerFactory>()
-    .CreateLogger<Program>();
+            mc.Services.AddSingleton(providers);
+            mc.Services.AddSingleton<ILoggerFactory>(sc =>
+            {
+                var providerCollection = sc.GetService<LoggerProviderCollection>();
+                var factory = new SerilogLoggerFactory(null, true, providerCollection);
 
-            var o = msm.CreateObserver<string>(args[0]);
+                foreach (var provider in sc.GetServices<ILoggerProvider>())
+                    factory.AddProvider(provider);
+
+                return factory;
+            });
+
+            mc.BuildServiceProvider();
+//            mc.Services.AddLogging(l => l.AddConsole());
+
+            var logger = mc.GetLogger<ILogger<Program>>();
+
+            var channel = mc.Configuration.GetValue<string>("channel");
+
+            logger.LogInformation($"Mesh Start with channel {channel}");
+            var mesh = mc.Start();
+
+            var o = mc.CreateObserver<string>(channel);
             for (; ; )
             {
                 var data = Console.ReadLine();
                 o.OnNext(data);
             }
+
         }
 
         public static void Test1(MeshClient msm)
         {
-            var logger = msm.ServiceProvider.GetService<ILoggerFactory>()
-                .CreateLogger<Program>();
+            var logger = msm.GetLogger<Program>();
 
             logger.LogDebug("Starting subscribers to nasdaqtestout");
             try

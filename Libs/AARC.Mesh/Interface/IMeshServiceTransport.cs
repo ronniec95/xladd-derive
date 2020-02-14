@@ -26,7 +26,7 @@ namespace AARC.Mesh.Interface
 
         ChannelWriter<byte[]> SenderChannel { get; }
 
-        string Url { get; }
+        Uri Url { get; }
 
         void Shutdown();
     }

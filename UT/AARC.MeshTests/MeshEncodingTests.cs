@@ -19,7 +19,7 @@ namespace AARC.MeshTests
             {
                 GraphId = 9999,
                 XId = 6666,
-                Service = "TestService",
+                Service = new Uri("tcp://TestService:0"),
                 Channel = "TestQueue",
                 PayLoad = "TestPayLoad"
             };
@@ -36,7 +36,7 @@ namespace AARC.MeshTests
             {
                 GraphId = 9999,
                 XId = 6666,
-                Service = "TestService",
+                Service = new Uri("tcp://TestService:0"),
                 Channel = "TestQueue",
                 PayLoad = null
             };
@@ -53,7 +53,7 @@ namespace AARC.MeshTests
             {
                 GraphId = 9999,
                 XId = 6666,
-                Service = "TestService",
+                Service = new Uri("tcp://TestService:0"),
                 Channel = "TestQueue",
                 PayLoad = "TestPayLoad"
             };
@@ -68,7 +68,7 @@ namespace AARC.MeshTests
 
             Assert.AreEqual<uint>(test.GraphId, test2.GraphId);
             Assert.AreEqual<uint>(test.XId, test2.XId);
-            Assert.AreEqual<string>(test.Service, test2.Service);
+            Assert.AreEqual<Uri>(test.Service, test2.Service);
             Assert.AreEqual<string>(test.Channel, test2.Channel);
             Assert.AreEqual<string>(test.PayLoad, test2.PayLoad);
         }
@@ -79,7 +79,7 @@ namespace AARC.MeshTests
             {
                 GraphId = 9999,
                 XId = 6666,
-                Service = "TestService",
+                Service = new Uri("tcp://TestService:0"),
                 Channel = "TestQueue",
                 PayLoad = null
             };
@@ -93,7 +93,7 @@ namespace AARC.MeshTests
 
             Assert.AreEqual<uint>(test.GraphId, test2.GraphId);
             Assert.AreEqual<uint>(test.XId, test2.XId);
-            Assert.AreEqual<string>(test.Service, test2.Service);
+            Assert.AreEqual<Uri>(test.Service, test2.Service);
             Assert.AreEqual<string>(test.Channel, test2.Channel);
             Assert.AreEqual<string>(test.PayLoad, test2.PayLoad);
         }
@@ -101,7 +101,7 @@ namespace AARC.MeshTests
         [TestMethod]
         public void TestMeshMessageDecodeReadonlySequence()
         {
-            var m = new MeshMessage { GraphId = 0, XId = 1, Channel = "channel1", Service = "localhost:1234", PayLoad = "[]" };
+            var m = new MeshMessage { GraphId = 0, XId = 1, Channel = "channel1", Service = new Uri("tcp://TestService:1234"), PayLoad = "[]" };
             var bmsg = m.Encode(0);
             var refmsgLen = bmsg.Length;
             var bytes = PacketProtocol.WrapMessage(bmsg);
@@ -143,7 +143,8 @@ namespace AARC.MeshTests
                 // Service
                 var len = BitConverter.ToInt32(source.Slice(msgPtr, 4).ToArray());
                 msgPtr += sizeof(Int32);
-                m.Service = System.Text.Encoding.ASCII.GetString(source.Slice(msgPtr, len).ToArray());
+                var service = System.Text.Encoding.ASCII.GetString(source.Slice(msgPtr, len).ToArray());
+                m.Service = new Uri(service);
                 msgPtr += len;
                 // QueueName
                 len = BitConverter.ToInt32(source.Slice(msgPtr, 4).ToArray());

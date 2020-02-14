@@ -12,6 +12,8 @@ namespace AARC.Service.Hosted
     using AARC.Mesh.SubService;
     using AARC.Mesh.TCP;
     using AARC.Repository.Interfaces;
+    using Serilog;
+
     /// <summary>
     /// Draft Service
     /// Service has a name
@@ -38,7 +40,6 @@ namespace AARC.Service.Hosted
                 {
                     var service = hostContext.Configuration.GetValue<string>("service", "MeshDataFlow");
                     var port = hostContext.Configuration.GetValue<string>("port", "");
-                    log4net.GlobalContext.Properties["LogFileName"] = $"{service}_{port}";
 
                     // DiscoveryMonitor connects remotely? Needs Host/Port  
                     // MeshSocketServer allows remote and internal connections
@@ -63,11 +64,11 @@ namespace AARC.Service.Hosted
                     services.AddScoped<IMeshNodeFactory, DataFlowFactory>();
                     services.AddHostedService<MeshHostedService>();
                 })
-                .ConfigureLogging((hostContext, logging) =>
+                .UseSerilog();
+/*                .ConfigureLogging((hostContext, logging) =>
                 {
                     logging.SetMinimumLevel(LogLevel.Debug);
-                    logging.AddLog4Net();
-                });
+                });*/
 
     }
 }

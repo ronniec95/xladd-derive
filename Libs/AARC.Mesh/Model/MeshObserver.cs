@@ -10,7 +10,7 @@ namespace AARC.Mesh.Model
     /// <typeparam name="T"></typeparam>
     public class MeshObserver<T> : IMeshObserver<T>
     {
-        public Action<string> OnConnect { get { return _channelProxy?.OnConnect; } set { _channelProxy.OnConnect = value; } }
+        public Action<Uri> OnConnect { get { return _channelProxy?.OnConnect; } set { _channelProxy.OnConnect = value; } }
 
         public string InputChannelAlias { get { return _channelProxy.InputChannelAlias; } }
 
@@ -35,7 +35,7 @@ namespace AARC.Mesh.Model
         // To Transport
         public void OnNext(T value) => _channelProxy.OnPost(value);
 
-        public void OnNext(T value, string transportUrl) => _channelProxy.OnPost(value, transportUrl);
+        public void OnNext(T value, Uri transportUrl) => _channelProxy.OnPost(value, transportUrl);
 
         public void Subscriber() => throw new NotSupportedException("Observers cannot subscribe");
 

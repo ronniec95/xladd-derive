@@ -10,6 +10,7 @@
     <PackageReference Include="System.Reactive" Version="4.3.2" />
     <PackageReference Include="System.Threading.Channels" Version="4.7.0" />
     <PackageReference Include="MsgPack.Cli" Version="1.0.1" />
+    <PackageReference Include="morelinq" Version="3.3.2" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Model\" />

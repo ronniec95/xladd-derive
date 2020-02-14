@@ -34,7 +34,7 @@ namespace AARC.Mesh.Model
             }
         }
 
-        public void OnConnect(string transportUrl) => onConnectCallbackProxy?.OnConnect?.Invoke(transportUrl);
+        public void OnConnect(Uri transportUrl) => onConnectCallbackProxy?.OnConnect?.Invoke(transportUrl);
 
         public IDisposable Subscribe(IObserver<T> observer)
         {

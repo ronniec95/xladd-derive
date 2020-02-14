@@ -11,34 +11,29 @@ namespace AARC.Mesh.Model
         /// </summary>
         public uint GraphId { get; set; }
         public uint XId { get; set; }
-        public string Service { get; set; }
+        public Uri Service { get; set; }
         public string Channel { get; set; }
         public string PayLoad { get; set; }
-        public bool IsValid() => !string.IsNullOrWhiteSpace(Service) && !string.IsNullOrWhiteSpace(Channel) && XId > 0;
-        public IEnumerable<string> Routes { get; set; }
+        public IEnumerable<Uri> Routes { get; set; }
     }
 
 
     public partial class MeshMessage : IMeshMessage
     {
-        public override string ToString() => Service;
+        public override string ToString() => Service.AbsoluteUri;
 
         public byte[] Encode(byte msgType)
         {
-            var bytes = new List<byte>();
-            bytes.Add((byte)0);
+            var bytes = new List<byte>  { (byte)0 };
             // GraphId
             bytes.AddRange(BitConverter.GetBytes(this.GraphId));
             // Xid
             bytes.AddRange(BitConverter.GetBytes(this.XId));
             // Service
-            bytes.AddRange(BitConverter.GetBytes(this.Service.Length));
-            bytes.AddRange(System.Text.Encoding.ASCII.GetBytes(this.Service));
-            // QueueName
-            bytes.AddRange(BitConverter.GetBytes(this.Channel.Length));
-            bytes.AddRange(System.Text.Encoding.ASCII.GetBytes(this.Channel));
+            bytes.AddRange(this.Service.AbsoluteUri.EncodeBytes());
+            // Channel
+            bytes.AddRange(this.Channel.EncodeBytes());
             // PayLoad
-
             var compressedbytes = AARC.Compression.Compression.CompressString(this.PayLoad);
             //                bytes.AddRange(BitConverter.GetBytes(compressedbytes.Length));
             bytes.AddRange(compressedbytes);
@@ -60,15 +55,9 @@ namespace AARC.Mesh.Model
             this.XId = BitConverter.ToUInt32(bytes, msgPtr);
             msgPtr += sizeof(uint);
             // Service
-            var len = BitConverter.ToInt32(bytes, msgPtr);
-            msgPtr += sizeof(Int32);
-            this.Service = System.Text.Encoding.ASCII.GetString(bytes, msgPtr, len);
-            msgPtr += len;
-            // QueueName
-            len = BitConverter.ToInt32(bytes, msgPtr);
-            msgPtr += sizeof(Int32);
-            this.Channel = System.Text.Encoding.ASCII.GetString(bytes, msgPtr, len);
-            msgPtr += len;
+            this.Service = new Uri(bytes.DecodeString(ref msgPtr));
+            // Channel Alias
+            this.Channel = bytes.DecodeString(ref msgPtr);
             // PayLoad
             this.PayLoad = AARC.Compression.Compression.DecompressString(bytes, msgPtr);
             return this;
