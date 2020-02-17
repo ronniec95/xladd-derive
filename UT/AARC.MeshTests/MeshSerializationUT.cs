@@ -21,11 +21,11 @@ namespace AARC.MeshTests
             {
                 GraphId = 0,
                 XId = MeshUtilities.NewXId,
-                Service = "tcp:/localhost:1000",
+                Service = new Uri("tcp:/localhost:1000"),
                 Channel = "TestChannel",
                 PayLoad = null
             };
-            _rawBytes = _refMessage.Encode();
+            _rawBytes = _refMessage.Encode(0);
             _inputBytes = PacketProtocol.WrapMessage(_rawBytes);
         }
 
@@ -57,7 +57,7 @@ namespace AARC.MeshTests
                 mm.Decode(bytes);
                 Assert.AreEqual<uint>(_refMessage.GraphId, mm.GraphId);
                 Assert.AreEqual<uint>(_refMessage.XId, mm.XId);
-                Assert.AreEqual<string>(_refMessage.Service, mm.Service);
+                Assert.AreEqual<Uri>(_refMessage.Service, mm.Service);
                 Assert.AreEqual<string>(_refMessage.Channel, mm.Channel);
                 Assert.AreEqual<string>(_refMessage.PayLoad, mm.PayLoad);
             };

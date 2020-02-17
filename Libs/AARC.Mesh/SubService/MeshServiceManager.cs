@@ -34,6 +34,7 @@ namespace AARC.Mesh.SubService
             _dssmc = discoveryServiceState;
             _logger = logger;
             _discoveryMonitor = discoveryMonitor;
+            _discoveryMonitor.ResetDiscoveryState += _dssmc.ResetState;
             _discoveryMonitor.DiscoveryReceiveMessage += _dssmc.CreateReceiveMessage;
             _discoveryMonitor.DiscoverySendMessage += _dssmc.CreateSendMessage;
             _discoveryMonitor.DiscoveryErrorMessage += _dssmc.CreateErrorMessage;

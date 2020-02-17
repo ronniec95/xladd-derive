@@ -4,6 +4,6 @@ namespace AARC.Mesh.Interface
 {
     public interface IChannelProxy
     {
-        Action<string> OnConnect { get; set; }
+        Action<Uri> OnConnect { get; set; }
     }
 }

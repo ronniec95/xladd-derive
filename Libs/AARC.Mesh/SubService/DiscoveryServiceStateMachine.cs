@@ -3,7 +3,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 using System.Linq;
-using Newtonsoft.Json;
 
 namespace AARC.Mesh.SubService
 {
@@ -27,18 +26,18 @@ namespace AARC.Mesh.SubService
         /// </summary>
         public MeshDictionary<T> LocalOutputChannels { get; private set; }
 
-        public ConcurrentDictionary<string, HashSet<string>> ExternalSubscriberChannels { get; private set; }
-        public ConcurrentDictionary<string, HashSet<string>> OutputChannelRoutes { get; private set; }
+        public ConcurrentDictionary<string, HashSet<Uri>> ExternalSubscriberChannels { get; private set; }
+        public ConcurrentDictionary<string, HashSet<Uri>> OutputChannelRoutes { get; private set; }
 
-        protected DiscoveryStates _state = DiscoveryStates.Register;
+        protected DiscoveryStates _state = DiscoveryStates.Connect;
 
         public DiscoveryServiceStateMachine()
         {
             RegistrationComplete = new ManualResetEvent(false);
             LocalInputChannels = new MeshDictionary<T>();
             LocalOutputChannels = new MeshDictionary<T>();
-            ExternalSubscriberChannels = new ConcurrentDictionary<string, HashSet<string>>();
-            OutputChannelRoutes = new ConcurrentDictionary<string, HashSet<string>>();
+            ExternalSubscriberChannels = new ConcurrentDictionary<string, HashSet<Uri>>();
+            OutputChannelRoutes = new ConcurrentDictionary<string, HashSet<Uri>>();
         }
 
         /// <summary>
@@ -46,34 +45,37 @@ namespace AARC.Mesh.SubService
         /// </summary>
         /// <param name="channel"></param>
         /// <returns></returns>
-        public IEnumerable<string> FindInputChannelRoutes(string channel)
+        public IEnumerable<Uri> FindInputChannelRoutes(string channel)
             => ExternalSubscriberChannels.Where(kv => string.Equals(kv.Key, channel, StringComparison.OrdinalIgnoreCase)).Select(kv => kv.Value).FirstOrDefault();
 
-        public IEnumerable<string> FindOutputChannelRoutes(string channel)
+        public IEnumerable<Uri> FindOutputChannelRoutes(string channel)
             => OutputChannelRoutes.Where(kv => string.Equals(kv.Key, channel, StringComparison.OrdinalIgnoreCase)).Select(kv => kv.Value).FirstOrDefault();
 
 
-        public bool RegisteredInputSource(string action, string endpoint)
+        public bool RegisteredInputSource(string action, Uri endpoint)
             => ExternalSubscriberChannels.Where(iq => string.Equals(iq.Key, action, StringComparison.OrdinalIgnoreCase)).Where(kvp => kvp.Value.Contains(endpoint)).Any();
 
         public IEnumerable<string> RoutableInputChannels() => OutputChannelRoutes.Keys.Intersect(LocalInputChannels.Keys);
         public IEnumerable<string> RoutableOutputChannels() => ExternalSubscriberChannels.Keys.Intersect(LocalOutputChannels.Keys);
 
-        public IEnumerable<string> RoutableInputChannelEndpoints() => OutputChannelRoutes.Keys.Intersect(LocalInputChannels.Keys).Select(key => OutputChannelRoutes[key].ToList()).SelectMany(t => t).Distinct();
+        public IEnumerable<Uri> RoutableInputChannelEndpoints() => OutputChannelRoutes.Keys.Intersect(LocalInputChannels.Keys).Select(key => OutputChannelRoutes[key].ToList()).SelectMany(t => t).Distinct();
 
-        public IEnumerable<string> RoutableOutputChannelEndpoints() => LocalOutputChannels.Keys.Intersect(ExternalSubscriberChannels.Keys).Select(key => ExternalSubscriberChannels[key].ToList()).SelectMany(t => t).Distinct();
+        public IEnumerable<Uri> RoutableOutputChannelEndpoints() => LocalOutputChannels.Keys.Intersect(ExternalSubscriberChannels.Keys).Select(key => ExternalSubscriberChannels[key].ToList()).SelectMany(t => t).Distinct();
 
-        public IEnumerable<Tuple<string, IEnumerable<string>>> OutputQRoutes =>
+        public IEnumerable<Tuple<string, IEnumerable<Uri>>> OutputQRoutes =>
             RoutableOutputChannels()
                 .Select(r => new { r, l = FindInputChannelRoutes(r) })
                 .Where(r => r.l != null && r.l.Any())
-                .Select(r => new Tuple<string, IEnumerable<string>>(r.r, r.l));
+                .Select(r => new Tuple<string, IEnumerable<Uri>>(r.r, r.l));
 
-        public IEnumerable<Tuple<string, IEnumerable<string>>> InputQRoutes =>
+        public IEnumerable<Tuple<string, IEnumerable<Uri>>> InputQRoutes =>
             RoutableInputChannels()
                 .Select(r => new { r, l = FindOutputChannelRoutes(r) })
                 .Where(r => r.l != null && r.l.Any())
-                .Select(r => new Tuple<string, IEnumerable<string>>(r.r, r.l));
+                .Select(r => new Tuple<string, IEnumerable<Uri>>(r.r, r.l));
+
+
+        public void ResetState() => _state = DiscoveryStates.Connect;
 
         /// <summary>
         /// State Machine
@@ -84,29 +86,51 @@ namespace AARC.Mesh.SubService
         {
             if (message != null)
             {
-                switch (message.State)
+                try
                 {
-                    case DiscoveryStates.Connect:
-                        _state = DiscoveryStates.Register;
-                        break;
-                    case DiscoveryStates.Register:
-                        Port = message.Port;
-                        _state = DiscoveryStates.GetInputQs;
-                        break;
-                    case DiscoveryStates.GetInputQs:
-                        var iq = JsonConvert.DeserializeObject<ConcurrentDictionary<string, HashSet<string>>>(message.Payload);
-                        MeshUtilities.Merge(ExternalSubscriberChannels, iq);
-                        _state = DiscoveryStates.GetOutputQs;
-                        break;
-                    case DiscoveryStates.GetOutputQs:
-                        var oq = JsonConvert.DeserializeObject<ConcurrentDictionary<string, HashSet<string>>>(message.Payload);
-                        MeshUtilities.Merge(OutputChannelRoutes, oq);
-                        _state = DiscoveryStates.GetInputQs;
-                        RegistrationComplete.Set();
-                        break;
-                    default:
-                        _state = DiscoveryStates.Connect;
-                        break;
+                    switch (message.State)
+                    {
+                        case DiscoveryStates.Connect:
+                            _state = DiscoveryStates.ConnectResponse;
+                            break;
+                        case DiscoveryStates.ConnectResponse:
+                            if (Port == 0)
+                            {
+                                var uri = message.Service;
+                                Port = uri.Port;
+                            }
+                            if (Port == 0)
+                                // Todo: Report to Monitor error
+                                throw new NotImplementedException();
+                            _state = DiscoveryStates.ChannelData;
+                            break;
+                        case DiscoveryStates.ChannelData:
+                            if (message.Channels != null)
+                                foreach (var channel in message.Channels)
+                                {
+                                    //Todo: Merge
+                                    // In this senario Service is the address of a single MS
+                                    // Channel Name/Service = "tcp://serverhost:xxx"
+                                    var channelName = channel.Name;
+                                    var service = message.Service;
+                                    if (channel.ChannelType == MeshChannel.ChannelTypes.Input)
+                                        foreach (var address in channel.Addresses)
+                                            ExternalSubscriberChannels[channelName].Add(address);
+                                    else
+                                        foreach (var address in channel.Addresses)
+                                            OutputChannelRoutes[channelName].Add(address);
+                                }
+                            _state = DiscoveryStates.ChannelData;
+                            RegistrationComplete.Set();
+                            break;
+                        default:
+                            _state = DiscoveryStates.Connect;
+                            break;
+                    }
+                }
+                catch(Exception ex)
+                {
+                    Console.WriteLine(ex.Message);
                 }
             }
         }
@@ -117,30 +141,28 @@ namespace AARC.Mesh.SubService
         /// <returns></returns>
         public void CreateSendMessage(DiscoveryMessage message, string hostName)
         {
+            var transportId = new Uri($"tcp://{hostName}:{Port}");
+            CreateSendMessage(message, transportId);
+        }
+
+        public void CreateSendMessage(DiscoveryMessage message, Uri transportId)
+        {
             message.State = _state;
-            message.HostServer = hostName;
-            message.Port = Port;
+            message.Service = transportId;
             switch (_state)
             {
                 case DiscoveryStates.Connect:
                     break;
-                case DiscoveryStates.Register:
+                case DiscoveryStates.ConnectResponse:
                     break;
-                case DiscoveryStates.GetInputQs:
-#if NETSTANDARD2_0
-                    message.Payload = LocalInputChannels.Keys.Any() ? string.Join(",", LocalInputChannels.Keys) : null;
-#endif
-#if NETSTANDARD2_1 // Targets .netcore 3.0
-                    message.Payload = LocalInputChannels.Keys.Any() ? string.Join(',', LocalInputChannels.Keys) : string.Empty;
-#endif
-                    break;
-                case DiscoveryStates.GetOutputQs:
-#if NETSTANDARD2_0
-                    message.Payload = LocalOutputChannels.Keys.Any() ? string.Join(",", LocalOutputChannels.Keys) : null;
-#endif
-#if NETSTANDARD2_1 // Targets .netcore 3.0
-                    message.Payload = LocalOutputChannels.Keys.Any() ? string.Join(',', LocalOutputChannels.Keys) : string.Empty;
-#endif
+                case DiscoveryStates.ChannelData:
+                    message.Channels = new List<MeshChannel>();
+                    foreach (var name in LocalInputChannels.Keys)
+                        message.Channels.Add(new MeshChannel { ChannelType = MeshChannel.ChannelTypes.Input, Name = name, Addresses = new HashSet<Uri> { transportId } }); ;
+
+                    foreach (var name in LocalOutputChannels.Keys)
+                        message.Channels.Add(new MeshChannel { ChannelType = MeshChannel.ChannelTypes.Output, Name = name, Addresses = new HashSet<Uri> { transportId } });
+
                     break;
                 default:
                     message.State = DiscoveryMessage.DiscoveryStates.Error;
@@ -150,9 +172,11 @@ namespace AARC.Mesh.SubService
 
         public void CreateErrorMessage(DiscoveryMessage message, string url, string errorMessage)
         {
-            message.State = DiscoveryStates.Error;
-            message.Payload = errorMessage;
-            message.HostServer = url;
+            // Todo: send to smart monitor
+            throw new NotImplementedException();
+//            message.State = DiscoveryStates.Error;
+//            message.Payload = errorMessage;
+//            message.HostServer = url;
         }
     }
 }

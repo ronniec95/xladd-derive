@@ -1,24 +1,15 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace AARC.Mesh.Interface
 {
-    public interface IMeshMessage
-    {
-        IEnumerable<string> Routes { get; }
-        byte[] Encode();
-
-        IMeshMessage Decode(byte[] bytes);
-    }
-
     public interface IMeshTransport<T> : IObservable<T>, IObserver<T>, IDisposable where T: IMeshMessage
     {
         /// <summary>
         /// A unique id to identify this service for connected services
         /// </summary>
-        string Url { get; }
+        Uri Url { get; }
 
         /// <summary>
         /// Subscribe to incoming service messages
@@ -52,6 +43,6 @@ namespace AARC.Mesh.Interface
         /// <param name="transportUrl"></param>
         /// <param name="cancellationToken"></param>
         /// <returns>new connection and connected</returns>
-        bool ServiceConnect(string transportUrl, CancellationToken cancellationToken);
+        bool ServiceConnect(Uri transportUrl, CancellationToken cancellationToken);
     }
 }

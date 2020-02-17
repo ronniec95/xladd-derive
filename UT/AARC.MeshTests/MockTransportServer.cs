@@ -14,7 +14,7 @@ namespace AARC.MeshTests
 
     class MockTransportServer : ObserverablePattern<MeshMessage>, IMeshTransport<MeshMessage>, IDuplex<byte[]>
     {
-        private readonly ConcurrentDictionary<string, IMeshServiceTransport> _meshServices = new ConcurrentDictionary<string, IMeshServiceTransport>();
+        private readonly ConcurrentDictionary<Uri, IMeshServiceTransport> _meshServices;
 
         public int MonitorPeriod { get; }
         private CancellationTokenSource _localCancelSource;
@@ -23,6 +23,7 @@ namespace AARC.MeshTests
         private IMeshTransportFactory _qServiceFactory;
         private readonly Channel<byte[]> _parentReceiver;
         private CancellationToken _localct;
+        protected byte _msgEncoderType;
 
         public MockTransportServer(ILogger<MockTransportServer> logger, IMeshTransportFactory qServiceFactory)
         {
@@ -31,12 +32,14 @@ namespace AARC.MeshTests
             _logger = logger;
             _qServiceFactory = qServiceFactory;
             _parentReceiver = Channel.CreateUnbounded<byte[]>();
-            _meshServices = new ConcurrentDictionary<string, IMeshServiceTransport>();
+            _meshServices = new ConcurrentDictionary<Uri, IMeshServiceTransport>();
             MonitorPeriod = 15000;
             _localct = _localCancelSource.Token;
+            _msgEncoderType = 0;
+            Url = new Uri("tcp://localhost:0");
         }
 
-        public string Url => "localhost:0";
+        public Uri Url { get; set; }
 
         public Task Cancel()
         {
@@ -57,7 +60,7 @@ namespace AARC.MeshTests
 
         public void OnNext(MeshMessage value)
         {
-            var bytes = value.Encode();
+            var bytes = value.Encode(_msgEncoderType);
             foreach (var transportId in value.Routes)
                 if (_meshServices.ContainsKey(transportId))
                 {
@@ -80,7 +83,7 @@ namespace AARC.MeshTests
                 o.OnNext(m);
         }
 
-        public bool ServiceConnect(string servicedetails, CancellationToken cancellationToken)
+        public bool ServiceConnect(Uri servicedetails, CancellationToken cancellationToken)
         {
             if (_meshServices.ContainsKey(servicedetails))
             {

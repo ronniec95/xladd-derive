@@ -37,8 +37,6 @@ namespace AARC.Service.Hosted
                 _meshServices = new List<IMeshReactor<MeshMessage>>();
                 foreach (var service in services)
                     _meshServices.Add(nodeFactory.Get(service));
-
-                //_meshServices.Add(new AARC.Graph.Test.MeshMethodWireUp(typeof());
             }
             else throw new ArgumentException(@"Missing Services");
         }

@@ -29,5 +29,10 @@ namespace AARC.MeshTests
         {
             throw new NotImplementedException();
         }
+
+        public void MessageRelay(byte[] bytes)
+        {
+            throw new NotImplementedException();
+        }
     }
 }

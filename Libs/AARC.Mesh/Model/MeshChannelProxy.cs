@@ -22,7 +22,7 @@ namespace AARC.Mesh.Model
         /// <summary>
         /// Used to notifed the a new connection has been made.
         /// </summary>
-        public Action<string> OnConnect { get; set; }
+        public Action<Uri> OnConnect { get; set; }
 
         public int ClusterType { get; }
 
@@ -41,12 +41,12 @@ namespace AARC.Mesh.Model
 
             if (!string.IsNullOrEmpty(inputChannelName))
             {
-                _metrics.Name = $"{inputChannelName}({channelType})";
+                _metrics.Name = inputChannelName;
                 this.InputChannelAlias = _metrics.Name;
             }
             if (!string.IsNullOrEmpty(outputChannelName))
             {
-                _metrics.Name = $"{outputChannelName}({channelType})";
+                _metrics.Name = outputChannelName;
                 this.OutputChannelAlias = _metrics.Name;
             }
         }
@@ -132,14 +132,14 @@ namespace AARC.Mesh.Model
 
         public void Unsubscribe() => unsubscriber?.Dispose();
         // To Transport out
-        public void OnPost(T payload, string transportUrl = null)
+        public void OnPost(T payload, Uri transportUrl = null)
         {
             ++_metrics.NoMsgSent;
             var jpayload = JsonConvert.SerializeObject(payload);
             var xid = MeshUtilities.NewXId;
             var message = new MeshMessage { GraphId = 1, XId = xid, PayLoad = jpayload };
-            if (!string.IsNullOrEmpty(transportUrl))
-                message.Routes = new List<string> { transportUrl };
+            if (transportUrl != null)
+                message.Routes = new List<Uri> { transportUrl };
             PublishChannel?.Invoke(this.OutputChannelAlias, message);
         }
     }

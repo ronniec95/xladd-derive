@@ -10,10 +10,13 @@ namespace AARC.Mesh.TCP
     {
         protected readonly IServiceProvider _serviceProvider;
         private Uri _url;
+        private MeshMonitor _mm;
 
         public MeshTransportFactory(IServiceProvider serviceProvider)
         {
             _serviceProvider = serviceProvider;
+
+            _mm = new MeshMonitor(serviceProvider.GetService<ILogger<MeshMonitor>>(), new Uri("udp://localhost:9900"));
         }
 
         /// <summary>
@@ -67,5 +70,7 @@ namespace AARC.Mesh.TCP
         }
 
         public SocketTransport Create(Socket socket) => new SocketTransport(socket, _serviceProvider.GetService<ILogger<SocketTransport>>());
+
+        public void MessageRelay(byte[] bytes) => _mm.OnNext(bytes);
     }
 }
