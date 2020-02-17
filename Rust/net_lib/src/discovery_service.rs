@@ -2,6 +2,7 @@ use crate::msg_serde::*;
 use async_std::net::SocketAddr;
 use async_std::net::{TcpListener, TcpStream};
 use async_std::prelude::*;
+use async_std::sync::{Arc, Mutex};
 use async_std::task::sleep;
 use chrono::Utc;
 use futures::executor::ThreadPool;
@@ -88,16 +89,27 @@ impl DiscoveryServer {
         Ok(())
     }
 
-    async fn run_loop(&self) -> Result<(), Box<dyn std::error::Error>> {
+    async fn run_loop(
+        &self,
+        channels: Arc<Mutex<BTreeSet<Channel>>>,
+        local_channels: &mut Vec<Channel>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut rng = SmallRng::from_entropy();
-        let mut channels = BTreeSet::new();
         loop {
             let msg = read_msg(self.stream.clone()).await?;
-            eprintln!("Received message {} {:?}", Utc::now(), msg);
+            eprintln!("Received message {} {}", Utc::now(), msg);
             match msg.state {
                 DiscoveryState::Connect => self.on_connect(msg, &mut rng).await?,
                 DiscoveryState::ConnectResponse => self.on_connect_response(msg).await?,
-                DiscoveryState::QueueData => self.on_queue_data(msg, &mut channels).await?,
+                DiscoveryState::QueueData => loop {
+                    if let Some(mut channels) = channels.try_lock() {
+                        self.on_queue_data(msg, &mut channels).await?;
+                        for ch in channels.iter() {
+                            local_channels.push(ch.clone());
+                        }
+                        break;
+                    }
+                },
                 DiscoveryState::Error => self.on_error(msg).await?,
             }
         }
@@ -106,14 +118,21 @@ impl DiscoveryServer {
 
 pub async fn run_server(addr: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
     let pool = ThreadPool::new().unwrap();
+    let channels = Arc::new(Mutex::new(BTreeSet::new()));
+
     let listener = TcpListener::bind(addr).await.unwrap();
     eprintln!("Server is listening on {:?}", listener.local_addr());
     let mut incoming = listener.incoming();
     while let Some(stream) = incoming.next().await {
         let stream = stream?.clone();
+        let global_channels = channels.clone();
         pool.spawn(async move {
             let discovery_service = DiscoveryServer::new(stream.clone());
-            match discovery_service.run_loop().await {
+            let mut local_channels = Vec::new();
+            match discovery_service
+                .run_loop(global_channels.clone(), &mut local_channels)
+                .await
+            {
                 Ok(_) => (),
                 Err(e) => {
                     eprintln!(
@@ -121,6 +140,15 @@ pub async fn run_server(addr: SocketAddr) -> Result<(), Box<dyn std::error::Erro
                         stream.peer_addr().unwrap(),
                         e
                     );
+                    loop {
+                        if let Some(mut channels) = global_channels.try_lock() {
+                            for ch in &local_channels {
+                                eprintln!("Removing channels {}", ch);
+                                channels.remove(ch);
+                            }
+                            break;
+                        }
+                    }
                 }
             }
         })?;

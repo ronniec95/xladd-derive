@@ -1,2 +1,2 @@
-port = 3574
-names = ["channel1","channel2"]
+port = 9900
+names = ["nasdaqtestout","nasdaqtestin","biggeststocks"]

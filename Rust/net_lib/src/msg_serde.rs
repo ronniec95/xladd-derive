@@ -9,6 +9,7 @@ use num_traits::{FromPrimitive, ToPrimitive};
 use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::convert::TryInto;
+use std::fmt;
 use urlparse::{urlparse, urlunparse, Url};
 
 pub type ChannelId = String;
@@ -44,7 +45,12 @@ pub struct Channel {
 
 impl Ord for Channel {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.name.cmp(&other.name)
+        let cmp = self.name.cmp(&other.name);
+        if cmp == Ordering::Equal {
+            self.channel_type.cmp(&other.channel_type)
+        } else {
+            cmp
+        }
     }
 }
 
@@ -73,6 +79,7 @@ pub struct DiscoveryMessage {
 pub enum Payload {
     Entry,
     Exit,
+    Error,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -88,6 +95,26 @@ pub struct MonitorMsg {
 pub struct QueueMessage {
     pub channel_name: String,
     pub data: Vec<u8>,
+}
+
+impl fmt::Display for Channel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?} {} => ", self.channel_type, self.name,)?;
+        for addr in &self.addresses {
+            write!(f, "{},", addr.unparse())?;
+        }
+        writeln!(f)
+    }
+}
+
+impl fmt::Display for DiscoveryMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "{:?} {} =>", self.state, self.uri.unparse())?;
+        for ch in &self.channels {
+            write!(f, "\t{}", ch)?;
+        }
+        writeln!(f)
+    }
 }
 
 // Helper functions
@@ -266,7 +293,7 @@ pub async fn write_msg(
     buf.resize(1024, 0u8);
     let (remain, _) = write_ds_msg(&msg, buf.as_mut_slice())?;
     let sz = 1024 - remain.len();
-    eprintln!("Sending msg {:?}", &msg);
+    eprintln!("Sending msg {}", &msg);
     stream.write(&u32::to_le_bytes(sz as u32)).await?;
     stream.write_all(&buf[0..sz]).await?;
     Ok(())
@@ -283,7 +310,7 @@ fn read_sm_msg(input: &[u8]) -> nom::IResult<&[u8], MonitorMsg> {
     let (input, msg_format) = read_enum::<MsgFormat>(input)?;
     let (input, payload) = read_enum::<Payload>(input)?;
     let (input, data) = match payload {
-        Payload::Entry => {
+        Payload::Entry | Payload::Error => {
             let rest = input;
             let (input, sz) = read_usize(rest)?;
             let (input, sz) = take(sz)(input)?;
@@ -291,11 +318,13 @@ fn read_sm_msg(input: &[u8]) -> nom::IResult<&[u8], MonitorMsg> {
         }
         Payload::Exit => Ok((input, &[][..])),
     }?;
+    dbg!(&date);
+    dbg!(&time);
     Ok((
         input,
         MonitorMsg {
             channel_name: name.to_string(),
-            adj_time_stamp: NaiveDateTime::from_timestamp(date as i64, time),
+            adj_time_stamp: NaiveDateTime::from_timestamp(date as i64, time / 1000),
             msg_format,
             payload,
             data: data.to_vec(),
@@ -312,7 +341,7 @@ fn write_sm_msg<'a>(
         msg.adj_time_stamp.timestamp_millis() as usize / 1000,
         output,
     )?;
-    let (output, _) = write_u32(msg.adj_time_stamp.timestamp_subsec_nanos(), output)?;
+    let (output, _) = write_u32(msg.adj_time_stamp.timestamp_subsec_nanos() * 1000, output)?;
     let (output, _) = write_enum::<MsgFormat>(&msg.msg_format, output)?;
     let (output, _) = write_enum::<Payload>(&msg.payload, output)?;
     if !msg.data.is_empty() {
@@ -325,7 +354,8 @@ fn write_sm_msg<'a>(
 pub async fn read_sm_message(
     mut stream: TcpStream,
 ) -> Result<MonitorMsg, Box<dyn std::error::Error>> {
-    let sz = read_u64_async(&mut stream).await? as usize;
+    let sz = read_u32_async(&mut stream).await? as usize;
+    dbg!(&sz);
     let mut buf = SmallVec::<[u8; 1024]>::with_capacity(sz);
     buf.resize(sz, 0u8);
     stream.read_exact(&mut buf).await?;
@@ -346,7 +376,7 @@ pub async fn write_sm_message(
     let mut buf = SmallVec::<[u8; 1024]>::with_capacity(1024);
     let (remain, _) = write_sm_msg(&msg, buf.as_mut_slice())?;
     let sz = 1024 - remain.len();
-    stream.write(&usize::to_le_bytes(sz)).await?;
+    stream.write(&u32::to_le_bytes(sz as u32)).await?;
     stream.write_all(&buf[0..sz]).await?;
     Ok(())
 }

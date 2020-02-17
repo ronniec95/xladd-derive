@@ -13,7 +13,6 @@ bincode = "1.1.4"
 futures = { version = "0.3.4", features = ["thread-pool"] }
 async-std = "^1"
 byteorder = "1"
-rmp="^0.8"
 pico-args="^0.3"
 chrono="^0.4"
 toml = "0.5.6"

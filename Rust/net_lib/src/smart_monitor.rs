@@ -62,6 +62,7 @@ impl SmartMonitor {
     ) -> Result<(), Box<dyn std::error::Error>> {
         loop {
             if let Ok(msg) = read_sm_message(stream.clone()).await {
+                eprintln!("Got smart mon msg {:?}", msg);
                 loop {
                     if let Ok(mut sender_map) = sender_map.try_lock() {
                         if let Some(sender) = sender_map.get_mut(&msg.channel_name) {
@@ -70,15 +71,21 @@ impl SmartMonitor {
                         break;
                     }
                 }
+            } else {
+                eprintln!(
+                    "Error receiving msg on smart monitor {:?}",
+                    stream.peer_addr()
+                );
             }
         }
     }
 
     pub async fn listen(&self, addr: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
         let listener = TcpListener::bind(addr).await.unwrap();
+        eprintln!("Listening on {:?}", listener.local_addr());
         let mut incoming = listener.incoming();
         while let Some(stream) = incoming.next().await {
-            let stream = stream.unwrap();
+            let stream = stream?;
             // Latency measurement using https://en.wikipedia.org/wiki/Network_Time_Protocol
             // Measure clock difference
             // Send adjustment to client

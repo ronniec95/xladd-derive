@@ -14,7 +14,7 @@ pub fn create_channel_table(name: &str) -> Result<Connection, Box<dyn std::error
 
 pub fn insert(conn: &Connection, msg: &MonitorMsg) -> Result<usize, Box<dyn std::error::Error>> {
     match &msg.payload {
-        Payload::Entry => {
+        Payload::Entry | Payload::Error => {
             let msg_format = match msg.msg_format {
                 MsgFormat::Bincode => 0,
                 MsgFormat::MsgPack => 1,
