@@ -1,4 +1,4 @@
-use crate::smart_monitor::{Message, MsgFormat, Payload};
+use crate::msg_serde::{MonitorMsg, MsgFormat, Payload};
 use rusqlite::{params, Connection, DatabaseName};
 use std::io::Write;
 
@@ -12,9 +12,9 @@ pub fn create_channel_table(name: &str) -> Result<Connection, Box<dyn std::error
     Ok(conn)
 }
 
-pub fn insert(conn: &Connection, msg: &Message) -> Result<usize, Box<dyn std::error::Error>> {
+pub fn insert(conn: &Connection, msg: &MonitorMsg) -> Result<usize, Box<dyn std::error::Error>> {
     match &msg.payload {
-        Payload::Entry(data) => {
+        Payload::Entry => {
             let msg_format = match msg.msg_format {
                 MsgFormat::Bincode => 0,
                 MsgFormat::MsgPack => 1,
@@ -23,13 +23,13 @@ pub fn insert(conn: &Connection, msg: &Message) -> Result<usize, Box<dyn std::er
             conn.execute(
                 &format!(
                     "INSERT INTO TS_DATA (Timestamp,Enter,Format,Msg) VALUES (?1,?2,?3,ZEROBLOB({}))",
-                    data.len()
+                    msg.data.len()
                 ),
                 params![msg.adj_time_stamp, 1, msg_format],
             )?;
             let rowid = conn.last_insert_rowid();
             let mut blob = conn.blob_open(DatabaseName::Main, "TS_DATA", "Msg", rowid, false)?;
-            blob.write(&data)?;
+            blob.write(&msg.data)?;
             Ok(1)
         }
         Payload::Exit => Ok(conn.execute(
@@ -42,16 +42,17 @@ pub fn insert(conn: &Connection, msg: &Message) -> Result<usize, Box<dyn std::er
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::smart_monitor::*;
+    use crate::msg_serde::*;
     use chrono::prelude::*;
     #[test]
     fn insert_db() {
         let utc = Utc::now();
-        let msg = Message {
-            channel_name: 1243,
+        let msg = MonitorMsg {
+            channel_name: ChannelId::from("hello"),
             adj_time_stamp: utc.naive_local(),
             msg_format: MsgFormat::Json,
-            payload: Payload::Entry(b"123456".to_vec()),
+            payload: Payload::Entry,
+            data: b"123456".to_vec(),
         };
         let conn = create_channel_table("channel1").unwrap();
         insert(&conn, &msg).expect("could not insert");

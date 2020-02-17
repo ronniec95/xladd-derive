@@ -1,13 +1,9 @@
-use crate::discovery_service::DiscoveryClient;
-use crate::error::*;
-use crate::messages::*;
+use crate::msg_serde::*;
 use crate::smart_monitor::*;
-use crate::utils::str_radix;
-use async_std::net::{TcpListener, TcpStream};
+use async_std::net::TcpListener;
 use async_std::stream::StreamExt;
-use futures::channel::mpsc::{channel, Receiver, Sender};
+use futures::channel::mpsc::{channel, Sender};
 use futures::executor::block_on;
-use futures::io::{AsyncReadExt, AsyncWriteExt};
 use futures::lock::Mutex;
 use futures::Future;
 use serde::{Deserialize, Serialize};
@@ -19,14 +15,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-enum MsgType<T> {
-    Update(SocketAddr),
-    UpdateCluster(Vec<SocketAddr>),
-    Send(T),
-}
-
 #[derive(Clone)]
-struct BurstQueue<T>
+pub struct BurstQueue<T>
 where
     T: Serialize,
 {
@@ -54,25 +44,27 @@ pub struct TcpScalarQueue<T>
 where
     T: Serialize + Send + 'static,
 {
-    sender: Sender<MsgType<T>>,
+    msg_format: MsgFormat,
+    sender: Sender<Vec<u8>>,
     sm_log: SMLogger<T>,
+    _data: std::marker::PhantomData<T>,
 }
 
-struct PushQueue<T: Clone + Serialize + Send + 'static> {
+pub struct OutputQueue<T: Clone + Serialize + Send + 'static> {
     last_value_consumers: Vec<LastValueQueue<T>>,
     burst_consumers: Vec<BurstQueue<T>>,
-    sink_consumers: Vec<TcpScalarQueue<T>>,
+    tcp_consumer: Vec<TcpScalarQueue<T>>,
 }
 
-impl<T> PushQueue<T>
+impl<T> OutputQueue<T>
 where
     T: Clone + Serialize + Send + for<'de> Deserialize<'de> + std::fmt::Debug + 'static,
 {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             last_value_consumers: Vec::new(),
             burst_consumers: Vec::new(),
-            sink_consumers: Vec::new(),
+            tcp_consumer: Vec::new(),
         }
     }
 
@@ -87,59 +79,16 @@ where
         self.burst_consumers.last().unwrap()
     }
 
-    pub fn tcp_scalar_pull_queue(&mut self, channel_id: ChannelId) -> &TcpScalarQueue<T> {
-        let (sender, receiver) = channel(10);
-        std::thread::spawn(move || PushQueue::tcp_stream_sender(channel_id, receiver));
-        self.sink_consumers.push(TcpScalarQueue {
+    fn tcp_sink(&mut self, channel_id: ChannelId, sender: Sender<Vec<u8>>) {
+        self.tcp_consumer.push(TcpScalarQueue {
+            msg_format: MsgFormat::Bincode,
             sender,
             sm_log: logger().create_sender::<T>(channel_id),
+            _data: std::marker::PhantomData,
         });
-        self.sink_consumers.last().unwrap()
     }
 
-    async fn tcp_stream_sender(
-        channel_id: ChannelId,
-        mut receiver: Receiver<MsgType<T>>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut tcp_stream: Option<TcpStream> = None;
-        loop {
-            if let Some(msg) = receiver.try_next()? {
-                match msg {
-                    MsgType::Send(item) => {
-                        if let Some(tcp_stream) = &mut tcp_stream {
-                            let err = bincode::serialize(&item).and_then(|bytes| {
-                                block_on(async {
-                                    tcp_stream.write(&usize::to_be_bytes(channel_id)).await?;
-                                    tcp_stream.write(&bytes).await?;
-                                    Ok(())
-                                })
-                            });
-                            match err {
-                                Ok(_) => (),
-                                Err(e) => eprintln!("Tcp stream message sending failed {}", e),
-                            }
-                        }
-                    }
-                    MsgType::Update(addr) => {
-                        if let Some(tcp_stream) = &mut tcp_stream {
-                            let err: Result<(), Box<dyn std::error::Error>> = block_on(async {
-                                tcp_stream.shutdown(std::net::Shutdown::Both)?;
-                                *tcp_stream = TcpStream::connect(addr).await?;
-                                Ok(())
-                            });
-                            match err {
-                                Ok(_) => (),
-                                Err(e) => eprintln!("Tcp reconnection failed {:?}", e),
-                            }
-                        }
-                    }
-                    MsgType::UpdateCluster(addresses) => {}
-                }
-            }
-        }
-    }
-
-    fn send(&mut self, item: T) {
+    pub fn send(&mut self, item: T) {
         for output in self.last_value_consumers.iter_mut() {
             output.push(item.clone());
         }
@@ -147,7 +96,7 @@ where
             dbg!(&item);
             output.push(item.clone());
         }
-        for output in self.sink_consumers.iter_mut() {
+        for output in self.tcp_consumer.iter_mut() {
             output.push(item.clone());
         }
     }
@@ -249,21 +198,61 @@ where
     T: Serialize + Send + 'static,
 {
     pub fn push(&mut self, item: T) {
-        self.sender.try_send(MsgType::Send(item)).unwrap();
-    }
-
-    pub fn update_socket(&mut self, addr: SocketAddr) {
-        self.sender.try_send(MsgType::Update(addr)).unwrap();
+        let bytes = bincode::serialize(&item).unwrap();
+        self.sender.try_send(bytes).unwrap();
     }
 }
+/*
+    async fn tcp_stream_sender(
+        channel_id: ChannelId,
+        mut receiver: Receiver<MsgType<T>>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut tcp_stream: Option<TcpStream> = None;
+        loop {
+            if let Some(msg) = receiver.try_next()? {
+                match msg {
+                    MsgType::Send(item) => {
+                        if let Some(tcp_stream) = &mut tcp_stream {
+                            let err = bincode::serialize(&item).and_then(|bytes| {
+                                block_on(async {
+                                    tcp_stream.write(&usize::to_be_bytes(channel_id)).await?;
+                                    tcp_stream.write(&bytes).await?;
+                                    Ok(())
+                                })
+                            });
+                            match err {
+                                Ok(_) => (),
+                                Err(e) => eprintln!("Tcp stream message sending failed {}", e),
+                            }
+                        }
+                    }
+                    MsgType::Update(addr) => {
+                        if let Some(tcp_stream) = &mut tcp_stream {
+                            let err: Result<(), Box<dyn std::error::Error>> = block_on(async {
+                                tcp_stream.shutdown(std::net::Shutdown::Both)?;
+                                *tcp_stream = TcpStream::connect(addr).await?;
+                                Ok(())
+                            });
+                            match err {
+                                Ok(_) => (),
+                                Err(e) => eprintln!("Tcp reconnection failed {:?}", e),
+                            }
+                        }
+                    }
+                    MsgType::UpdateCluster(addresses) => {}
+                }
+            }
+        }
+    }
+*/
 
-pub trait ByteDeSerialiser {
+pub trait ByteDeSerialiser: Send + Sync {
     fn push_data(&mut self, v: &[u8]);
 }
 
 impl<T> ByteDeSerialiser for BurstQueue<T>
 where
-    T: Serialize + for<'de> Deserialize<'de> + std::fmt::Debug + Send,
+    T: Serialize + for<'de> Deserialize<'de> + std::fmt::Debug + Send + Sync,
 {
     fn push_data(&mut self, v: &[u8]) {
         self.push_bytes(&v);
@@ -272,7 +261,7 @@ where
 
 impl<T> ByteDeSerialiser for LastValueQueue<T>
 where
-    T: Serialize + for<'de> Deserialize<'de> + std::fmt::Debug + Send,
+    T: Serialize + for<'de> Deserialize<'de> + std::fmt::Debug + Send + Sync,
 {
     fn push_data(&mut self, v: &[u8]) {
         self.push_bytes(&v);
@@ -281,12 +270,13 @@ where
 
 /// Implements a tcp external connection for channels
 ///
-pub struct TcpPullQueueMgr {
+pub struct TcpQueueManager {
     port: u16,
     input_queue_map: BTreeMap<ChannelId, Vec<Box<dyn ByteDeSerialiser>>>,
+    output_queue_map: BTreeMap<ChannelId, Vec<Box<dyn ByteDeSerialiser>>>,
 }
 
-impl TcpPullQueueMgr {
+impl TcpQueueManager {
     /// Creates a listener on a port
     /// # Arguments
     /// * 'port' - A port number
@@ -295,6 +285,7 @@ impl TcpPullQueueMgr {
         Self {
             port,
             input_queue_map: BTreeMap::new(),
+            output_queue_map: BTreeMap::new(),
         }
     }
 
@@ -310,15 +301,31 @@ impl TcpPullQueueMgr {
     /// * 'id' - channel id
     /// * 'sink' - queue that implments byteDeserialiser
     ///
-    pub fn register_input_queue(&mut self, id: ChannelId, sink: Box<dyn ByteDeSerialiser>) {
+    pub fn add_input(&mut self, id: ChannelId, sink: Box<dyn ByteDeSerialiser>) {
         self.input_queue_map.entry(id).or_insert(vec![]).push(sink);
     }
 
-    pub fn unregister_input_queue(&mut self, id: &ChannelId) {
-        self.input_queue_map.remove(&id);
+    pub fn add_output<T>(&mut self, id: ChannelId, output_q: &mut OutputQueue<T>)
+    where
+        T: Serialize + for<'de> Deserialize<'de> + Clone + Send + std::fmt::Debug,
+    {
+        let (sender, receiver) = channel(10);
+        output_q.tcp_sink(id, sender);
     }
 
-    pub async fn listen(&mut self) -> Result<(), MeshError> {
+    pub fn update_channel_info(&mut self, msg: &DiscoveryMessage) {
+        match msg.state {
+            DiscoveryState::Connect => {
+                let port = msg.uri.port.unwrap();
+                self.port = if port > 0 { self.port } else { port };
+            }
+            DiscoveryState::ConnectResponse => {}
+            DiscoveryState::QueueData => {}
+            DiscoveryState::Error => {}
+        }
+    }
+
+    pub async fn listen(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let listener = block_on(async {
             TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], self.port)))
                 .await
@@ -326,17 +333,11 @@ impl TcpPullQueueMgr {
         });
         let mut incoming = listener.incoming();
         while let Some(stream) = incoming.next().await {
-            let reader = &mut &stream?;
-            let mut channel_id = [0u8; 8];
-            let mut byte_len = [0u8; 4];
-            reader.read_exact(&mut channel_id).await?;
-            reader.read_exact(&mut byte_len).await?;
-            let channel_id = usize::from_be_bytes(channel_id);
-            let mut buffer = Vec::with_capacity(u32::from_be_bytes(byte_len) as usize);
-            reader.read_exact(&mut buffer).await?;
-            if let Some(sinks) = self.input_queue_map.get_mut(&channel_id) {
+            let stream = stream?;
+            let msg = read_queue_message(stream).await?;
+            if let Some(sinks) = self.input_queue_map.get_mut(&msg.channel_name) {
                 for sink in sinks {
-                    sink.push_data(&buffer)
+                    sink.push_data(&msg.data)
                 }
             }
         }
@@ -360,7 +361,7 @@ mod tests {
     #[test]
     fn fifo_queue() {
         let mut pool = LocalPool::new();
-        let queue = BurstQueue::<i32>::new(str_radix("channel1"));
+        let queue = BurstQueue::<i32>::new(ChannelId::from("hello"));
         let spawner = pool.spawner();
         let mut l_queue = queue.clone();
         spawner
@@ -391,7 +392,7 @@ mod tests {
     #[test]
     fn last_value_queue() {
         let mut pool = LocalPool::new();
-        let queue = LastValueQueue::<i32>::new(str_radix("channel1"));
+        let queue = LastValueQueue::<i32>::new(ChannelId::from("channel1"));
         let spawner = pool.spawner();
         let mut l_queue = queue.clone();
         spawner
@@ -426,7 +427,7 @@ mod tests {
     impl ProducerService {
         fn new() -> Self {
             Self {
-                q1: BurstQueue::<i32>::new(str_radix("channel1")),
+                q1: BurstQueue::<i32>::new(ChannelId::from("channel1")),
             }
         }
 
@@ -472,13 +473,13 @@ mod tests {
     }
 
     struct SourceNode {
-        oq: PushQueue<i32>,
+        oq: OutputQueue<i32>,
     }
 
     impl SourceNode {
         fn new() -> Self {
             Self {
-                oq: PushQueue::new(),
+                oq: OutputQueue::new(),
             }
         }
 
@@ -499,9 +500,9 @@ mod tests {
     }
 
     impl ComputeNode {
-        fn new(oq: &mut PushQueue<i32>) -> Self {
+        fn new(oq: &mut OutputQueue<i32>) -> Self {
             Self {
-                q1: oq.burst_pull_queue(str_radix("channel1")).clone(),
+                q1: oq.burst_pull_queue(ChannelId::from("channel1")).clone(),
             }
         }
 
@@ -521,9 +522,9 @@ mod tests {
     }
 
     impl ComputeNode2 {
-        fn new(oq: &mut PushQueue<i32>) -> Self {
+        fn new(oq: &mut OutputQueue<i32>) -> Self {
             Self {
-                q1: oq.burst_pull_queue(str_radix("channel1")).clone(),
+                q1: oq.burst_pull_queue(ChannelId::from("channel1")).clone(),
             }
         }
 

@@ -10,14 +10,23 @@ edition = "2018"
 serde="^1"
 serde_derive="^1"
 bincode = "1.1.4"
-futures = { version = "0.3", features = ["thread-pool"] }
+futures = { version = "0.3.4", features = ["thread-pool"] }
 async-std = "^1"
 byteorder = "1"
-rand = "0.7.0"
 rmp="^0.8"
 pico-args="^0.3"
 chrono="^0.4"
 toml = "0.5.6"
+num-traits = "0.2"
+num-derive = "0.3"
+nom="^5"
+cookie-factory="^0.3"
+urlparse = "^0.7"
+smallvec="^1"
+
+[dependencies.rand]
+version = "^0.7"
+features = ["small_rng"]
 
 [dependencies.rusqlite]
 version = "0.21.0"
