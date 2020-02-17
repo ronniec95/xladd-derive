@@ -7,6 +7,7 @@ use nom::combinator::*;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 use smallvec::SmallVec;
+use std::cmp::Ordering;
 use std::convert::TryInto;
 use urlparse::{urlparse, urlunparse, Url};
 
@@ -28,11 +29,11 @@ pub enum ChannelType {
 
 #[derive(Clone, Copy, Ord, PartialEq, PartialOrd, Eq, Debug, FromPrimitive, ToPrimitive)]
 pub enum MsgFormat {
-    Bincode,
-    MsgPack,
-    Json,
+    Bincode = 0,
+    MsgPack = 1,
+    Json = 2,
 }
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Channel {
     pub name: String,
     pub instance: usize,
@@ -40,6 +41,26 @@ pub struct Channel {
     pub encoding_type: MsgFormat, // This is either msgpack,json or binary
     pub addresses: Vec<Url>,
 }
+
+impl Ord for Channel {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.name.cmp(&other.name)
+    }
+}
+
+impl PartialOrd for Channel {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for Channel {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl Eq for Channel {}
 
 #[derive(Debug, PartialEq)]
 pub struct DiscoveryMessage {
@@ -106,8 +127,8 @@ fn read_u32(input: &[u8]) -> nom::IResult<&[u8], u32> {
 }
 
 fn read_str(input: &[u8]) -> nom::IResult<&[u8], &str> {
-    let (input, sz) = read_usize(input)?;
-    map(take(sz), |v| std::str::from_utf8(v).unwrap())(input)
+    let (input, sz) = read_u32(input)?;
+    map(take(sz as usize), |v| std::str::from_utf8(v).unwrap())(input)
 }
 
 fn write_enum<'a, T: ToPrimitive>(
@@ -118,7 +139,7 @@ fn write_enum<'a, T: ToPrimitive>(
 }
 
 fn write_str<'a>(s: &str, output: &'a mut [u8]) -> Result<(&'a mut [u8], u64), GenError> {
-    let (output, _) = gen(le_u64(s.len() as u64), output)?;
+    let (output, _) = gen(le_u32(s.len() as u32), output)?;
     gen(slice(s), output)
 }
 
@@ -181,7 +202,7 @@ fn write_channel<'a>(ch: &Channel, output: &'a mut [u8]) -> Result<(&'a mut [u8]
 //
 
 fn read_ds_msg(input: &[u8]) -> nom::IResult<&[u8], DiscoveryMessage> {
-    let (input, state) = read_enum::<MsgFormat>(input)?;
+    let (input, _) = read_enum::<MsgFormat>(input)?;
     let (input, state) = read_enum::<DiscoveryState>(input)?;
     let (input, uri) = map(read_str, |v| urlparse(v))(input)?;
     let (input, channel_cnt) = read_usize(input)?;
@@ -208,7 +229,7 @@ fn write_ds_msg<'a>(
 ) -> Result<(&'a mut [u8], u64), GenError> {
     let (output, _) = write_enum::<MsgFormat>(&MsgFormat::Bincode, output)?;
     let (output, _) = write_enum::<DiscoveryState>(&msg.state, output)?;
-    let (output, _) = write_str(&urlunparse(msg.uri.clone()), output)?;
+    let (output, _) = write_str(&msg.uri.unparse(), output)?;
     let (output, sz) = gen(le_u64(msg.channels.len() as u64), output)?;
     let mut rest = output;
     let mut sz = sz;
@@ -241,10 +262,13 @@ pub async fn write_msg(
     mut stream: TcpStream,
     msg: DiscoveryMessage,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut buf = SmallVec::<[u8; 1024]>::with_capacity(1024);
-    write_ds_msg(&msg, buf.as_mut_slice())?;
-    stream.write(&usize::to_le_bytes(buf.len())).await?;
-    stream.write_all(&buf).await?;
+    let mut buf = SmallVec::<[u8; 1024]>::new();
+    buf.resize(1024, 0u8);
+    let (remain, _) = write_ds_msg(&msg, buf.as_mut_slice())?;
+    let sz = 1024 - remain.len();
+    eprintln!("Sending msg {:?}", &msg);
+    stream.write(&u32::to_le_bytes(sz as u32)).await?;
+    stream.write_all(&buf[0..sz]).await?;
     Ok(())
 }
 
@@ -293,7 +317,7 @@ fn write_sm_msg<'a>(
     let (output, _) = write_enum::<Payload>(&msg.payload, output)?;
     if !msg.data.is_empty() {
         let (output, _) = write_usize(msg.data.len(), output)?;
-        let (output, _) = gen(slice(&msg.data), output)?;
+        let (_, _) = gen(slice(&msg.data), output)?;
     }
     Ok((output, 0))
 }
@@ -320,9 +344,10 @@ pub async fn write_sm_message(
     msg: MonitorMsg,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut buf = SmallVec::<[u8; 1024]>::with_capacity(1024);
-    write_sm_msg(&msg, buf.as_mut_slice())?;
-    stream.write(&usize::to_le_bytes(buf.len())).await?;
-    stream.write_all(&buf).await?;
+    let (remain, _) = write_sm_msg(&msg, buf.as_mut_slice())?;
+    let sz = 1024 - remain.len();
+    stream.write(&usize::to_le_bytes(sz)).await?;
+    stream.write_all(&buf[0..sz]).await?;
     Ok(())
 }
 
@@ -384,7 +409,7 @@ mod tests {
     fn protocol_discovery() {
         let msg = DiscoveryMessage {
             state: DiscoveryState::Connect,
-            uri: urlparse("tcp://127.0.0.1"),
+            uri: urlparse("tcp://127.0.0.1:12345"),
             channels: vec![Channel {
                 name: "mychannel".to_string(),
                 instance: 0,
@@ -401,7 +426,13 @@ mod tests {
         write_ds_msg(&msg, &mut buf).expect("Failed to serialise");
         let (remaining, msg_out) = read_ds_msg(&buf).expect("failed to deserialise");
         assert_eq!(msg, msg_out);
-        assert_eq!(remaining.len(), 887);
+        assert_eq!(remaining.len(), 901);
+
+        let mut buf = SmallVec::<[u8; 1024]>::with_capacity(1024);
+        buf.resize(1024, 0u8);
+        write_ds_msg(&msg_out, &mut buf).expect("Failed to serialise");
+        let (_, msg_out) = read_ds_msg(&buf).expect("failed to deserialise");
+        assert_eq!(msg, msg_out);
     }
 
     #[test]
@@ -418,7 +449,15 @@ mod tests {
         write_sm_msg(&msg, &mut buf).expect("Failed to serialise");
         let (remaining, msg_out) = read_sm_msg(&buf).expect("failed to deserialise");
         assert_eq!(msg, msg_out);
-        assert_eq!(remaining.len(), 975);
-        dbg!(&msg_out);
+        assert_eq!(remaining.len(), 979);
+        (&msg_out);
+    }
+
+    #[test]
+    fn urlparser() {
+        let url = "tcp://abmac.local:12345";
+        let parsed = Url::parse(url);
+        let s = parsed.unparse();
+        assert_eq!(url, &s);
     }
 }

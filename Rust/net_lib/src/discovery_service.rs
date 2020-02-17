@@ -8,6 +8,7 @@ use futures::executor::ThreadPool;
 use futures::task::SpawnExt;
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
+use std::collections::BTreeSet;
 use urlparse::Url;
 
 pub struct DiscoveryServer {
@@ -24,11 +25,13 @@ impl DiscoveryServer {
         msg: DiscoveryMessage,
         rng: &mut SmallRng,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        match msg.uri.port.unwrap() {
-            0 => {
+        match msg.uri.port {
+            None => {
                 let n = rng.gen_range(1024, std::u16::MAX);
-                let mut new_address = msg.uri.clone();
-                new_address.port = Some(n);
+                let new_address = Url::parse(&format!(
+                    "{}://{}:{}{}",
+                    msg.uri.scheme, msg.uri.netloc, n, msg.uri.path
+                ));
                 write_msg(
                     self.stream.clone(),
                     DiscoveryMessage {
@@ -39,7 +42,7 @@ impl DiscoveryServer {
                 )
                 .await?;
             }
-            _ => {
+            Some(_) => {
                 write_msg(
                     self.stream.clone(),
                     DiscoveryMessage {
@@ -63,16 +66,18 @@ impl DiscoveryServer {
 
     async fn on_queue_data(
         &self,
-        mut msg: DiscoveryMessage,
-        channels: &mut Vec<Channel>,
+        msg: DiscoveryMessage,
+        channels: &mut BTreeSet<Channel>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        channels.append(&mut msg.channels);
+        msg.channels.iter().for_each(|ch| {
+            channels.insert(ch.clone());
+        });
         write_msg(
             self.stream.clone(),
             DiscoveryMessage {
                 state: DiscoveryState::QueueData,
                 uri: msg.uri,
-                channels: channels.clone(),
+                channels: channels.iter().cloned().collect::<Vec<_>>(),
             },
         )
         .await?;
@@ -85,7 +90,7 @@ impl DiscoveryServer {
 
     async fn run_loop(&self) -> Result<(), Box<dyn std::error::Error>> {
         let mut rng = SmallRng::from_entropy();
-        let mut channels = Vec::new();
+        let mut channels = BTreeSet::new();
         loop {
             let msg = read_msg(self.stream.clone()).await?;
             eprintln!("Received message {} {:?}", Utc::now(), msg);
@@ -179,7 +184,6 @@ mod tests {
     use std::str::FromStr;
     #[test]
     fn ds_server() {
-        let _ =
-            block_on(async { run_server(SocketAddr::from_str("127.0.0.1:53426").unwrap()).await });
+        let _ = block_on(async { run_server(SocketAddr::from_str("0.0.0.0:9999").unwrap()).await });
     }
 }
