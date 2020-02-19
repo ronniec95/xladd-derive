@@ -3,7 +3,7 @@ use crate::smart_monitor_sqlite;
 use async_std::net::SocketAddr;
 use async_std::net::{TcpListener, TcpStream};
 use async_std::stream::StreamExt;
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::executor::ThreadPool;
 use futures::task::SpawnExt;
@@ -56,27 +56,31 @@ impl SmartMonitor {
         Ok(())
     }
 
-    async fn handle_monitoring(
-        stream: TcpStream,
+    async fn manage_monitor(
+        mut stream: TcpStream,
         sender_map: Arc<Mutex<BTreeMap<ChannelId, Sender<MonitorMsg>>>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        loop {
-            if let Ok(msg) = read_sm_message(stream.clone()).await {
-                eprintln!("Got smart mon msg {:?}", msg);
-                loop {
-                    if let Ok(mut sender_map) = sender_map.try_lock() {
-                        if let Some(sender) = sender_map.get_mut(&msg.channel_name) {
-                            sender.try_send(msg)?;
-                        }
-                        break;
-                    }
-                }
-            } else {
-                eprintln!(
-                    "Error receiving msg on smart monitor {:?}",
-                    stream.peer_addr()
-                );
+        let mut latency = 0i64;
+        let mut msg = read_sm_message(&mut stream).await?;
+        eprintln!("Got smart mon msg {:?}", msg);
+        match msg.payload {
+            Payload::NtpTimestamp => {
+                read_timestamp_async(&mut stream).await?;
+                let t1 = Utc::now().naive_utc();
+                write_timestamp_async(&mut stream, t1).await?;
+                let ntp = read_ntp_msg(&mut stream).await?;
+                latency = ntp.offset as i64 + ntp.delay as i64;
+                Ok(())
             }
+            _ => loop {
+                if let Ok(mut sender_map) = sender_map.try_lock() {
+                    if let Some(sender) = sender_map.get_mut(&msg.channel_name) {
+                        msg.adj_time_stamp = msg.adj_time_stamp + Duration::milliseconds(latency);
+                        sender.try_send(msg).unwrap();
+                    }
+                    return Ok(());
+                }
+            },
         }
     }
 
@@ -86,12 +90,9 @@ impl SmartMonitor {
         let mut incoming = listener.incoming();
         while let Some(stream) = incoming.next().await {
             let stream = stream?;
-            // Latency measurement using https://en.wikipedia.org/wiki/Network_Time_Protocol
-            // Measure clock difference
-            // Send adjustment to client
             let sender_map = self.senders.clone();
             self.pool.spawn(async move {
-                match SmartMonitor::handle_monitoring(stream, sender_map).await {
+                match SmartMonitor::manage_monitor(stream, sender_map).await {
                     Ok(_) => (),
                     Err(e) => eprintln!("error {:?}", e),
                 }

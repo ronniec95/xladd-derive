@@ -79,6 +79,8 @@ pub struct DiscoveryMessage {
 pub enum Payload {
     Entry,
     Exit,
+    NtpTimestamp,
+    NtpLatency,
     Error,
 }
 
@@ -95,6 +97,12 @@ pub struct MonitorMsg {
 pub struct QueueMessage {
     pub channel_name: String,
     pub data: Vec<u8>,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct NtpMsg {
+    pub offset: i32,
+    pub delay: i32,
 }
 
 impl fmt::Display for Channel {
@@ -150,6 +158,12 @@ fn read_usize(input: &[u8]) -> nom::IResult<&[u8], usize> {
 fn read_u32(input: &[u8]) -> nom::IResult<&[u8], u32> {
     map(take(std::mem::size_of::<u32>()), |v: &[u8]| {
         u32::from_le_bytes(v.try_into().unwrap())
+    })(input)
+}
+
+fn read_i32(input: &[u8]) -> nom::IResult<&[u8], i32> {
+    map(take(std::mem::size_of::<i32>()), |v: &[u8]| {
+        i32::from_le_bytes(v.try_into().unwrap())
     })(input)
 }
 
@@ -303,14 +317,52 @@ pub async fn write_msg(
 // Smart monitor messages
 //
 
-fn read_sm_msg(input: &[u8]) -> nom::IResult<&[u8], MonitorMsg> {
-    let (input, name) = read_str(input)?;
+fn write_timestamp<'a>(
+    dt: &NaiveDateTime,
+    output: &'a mut [u8],
+) -> Result<(&'a mut [u8], u64), GenError> {
+    let (output, _) = write_usize(dt.timestamp_millis() as usize / 1000, output)?;
+    let (output, sz) = write_u32(dt.timestamp_subsec_nanos() * 1000, output)?;
+    Ok((output, sz))
+}
+
+fn read_timestamp(input: &[u8]) -> nom::IResult<&[u8], NaiveDateTime> {
     let (input, date) = read_usize(input)?;
     let (input, time) = read_u32(input)?;
+    Ok((
+        input,
+        NaiveDateTime::from_timestamp(date as i64, time / 1000),
+    ))
+}
+
+pub async fn read_timestamp_async(
+    mut stream: &mut TcpStream,
+) -> Result<NaiveDateTime, Box<dyn std::error::Error>> {
+    let mut buf = [0u8; 12];
+    stream.read_exact(&mut buf).await?;
+    match read_timestamp(&mut buf) {
+        Ok((_, dt)) => Ok(dt),
+        Err(e) => Err(format!("Error reading datetime {:?}", e).into()),
+    }
+}
+
+pub async fn write_timestamp_async(
+    mut stream: &mut TcpStream,
+    dt: NaiveDateTime,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut buf = [0u8; 12];
+    let (_, _) = write_timestamp(&dt, &mut buf)?;
+    stream.write_all(&buf).await?;
+    Ok(())
+}
+
+fn read_sm_msg(input: &[u8]) -> nom::IResult<&[u8], MonitorMsg> {
+    let (input, name) = read_str(input)?;
+    let (input, adj_time_stamp) = read_timestamp(input)?;
     let (input, msg_format) = read_enum::<MsgFormat>(input)?;
     let (input, payload) = read_enum::<Payload>(input)?;
     let (input, data) = match payload {
-        Payload::Entry | Payload::Error => {
+        Payload::Entry | Payload::Error | Payload::NtpTimestamp | Payload::NtpLatency => {
             let rest = input;
             let (input, sz) = read_usize(rest)?;
             let (input, sz) = take(sz)(input)?;
@@ -318,13 +370,11 @@ fn read_sm_msg(input: &[u8]) -> nom::IResult<&[u8], MonitorMsg> {
         }
         Payload::Exit => Ok((input, &[][..])),
     }?;
-    dbg!(&date);
-    dbg!(&time);
     Ok((
         input,
         MonitorMsg {
             channel_name: name.to_string(),
-            adj_time_stamp: NaiveDateTime::from_timestamp(date as i64, time / 1000),
+            adj_time_stamp,
             msg_format,
             payload,
             data: data.to_vec(),
@@ -337,11 +387,7 @@ fn write_sm_msg<'a>(
     output: &'a mut [u8],
 ) -> Result<(&'a mut [u8], u64), GenError> {
     let (output, _) = write_str(&msg.channel_name, output)?;
-    let (output, _) = write_usize(
-        msg.adj_time_stamp.timestamp_millis() as usize / 1000,
-        output,
-    )?;
-    let (output, _) = write_u32(msg.adj_time_stamp.timestamp_subsec_nanos() * 1000, output)?;
+    let (output, _) = write_timestamp(&msg.adj_time_stamp, output)?;
     let (output, _) = write_enum::<MsgFormat>(&msg.msg_format, output)?;
     let (output, _) = write_enum::<Payload>(&msg.payload, output)?;
     if !msg.data.is_empty() {
@@ -352,7 +398,7 @@ fn write_sm_msg<'a>(
 }
 
 pub async fn read_sm_message(
-    mut stream: TcpStream,
+    mut stream: &mut TcpStream,
 ) -> Result<MonitorMsg, Box<dyn std::error::Error>> {
     let sz = read_u32_async(&mut stream).await? as usize;
     dbg!(&sz);
@@ -430,6 +476,24 @@ pub async fn write_queue_message(
     stream.write(&usize::to_le_bytes(buf.len())).await?;
     stream.write_all(&buf).await?;
     Ok(())
+}
+
+// Ntp Message
+fn read_ntp(input: &[u8]) -> nom::IResult<&[u8], NtpMsg> {
+    let (input, offset) = read_i32(input)?;
+    let (input, delay) = read_i32(input)?;
+    Ok((input, NtpMsg { offset, delay }))
+}
+
+pub async fn read_ntp_msg(
+    mut stream: &mut TcpStream,
+) -> Result<NtpMsg, Box<dyn std::error::Error>> {
+    let mut buf = [0u8; 8];
+    stream.read_exact(&mut buf).await?;
+    match read_ntp(&mut buf) {
+        Ok((_, msg)) => Ok(msg),
+        Err(e) => Err(format!("Invalid data while asertaining latency {}", e).into()),
+    }
 }
 
 #[cfg(test)]
