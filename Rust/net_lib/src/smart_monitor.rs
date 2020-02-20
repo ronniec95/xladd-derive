@@ -8,6 +8,7 @@ use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::executor::ThreadPool;
 use futures::task::SpawnExt;
 use serde::Serialize;
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, Once};
 
@@ -16,7 +17,7 @@ use std::sync::{Arc, Mutex, Once};
 //
 pub struct SmartMonitor {
     pool: ThreadPool,
-    senders: Arc<Mutex<BTreeMap<ChannelId, Sender<MonitorMsg>>>>,
+    senders: Arc<Mutex<BTreeMap<ChannelId, Sender<Cow<'static, MonitorMsg>>>>>,
 }
 
 //01494790028 - Imran IBB solicitors
@@ -29,9 +30,10 @@ impl SmartMonitor {
             senders: Arc::new(Mutex::new(BTreeMap::new())),
         }
     }
+
     async fn consume(
         name: &str,
-        mut msg_receiver: Receiver<MonitorMsg>,
+        mut msg_receiver: Receiver<Cow<'static, MonitorMsg>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let conn = smart_monitor_sqlite::create_channel_table(name)?;
         while let Ok(msg) = msg_receiver.try_next() {
@@ -58,29 +60,33 @@ impl SmartMonitor {
 
     async fn manage_monitor(
         mut stream: TcpStream,
-        sender_map: Arc<Mutex<BTreeMap<ChannelId, Sender<MonitorMsg>>>>,
+        sender_map: Arc<Mutex<BTreeMap<ChannelId, Sender<Cow<'_, MonitorMsg>>>>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut latency = 0i64;
-        let mut msg = read_sm_message(&mut stream).await?;
-        eprintln!("Got smart mon msg {:?}", msg);
-        match msg.payload {
-            Payload::NtpTimestamp => {
-                read_timestamp_async(&mut stream).await?;
-                let t1 = Utc::now().naive_utc();
-                write_timestamp_async(&mut stream, t1).await?;
-                let ntp = read_ntp_msg(&mut stream).await?;
-                latency = ntp.offset as i64 + ntp.delay as i64;
-                Ok(())
-            }
-            _ => loop {
-                if let Ok(mut sender_map) = sender_map.try_lock() {
-                    if let Some(sender) = sender_map.get_mut(&msg.channel_name) {
-                        msg.adj_time_stamp = msg.adj_time_stamp + Duration::milliseconds(latency);
-                        sender.try_send(msg).unwrap();
-                    }
-                    return Ok(());
+        loop {
+            let mut msg: Cow<'_, MonitorMsg> = Cow::Owned(read_sm_message(&mut stream).await?);
+            eprintln!("Got smart mon msg {:?}", msg);
+            match msg.payload {
+                Payload::NtpTimestamp => {
+                    read_timestamp_async(&mut stream).await?;
+                    let t1 = Utc::now().naive_utc();
+                    write_timestamp_async(&mut stream, t1).await?;
+                    let ntp = read_ntp_msg(&mut stream).await?;
+                    latency = ntp.offset as i64 + ntp.delay as i64;
                 }
-            },
+                _ => loop {
+                    if let Ok(mut sender_map) = sender_map.try_lock() {
+                        if let Some(sender) = sender_map.get_mut(&msg.channel_name) {
+                            msg.to_mut().adj_time_stamp =
+                                msg.adj_time_stamp + Duration::milliseconds(latency);
+                            while let Err(_) = sender.try_send(msg.clone()) {
+                                std::thread::sleep(std::time::Duration::from_micros(100));
+                            }
+                        }
+                    }
+                    break;
+                },
+            }
         }
     }
 

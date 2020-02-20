@@ -80,7 +80,6 @@ pub enum Payload {
     Entry,
     Exit,
     NtpTimestamp,
-    NtpLatency,
     Error,
 }
 
@@ -121,9 +120,16 @@ impl fmt::Display for DiscoveryMessage {
         for ch in &self.channels {
             write!(f, "\t{}", ch)?;
         }
-        writeln!(f)
+        Ok(())
     }
 }
+
+impl fmt::Display for MonitorMsg {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} [{}] [{:?}] [{:?}] => ", self.channel_name,self.adj_time_stamp,self.payload,&self.data)
+    }
+}
+
 
 // Helper functions
 
@@ -357,17 +363,22 @@ pub async fn write_timestamp_async(
 }
 
 fn read_sm_msg(input: &[u8]) -> nom::IResult<&[u8], MonitorMsg> {
-    let (input, name) = read_str(input)?;
     let (input, adj_time_stamp) = read_timestamp(input)?;
     let (input, msg_format) = read_enum::<MsgFormat>(input)?;
     let (input, payload) = read_enum::<Payload>(input)?;
+    let (input, _) = read_u32(input)?; // graph id
+    let (input, _) = read_u32(input)?; // execution id
+    let (input, _) = read_str(input)?; // transport
+    let (input, name) = read_str(input)?; // channel name
+
     let (input, data) = match payload {
-        Payload::Entry | Payload::Error | Payload::NtpTimestamp | Payload::NtpLatency => {
+        Payload::Entry | Payload::Error => {
             let rest = input;
             let (input, sz) = read_usize(rest)?;
             let (input, sz) = take(sz)(input)?;
             Ok((input, sz))
         }
+        Payload::NtpTimestamp => Ok((input, &[][..])),
         Payload::Exit => Ok((input, &[][..])),
     }?;
     Ok((
@@ -386,10 +397,13 @@ fn write_sm_msg<'a>(
     msg: &MonitorMsg,
     output: &'a mut [u8],
 ) -> Result<(&'a mut [u8], u64), GenError> {
-    let (output, _) = write_str(&msg.channel_name, output)?;
     let (output, _) = write_timestamp(&msg.adj_time_stamp, output)?;
     let (output, _) = write_enum::<MsgFormat>(&msg.msg_format, output)?;
     let (output, _) = write_enum::<Payload>(&msg.payload, output)?;
+    let (output, _) = write_u32(0, output)?;
+    let (output, _) = write_u32(0, output)?;
+    let (output, _) = write_str("", output)?;
+    let (output, _) = write_str(&msg.channel_name, output)?;
     if !msg.data.is_empty() {
         let (output, _) = write_usize(msg.data.len(), output)?;
         let (_, _) = gen(slice(&msg.data), output)?;
@@ -401,7 +415,6 @@ pub async fn read_sm_message(
     mut stream: &mut TcpStream,
 ) -> Result<MonitorMsg, Box<dyn std::error::Error>> {
     let sz = read_u32_async(&mut stream).await? as usize;
-    dbg!(&sz);
     let mut buf = SmallVec::<[u8; 1024]>::with_capacity(sz);
     buf.resize(sz, 0u8);
     stream.read_exact(&mut buf).await?;
@@ -543,7 +556,7 @@ mod tests {
         write_sm_msg(&msg, &mut buf).expect("Failed to serialise");
         let (remaining, msg_out) = read_sm_msg(&buf).expect("failed to deserialise");
         assert_eq!(msg, msg_out);
-        assert_eq!(remaining.len(), 979);
+        assert_eq!(remaining.len(), 967);
         (&msg_out);
     }
 
