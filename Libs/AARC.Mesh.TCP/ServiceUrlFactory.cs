@@ -9,7 +9,7 @@ namespace AARC.Mesh.TCP
 
         public ServiceUrlFactory()
         {
-            _url = new Uri(Dns.GetHostName());
+            _url = new Uri(MeshUtilities.GetLocalHostFQDN());
         }
 
         public string TransportId => _url.AbsoluteUri;

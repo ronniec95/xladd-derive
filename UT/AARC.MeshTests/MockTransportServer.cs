@@ -36,10 +36,10 @@ namespace AARC.MeshTests
             MonitorPeriod = 15000;
             _localct = _localCancelSource.Token;
             _msgEncoderType = 0;
-            Url = new Uri("tcp://localhost:0");
+            URI = new Uri("tcp://localhost:0");
         }
 
-        public Uri Url { get; set; }
+        public Uri URI { get; set; }
 
         public Task Cancel()
         {

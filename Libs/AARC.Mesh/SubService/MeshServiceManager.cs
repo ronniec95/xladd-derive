@@ -72,44 +72,39 @@ namespace AARC.Mesh.SubService
         private void OnNext(string channel, MeshMessage message)
         {
             // Check this is one of our channels
-            if (_dssmc.LocalOutputChannels.ContainsKey(channel))
+            var channelRoute = _dssmc.OutputChannelMap.Where(r => r.Item1 == channel);
+            if (channelRoute.Any())
             {
-                // Is it for external consumption?
-                if (_dssmc.ExternalSubscriberChannels.ContainsKey(channel))
-                {
-                    // Todo: This causes feedback what do I want to do here?
-                    //_dssmc.outputChannels[channel].Add(message);
-                    message.Service = _transportServer.Url;
-                    message.Channel = channel;
+                // Todo: This causes feedback what do I want to do here?
+                //_dssmc.outputChannels[channel].Add(message);
+                message.Service = _transportServer.URI;
+                message.Channel = channel;
+                message.State = MeshMessage.States.MessageOut;
 
-                    // Find the external routes
-                    var routes = _dssmc.ExternalSubscriberChannels[channel];
-                    if (routes == null || !routes.Any())
-                        _logger.LogWarning($"NO ROUTE Message GraphId={message.GraphId}, Xid={message.XId}, Channel={channel}");
-                    else
-                    {
-                        if (message.Routes == null)
-                            message.Routes = routes;
-                        else
-                        {
-                            var intersection = message.Routes.Intersect(routes);
-                            if (intersection.Any())
-                                _logger.LogWarning($"ROUTE CONFIRMED Message GraphId={message.GraphId}, Xid={message.XId}, Channel={channel} Routes={string.Join(",", intersection)}");
-                            else
-                                _logger.LogWarning($"ROUTE NOT FOUND Message GraphId={message.GraphId}, Xid={message.XId}, Channel={channel} Routes={string.Join(",", message.Routes)}");
-                        }
-                        _transportServer.OnNext(message);
-                    }
-                }
+                // Find the external routes
+                var routes = channelRoute.SelectMany(c => c.Item2);
+                if (routes == null || !routes.Any())
+                    _logger.LogWarning($"NO ROUTE Message GraphId={message.GraphId}, Xid={message.XId}, Channel={channel}");
                 else
                 {
-                    // Todo: No destinations available? Keep on the Q? How to process later?
-                    _logger.LogInformation($"NO ROUTE for {channel}");
+                    if (message.Routes == null)
+                        message.Routes = routes;
+                    else
+                    {
+                        var intersection = message.Routes.Intersect(routes);
+                        if (intersection.Any())
+                            _logger.LogInformation($"ROUTE CONFIRMED Message GraphId={message.GraphId}, Xid={message.XId}, Channel={channel} Routes={string.Join(",", intersection)}");
+                        else
+                            // Todo: Tell Monitor?
+                            _logger.LogWarning($"ROUTE NOT FOUND Message GraphId={message.GraphId}, Xid={message.XId}, Channel={channel} Routes={string.Join(",", message.Routes)}");
+                    }
+                    _transportServer.OnNext(message);
                 }
             }
             else
                 // Todo: Unknown destination?
-                _logger.LogInformation($"UNKOWN ROUTE for {channel}");
+                // Send to Monitor
+                _logger.LogInformation($"[{channel}] NO ROUTE");
         }
 
         /// <summary>
@@ -135,7 +130,7 @@ namespace AARC.Mesh.SubService
             return Task.WhenAll(DiscoveryService, ListenService, PublishService);
         }
 
-        public async Task StartDiscoveryServices(Uri serviceDetails, CancellationToken cancellationToken) => await _discoveryMonitor.StartListeningServices(serviceDetails, cancellationToken);
+        public async Task StartDiscoveryServices(Uri uri, CancellationToken cancellationToken) => await _discoveryMonitor.StartListeningServices(uri, cancellationToken);
 
         /// <summary>
         /// down stream services will lookup the output queues from the DS and find out IP address and connect.
@@ -154,53 +149,61 @@ namespace AARC.Mesh.SubService
             await Task.Factory.StartNew(() =>
             {
                 RegistrationComplition.WaitOne();
-                _logger.LogInformation("Publisher Enabled");
-                while (!cancellationToken.IsCancellationRequested)
+                try
                 {
-                    var routableInputQs = _dssmc.RoutableInputChannels();
-                    foreach (var routes in _dssmc.InputQRoutes)
+                    _logger.LogInformation("Publisher Enabled");
+                    while (!cancellationToken.IsCancellationRequested)
                     {
-                        _logger?.LogInformation($"ROUTE(i) [{string.Join(",", routes.Item2)}]=>{routes.Item1}=>[{_transportServer.Url}]");
-                    }
-
-                    foreach (var routes in _dssmc.OutputQRoutes)
-                    {
-                        _logger?.LogInformation($"ROUTE(o) [{_transportServer.Url}]=>{routes.Item1}=>[{string.Join(",", routes.Item2)}]");
-                    }
-
-                    var channelTransports = _dssmc.OutputQRoutes.SelectMany(r => r.Item2).Distinct();
-                    foreach (var transportUrl in channelTransports)
-                        try
+                        var routableInputQs = _dssmc.RoutableInputChannels();
+                        foreach (var routes in _dssmc.IputChannelMap)
                         {
-                            if (_transportServer.Url != transportUrl)
+                            _logger?.LogInformation($"ROUTE(i) [{string.Join(",", routes.Item2)}]=>{routes.Item1}=>[{_transportServer.URI}]");
+                        }
+
+                        foreach (var routes in _dssmc.OutputChannelMap)
+                        {
+                            _logger?.LogInformation($"ROUTE(o) [{_transportServer.URI}]=>{routes.Item1}=>[{string.Join(",", routes.Item2)}]");
+                        }
+
+                        var channelTransports = _dssmc.OutputChannelMap.SelectMany(r => r.Item2).Distinct();
+                        foreach (var transportUrl in channelTransports)
+                            try
                             {
-                                // If new connection and connected
-                                if (_transportServer.ServiceConnect(transportUrl, cancellationToken))
+                                if (_transportServer.URI != transportUrl)
                                 {
-                                    // Need Channel Names
-                                    //_dssmc.OutputChannelRoutes[]
-                                    var channels = _dssmc.OutputQRoutes.Where(r => r.Item2.Contains(transportUrl)).Select(r => r.Item1);
-                                    _logger?.LogInformation($"{transportUrl} OnConnect {string.Join(",", channels)}");
-                                    foreach (var c in channels)
+                                    // If new connection and connected
+                                    if (_transportServer.ServiceConnect(transportUrl, cancellationToken))
                                     {
-                                        if (_dssmc.LocalOutputChannels.ContainsKey(c))
+                                        // Need Channel Names
+                                        //_dssmc.OutputChannelRoutes[]
+                                        var channels = _dssmc.OutputChannelMap.Where(r => r.Item2.Contains(transportUrl)).Select(r => r.Item1);
+                                        _logger?.LogInformation($"{transportUrl} OnConnect {string.Join(",", channels)}");
+                                        foreach (var c in channels)
                                         {
-                                            var o = _dssmc.LocalOutputChannels[c];
-                                            o.OnConnect(transportUrl);
+                                            if (_dssmc.LocalOutputChannels.ContainsKey(c))
+                                            {
+                                                var o = _dssmc.LocalOutputChannels[c];
+                                                o.OnConnect(transportUrl);
+
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
-                        catch (Exception e)
-                        {
-                            _logger?.LogError(e, "MSM General Error with connections");
-                        }
-                        finally
-                        {
-                            Task.Delay(1000).Wait();
-                        }
-                    Task.Delay(30000).Wait();
+                            catch (Exception e)
+                            {
+                                _logger?.LogError(e, "MSM General Error with connections");
+                            }
+                            finally
+                            {
+                                Task.Delay(1000).Wait();
+                            }
+                        Task.Delay(5000).Wait();
+                    }
+                }
+                catch(Exception ex)
+                {
+                    _logger?.LogError(ex, "MSM Route determin errors");
                 }
             }, cancellationToken);
         }
@@ -256,7 +259,7 @@ namespace AARC.Mesh.SubService
         // Todo: Send to DS
         public void OnError(Exception error)
         {
-            this._discoveryMonitor.OnError(error.Message, _transportServer.Url);
+            this._discoveryMonitor.OnError(error.Message, _transportServer.URI);
         }
 
         /// <summary>

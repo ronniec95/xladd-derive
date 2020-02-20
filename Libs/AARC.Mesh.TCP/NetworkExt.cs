@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Diagnostics;
 using System.Linq;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -134,7 +135,7 @@ namespace AARC.Mesh.TCP
             }
         }
 
-        public static IPAddress GetLocalHost() => GetHostIPAddress(Dns.GetHostName());
+        public static IPAddress GetLocalHost() => GetHostIPAddress(MeshUtilities.GetLocalHostFQDN());
 
         public static IPAddress GetHostIPAddress(string address)
         {
@@ -162,7 +163,9 @@ namespace AARC.Mesh.TCP
             }
         }
 
-        public static Uri GetHostNameUrl(int? port = null) => CreateUrl(Dns.GetHostName(), port);
+        // Todo: DNS is not working correctly on the mac
+        public static Uri GetHostNameUrl(int? port = null) => CreateUrl(MeshUtilities.GetLocalHostFQDN(), port);
+            //CreateUrl(Dns.GetHostName(), port);
 
         public static Uri CreateUrl(string hostname, int? port = null, string scheme = "tcp")
         {

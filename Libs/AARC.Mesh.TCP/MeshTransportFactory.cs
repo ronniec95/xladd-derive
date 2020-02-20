@@ -9,44 +9,44 @@ namespace AARC.Mesh.TCP
     public class MeshTransportFactory : IMeshTransportFactory
     {
         protected readonly IServiceProvider _serviceProvider;
-        private Uri _url;
+        private Uri _uri;
         private MeshMonitor _mm;
 
         public MeshTransportFactory(IServiceProvider serviceProvider)
         {
             _serviceProvider = serviceProvider;
 
-            _mm = new MeshMonitor(serviceProvider.GetService<ILogger<MeshMonitor>>(), new Uri("udp://localhost:9900"));
+            _mm = new MeshMonitor(new Uri("tcp://ronniepc:9900"), this, serviceProvider.GetService<ILogger<MeshMonitor>>());
         }
 
         /// <summary>
         /// Using _serviceHost details to create connection
         /// </summary>
         /// <returns></returns>
-        public IMeshServiceTransport Create() => Create(_url);
+        public IMeshServiceTransport Create() => Create(_uri);
 
 
         /// <summary>
         /// Uses servicedetails work work out how to setup this MeshQueueService
         /// </summary>
-        /// <param name="url"></param>
+        /// <param name="uri"></param>
         /// <returns></returns>
-        public IMeshServiceTransport Create(string url)
+        public IMeshServiceTransport Create(string uri)
         {
-            _url = new Uri(url);
+            _uri = new Uri(uri);
 
-            return Create(_url);
+            return Create(_uri);
         }
 
         /// <summary>
         /// Creates a new SocketServices and reset _serviceHost details and starts ReadAsync
         /// </summary>
-        /// <param name="url">Host name or IP address</param>
+        /// <param name="uri">Host name or IP address</param>
         /// <returns></returns>
-        public IMeshServiceTransport Create(Uri url)
+        public IMeshServiceTransport Create(Uri uri)
         {
             var qss = new SocketTransport(_serviceProvider.GetService<ILogger<SocketTransport>>());
-            qss.ManageConnection(url, false);
+            qss.ManageConnection(uri, false);
             qss.ReadAsync();
             return qss;
         }
@@ -66,7 +66,7 @@ namespace AARC.Mesh.TCP
                 return qss;
             }
 
-            throw new NotSupportedException($"Cant not create a IMeshQueueService from {dispose.GetType()}");
+            throw new NotSupportedException($"Cant create a IMeshQueueService from {dispose.GetType()}");
         }
 
         public SocketTransport Create(Socket socket) => new SocketTransport(socket, _serviceProvider.GetService<ILogger<SocketTransport>>());

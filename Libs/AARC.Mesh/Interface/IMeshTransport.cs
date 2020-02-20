@@ -9,7 +9,7 @@ namespace AARC.Mesh.Interface
         /// <summary>
         /// A unique id to identify this service for connected services
         /// </summary>
-        Uri Url { get; }
+        Uri URI { get; }
 
         /// <summary>
         /// Subscribe to incoming service messages

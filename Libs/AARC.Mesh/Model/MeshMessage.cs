@@ -1,16 +1,30 @@
 using System;
 using System.Collections.Generic;
 using AARC.Mesh.Interface;
+using AARC.Utilities;
 
 namespace AARC.Mesh.Model
 {
     public partial class MeshMessage : IMeshMessage
     {
+        public enum States
+        {
+            MessageIn = 0,
+            MessageOut = 1,
+            NTPMode = 2,
+            ONConnect = 3,
+            ERROR = 255
+        };
         /// <summary>
         /// GraphId of zero means system message
         /// </summary>
-        public uint GraphId { get; set; }
-        public uint XId { get; set; }
+        public UInt64 DateTimeTotalSeconds { get; set; }
+        public UInt32 DateTimeMS { get; set; }
+        public States State { get; set; }
+        // JSON or MessagePack or Binary
+        public byte EncodingType { get; set; }
+        public UInt32 GraphId { get; set; }
+        public UInt32 XId { get; set; }
         public Uri Service { get; set; }
         public string Channel { get; set; }
         public string PayLoad { get; set; }
@@ -24,7 +38,18 @@ namespace AARC.Mesh.Model
 
         public byte[] Encode(byte msgType)
         {
-            var bytes = new List<byte>  { (byte)0 };
+            (this.DateTimeTotalSeconds, this.DateTimeMS) = DateTimeUtilities.DateTimeToUnixTotalSeconds(DateTime.Now);
+            //this.DateTimeTotalSeconds = Date
+            var bytes = new List<byte>();
+            // Date Time in Seconds from 1970
+            bytes.AddRange(BitConverter.GetBytes(this.DateTimeTotalSeconds));
+            // The milliseconds part of the date time from 1970
+            bytes.AddRange(BitConverter.GetBytes(this.DateTimeMS));
+            // Message State
+            var state = (byte)(this.State == States.MessageIn ? States.MessageOut : this.State);
+            bytes.Add(state);
+            // EncodingType
+            bytes.Add(this.EncodingType);
             // GraphId
             bytes.AddRange(BitConverter.GetBytes(this.GraphId));
             // Xid
@@ -35,7 +60,6 @@ namespace AARC.Mesh.Model
             bytes.AddRange(this.Channel.EncodeBytes());
             // PayLoad
             var compressedbytes = AARC.Compression.Compression.CompressString(this.PayLoad);
-            //                bytes.AddRange(BitConverter.GetBytes(compressedbytes.Length));
             bytes.AddRange(compressedbytes);
             return bytes.ToArray();
         }
@@ -46,14 +70,19 @@ namespace AARC.Mesh.Model
         {
             // GraphId
             var msgPtr = 0;
-            var msgType = bytes[msgPtr++];
-            if (msgType != 0) throw new NotSupportedException();
-
-            this.GraphId = BitConverter.ToUInt32(bytes, msgPtr);
-            msgPtr += sizeof(uint);
+            // Date Time in seconds
+            this.DateTimeTotalSeconds = bytes.ToUInt64(ref msgPtr);
+            // Plus the ms bit
+            this.DateTimeMS = bytes.ToUInt32(ref msgPtr);
+            // States Type
+            var state = bytes[++msgPtr];
+            this.State = States.MessageIn;
+            // Encoding Type
+            this.EncodingType = bytes[msgPtr++];
+            // Feature
+            this.GraphId = bytes.ToUInt32(ref msgPtr);
             // Xid
-            this.XId = BitConverter.ToUInt32(bytes, msgPtr);
-            msgPtr += sizeof(uint);
+            this.XId = bytes.ToUInt32(ref msgPtr);
             // Service
             this.Service = new Uri(bytes.DecodeString(ref msgPtr));
             // Channel Alias

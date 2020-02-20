@@ -4,18 +4,27 @@ namespace AARC.Utilities
 {
     public static class DateTimeUtilities
     {
+        static readonly DateTime dt1970 = new DateTime(1970, 1, 1).ToLocalTime();
+
         public static DateTime UnixTimeStampToDateTime(double unixTimeStamp)
         {
             // Unix timestamp is seconds past epoch
-            DateTime dtDateTime = new DateTime(1970, 1, 1, 0, 0, 0, 0).ToLocalTime();
-            dtDateTime = dtDateTime.AddSeconds(unixTimeStamp).ToLocalTime();
-            return dtDateTime;
+            return dt1970.AddSeconds(unixTimeStamp).ToLocalTime();
         }
 
         public static double DateTimeToUnixTimestamp(DateTime dateTime)
         {
             //return (dateTime - new DateTime(1970, 1, 1).ToLocalTime()).TotalSeconds;
-            return (dateTime.ToLocalTime() - new DateTime(1970, 1, 1)).TotalSeconds;
+            var ts = (dateTime.ToLocalTime() - dt1970);
+
+            return ts.TotalSeconds;
+        }
+
+        public static (UInt64 TotalSeconds, UInt32 MilliSeconds) DateTimeToUnixTotalSeconds(DateTime dateTime)
+        {
+            //return (dateTime - new DateTime(1970, 1, 1).ToLocalTime()).TotalSeconds;
+            var ts = (dateTime.ToLocalTime() - dt1970);
+            return ((UInt64)ts.TotalSeconds, (UInt32)ts.Milliseconds);
         }
 
         public static ulong ToUnsignedLong(DateTime date)

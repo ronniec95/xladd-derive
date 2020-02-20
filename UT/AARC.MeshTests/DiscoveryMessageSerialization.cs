@@ -4,6 +4,7 @@ using System.Linq;
 using AARC.Mesh;
 using AARC.Mesh.Model;
 using AARC.Mesh.SubService;
+using AARC.Utilities;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static AARC.Mesh.Model.DiscoveryMessage;
 
@@ -192,7 +193,7 @@ namespace AARC.MeshTests
         {
             var dsm = new DiscoveryServiceStateMachine<DiscoveryMessage>();
 
-            var hostname = new Uri("testhostname:9999");
+            var hostname = new Uri("tcp://testhostname:9999");
 
             var dm = new DiscoveryMessage { Service = hostname, State = DiscoveryStates.ConnectResponse };
             dsm.CreateReceiveMessage(dm);
@@ -205,14 +206,12 @@ namespace AARC.MeshTests
         {
             var dsm = new DiscoveryServiceStateMachine<MeshMessage>();
 
-            var hostname = "testhostname";
-
-            var transportId = new Uri($"tcp://{hostname}:9999");
+            var transportId = new Uri($"tcp://testhostname:9999");
 
             var dm = new DiscoveryMessage { Service = transportId, State = DiscoveryStates.ConnectResponse };
             dsm.CreateReceiveMessage(dm);
             dsm.LocalInputChannels["testchannel"] = new MeshNetChannel<MeshMessage>();
-            dsm.CreateSendMessage(dm, hostname);
+            dsm.CreateSendMessage(dm, transportId);
             Assert.AreEqual<DiscoveryStates>(DiscoveryStates.ChannelData, dm.State);
             Assert.AreEqual<int>(1, dm.Channels.Count);
             Assert.AreEqual<string>("testchannel", dm.Channels.FirstOrDefault().Name);
@@ -238,7 +237,28 @@ namespace AARC.MeshTests
             var bytes = dm.Encode(0);
             var ddm = new DiscoveryMessage();
             ddm.Decode(bytes);
-            Assert.AreEqual<int>(100, bytes.Length);
+            var bytes2 = ddm.Encode(0);
+            Assert.AreEqual<int>(bytes.Length, bytes2.Length);
+        }
+
+        [TestMethod]
+        public void TestNTP()
+        {
+            var bytes = new List<byte>();
+            var (totalSeconds, milliseconds) = DateTimeUtilities.DateTimeToUnixTotalSeconds(new DateTime(1980, 1, 1));
+            bytes.AddRange(BitConverter.GetBytes(totalSeconds));
+            bytes.AddRange(BitConverter.GetBytes(milliseconds));
+
+            var bytearray = bytes.ToArray();
+
+            MeshUtilities.UpdateNT(new DateTime(1990, 1, 1), bytearray);
+
+            var msgPtr = 0;
+            var newtotalseconds = bytearray.ToUInt64(ref msgPtr);
+            Assert.AreNotEqual<UInt64>(totalSeconds, newtotalseconds);
+            var newms = bytearray.ToUInt32(ref msgPtr);
+            Assert.AreEqual<UInt32>(milliseconds, newms);
+
         }
     }
 }

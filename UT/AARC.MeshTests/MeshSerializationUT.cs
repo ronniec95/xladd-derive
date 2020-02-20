@@ -30,6 +30,12 @@ namespace AARC.MeshTests
         }
 
         [TestMethod]
+        public void TestRefMessageDateTimeStamp()
+        {
+            Assert.AreNotEqual<UInt64>(0, _refMessage.DateTimeTotalSeconds);
+        }
+
+        [TestMethod]
         public void TestEncodedMessageExits()
         {
             Assert.IsNotNull(_inputBytes);
@@ -55,6 +61,8 @@ namespace AARC.MeshTests
             pp.MessageArrived += (bytes) => {
                 var mm = new MeshMessage();
                 mm.Decode(bytes);
+                Assert.AreEqual<UInt64>(_refMessage.DateTimeTotalSeconds, mm.DateTimeTotalSeconds);
+                Assert.AreEqual<UInt32>(_refMessage.DateTimeMS, mm.DateTimeMS);
                 Assert.AreEqual<uint>(_refMessage.GraphId, mm.GraphId);
                 Assert.AreEqual<uint>(_refMessage.XId, mm.XId);
                 Assert.AreEqual<Uri>(_refMessage.Service, mm.Service);

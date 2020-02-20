@@ -18,13 +18,13 @@ namespace AARC.MeshTests
         protected readonly byte _msgEncoderType;
         public MockChannelService(Uri url)
         {
-            Url = url;
+            URI = url;
             _msgEncoderType = 0;
         }
         public bool Connected => throw new NotImplementedException();
 
 
-        public Uri Url { get; private set; }
+        public Uri URI { get; private set; }
         public ChannelWriter<byte[]> ReceiverChannel { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
 
         public ChannelWriter<byte[]> SenderChannel => throw new NotImplementedException();
@@ -47,7 +47,7 @@ namespace AARC.MeshTests
                 tickerUniverse[t] = new TickerPrices { Ticker = t };
 
             var opayload = JsonConvert.SerializeObject(tickerUniverse);
-            var o = new MeshMessage { Service = Url, Channel = "nasdaqtestout", PayLoad = opayload };
+            var o = new MeshMessage { Service = URI, Channel = "nasdaqtestout", PayLoad = opayload };
             var obytes = o.Encode(0);
             foreach (var p in _publishers)
                 p.OnPublish(obytes);

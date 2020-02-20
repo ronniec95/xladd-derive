@@ -59,11 +59,11 @@ namespace AARC.Mesh.Client
             logger.LogInformation($"Mesh Start with channel {channel}");
             var mesh = mc.Start();
 
-            var o = mc.CreateObserver<string>(channel);
+            var o = mc.CreateObserver<List<string>>(channel);
             for (; ; )
             {
                 var data = Console.ReadLine();
-                o.OnNext(data);
+                o.OnNext(new List<string> { data });
             }
 
         }

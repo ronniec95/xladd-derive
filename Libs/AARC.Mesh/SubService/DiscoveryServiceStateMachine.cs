@@ -26,8 +26,8 @@ namespace AARC.Mesh.SubService
         /// </summary>
         public MeshDictionary<T> LocalOutputChannels { get; private set; }
 
-        public ConcurrentDictionary<string, HashSet<Uri>> ExternalSubscriberChannels { get; private set; }
-        public ConcurrentDictionary<string, HashSet<Uri>> OutputChannelRoutes { get; private set; }
+        private ConcurrentDictionary<string, HashSet<Uri>> _exInputChannels { get;  set; }
+        private ConcurrentDictionary<string, HashSet<Uri>> _exOutputChannels { get;  set; }
 
         protected DiscoveryStates _state = DiscoveryStates.Connect;
 
@@ -36,8 +36,8 @@ namespace AARC.Mesh.SubService
             RegistrationComplete = new ManualResetEvent(false);
             LocalInputChannels = new MeshDictionary<T>();
             LocalOutputChannels = new MeshDictionary<T>();
-            ExternalSubscriberChannels = new ConcurrentDictionary<string, HashSet<Uri>>();
-            OutputChannelRoutes = new ConcurrentDictionary<string, HashSet<Uri>>();
+            _exInputChannels = new ConcurrentDictionary<string, HashSet<Uri>>();
+            _exOutputChannels = new ConcurrentDictionary<string, HashSet<Uri>>();
         }
 
         /// <summary>
@@ -46,29 +46,29 @@ namespace AARC.Mesh.SubService
         /// <param name="channel"></param>
         /// <returns></returns>
         public IEnumerable<Uri> FindInputChannelRoutes(string channel)
-            => ExternalSubscriberChannels.Where(kv => string.Equals(kv.Key, channel, StringComparison.OrdinalIgnoreCase)).Select(kv => kv.Value).FirstOrDefault();
+            => _exInputChannels.Where(kv => string.Equals(kv.Key, channel, StringComparison.OrdinalIgnoreCase)).Select(kv => kv.Value).FirstOrDefault();
 
         public IEnumerable<Uri> FindOutputChannelRoutes(string channel)
-            => OutputChannelRoutes.Where(kv => string.Equals(kv.Key, channel, StringComparison.OrdinalIgnoreCase)).Select(kv => kv.Value).FirstOrDefault();
+            => _exOutputChannels.Where(kv => string.Equals(kv.Key, channel, StringComparison.OrdinalIgnoreCase)).Select(kv => kv.Value).FirstOrDefault();
 
 
         public bool RegisteredInputSource(string action, Uri endpoint)
-            => ExternalSubscriberChannels.Where(iq => string.Equals(iq.Key, action, StringComparison.OrdinalIgnoreCase)).Where(kvp => kvp.Value.Contains(endpoint)).Any();
+            => _exInputChannels.Where(iq => string.Equals(iq.Key, action, StringComparison.OrdinalIgnoreCase)).Where(kvp => kvp.Value.Contains(endpoint)).Any();
 
-        public IEnumerable<string> RoutableInputChannels() => OutputChannelRoutes.Keys.Intersect(LocalInputChannels.Keys);
-        public IEnumerable<string> RoutableOutputChannels() => ExternalSubscriberChannels.Keys.Intersect(LocalOutputChannels.Keys);
+        public IEnumerable<string> RoutableInputChannels() => _exOutputChannels.Keys.Intersect(LocalInputChannels.Keys);
+        public IEnumerable<string> RoutableOutputChannels() => _exInputChannels.Keys.Intersect(LocalOutputChannels.Keys);
 
-        public IEnumerable<Uri> RoutableInputChannelEndpoints() => OutputChannelRoutes.Keys.Intersect(LocalInputChannels.Keys).Select(key => OutputChannelRoutes[key].ToList()).SelectMany(t => t).Distinct();
+        public IEnumerable<Uri> RoutableInputChannelEndpoints() => _exOutputChannels.Keys.Intersect(LocalInputChannels.Keys).Select(key => _exOutputChannels[key].ToList()).SelectMany(t => t).Distinct();
 
-        public IEnumerable<Uri> RoutableOutputChannelEndpoints() => LocalOutputChannels.Keys.Intersect(ExternalSubscriberChannels.Keys).Select(key => ExternalSubscriberChannels[key].ToList()).SelectMany(t => t).Distinct();
+        public IEnumerable<Uri> RoutableOutputChannelEndpoints() => LocalOutputChannels.Keys.Intersect(_exInputChannels.Keys).Select(key => _exInputChannels[key].ToList()).SelectMany(t => t).Distinct();
 
-        public IEnumerable<Tuple<string, IEnumerable<Uri>>> OutputQRoutes =>
+        public IEnumerable<Tuple<string, IEnumerable<Uri>>> OutputChannelMap =>
             RoutableOutputChannels()
                 .Select(r => new { r, l = FindInputChannelRoutes(r) })
                 .Where(r => r.l != null && r.l.Any())
                 .Select(r => new Tuple<string, IEnumerable<Uri>>(r.r, r.l));
 
-        public IEnumerable<Tuple<string, IEnumerable<Uri>>> InputQRoutes =>
+        public IEnumerable<Tuple<string, IEnumerable<Uri>>> IputChannelMap =>
             RoutableInputChannels()
                 .Select(r => new { r, l = FindOutputChannelRoutes(r) })
                 .Where(r => r.l != null && r.l.Any())
@@ -94,7 +94,7 @@ namespace AARC.Mesh.SubService
                             _state = DiscoveryStates.ConnectResponse;
                             break;
                         case DiscoveryStates.ConnectResponse:
-                            if (Port == 0)
+                            if (Port == 0 && message.Service.Port > 0)
                             {
                                 var uri = message.Service;
                                 Port = uri.Port;
@@ -108,17 +108,16 @@ namespace AARC.Mesh.SubService
                             if (message.Channels != null)
                                 foreach (var channel in message.Channels)
                                 {
-                                    //Todo: Merge
                                     // In this senario Service is the address of a single MS
                                     // Channel Name/Service = "tcp://serverhost:xxx"
                                     var channelName = channel.Name;
                                     var service = message.Service;
+
+                                    // Is this safe to take from the DS message?
                                     if (channel.ChannelType == MeshChannel.ChannelTypes.Input)
-                                        foreach (var address in channel.Addresses)
-                                            ExternalSubscriberChannels[channelName].Add(address);
+                                        _exInputChannels.AddOrUpdate(channelName, channel.Addresses, (k, v) => channel.Addresses);
                                     else
-                                        foreach (var address in channel.Addresses)
-                                            OutputChannelRoutes[channelName].Add(address);
+                                        _exOutputChannels.AddOrUpdate(channelName, channel.Addresses, (k, v) => channel.Addresses);
                                 }
                             _state = DiscoveryStates.ChannelData;
                             RegistrationComplete.Set();

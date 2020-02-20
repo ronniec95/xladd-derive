@@ -13,6 +13,8 @@ namespace AARC.Service.Hosted
     using AARC.Mesh.TCP;
     using AARC.Repository.Interfaces;
     using Serilog;
+    using Serilog.Events;
+    using Serilog.Extensions.Logging;
 
     /// <summary>
     /// Draft Service
@@ -38,6 +40,16 @@ namespace AARC.Service.Hosted
                 })
                 .ConfigureServices((hostContext, services) =>
                 {
+                    var providers = new LoggerProviderCollection();
+
+                    Log.Logger = new LoggerConfiguration()
+                                .MinimumLevel.Debug()
+                                .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
+                                .Enrich.FromLogContext()
+                                .WriteTo.Console()
+                                .WriteTo.Providers(providers)
+                                .CreateLogger();
+
                     var service = hostContext.Configuration.GetValue<string>("service", "MeshDataFlow");
                     var port = hostContext.Configuration.GetValue<string>("port", "");
 
@@ -63,6 +75,18 @@ namespace AARC.Service.Hosted
                     // services.AddScoped<IMeshNodeFactory, AutoWireUpFactory>();
                     services.AddScoped<IMeshNodeFactory, DataFlowFactory>();
                     services.AddHostedService<MeshHostedService>();
+
+                    services.AddSingleton(providers);
+                    services.AddSingleton<ILoggerFactory>(sc =>
+                    {
+                        var providerCollection = sc.GetService<LoggerProviderCollection>();
+                        var factory = new SerilogLoggerFactory(null, true, providerCollection);
+
+                        foreach (var provider in sc.GetServices<ILoggerProvider>())
+                            factory.AddProvider(provider);
+
+                        return factory;
+                    });
                 })
                 .UseSerilog();
 /*                .ConfigureLogging((hostContext, logging) =>

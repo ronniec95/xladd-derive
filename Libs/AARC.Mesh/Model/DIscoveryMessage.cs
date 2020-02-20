@@ -86,8 +86,10 @@ namespace AARC.Mesh.Model
                     bytes.AddRange(BitConverter.GetBytes(channel.Instance));
                     bytes.Add((byte)channel.ChannelType);
                     bytes.Add(channel.EncodingType);
-                    var payloadRadix = Radix.Encode(channel.PayloadType);
-                    Radix.RadixToBytes(bytes, payloadRadix);
+                    if (string.IsNullOrEmpty(channel.PayloadType))
+                        bytes.AddRange(BitConverter.GetBytes((int)0));
+                    else
+                        bytes.AddRange(channel.PayloadType?.EncodeBytes());
                     // Add addresses
                     bytes.AddRange(BitConverter.GetBytes((UInt64)(channel.Addresses?.Count ?? 0)));
                     foreach (var address in channel.Addresses)
@@ -149,8 +151,7 @@ namespace AARC.Mesh.Model
             var service = bytes.DecodeString(ref msgPtr);
             this.Service = new Uri(service);
 
-            var noChannels = BitConverter.ToUInt64(bytes, msgPtr);
-            msgPtr += sizeof(UInt64);
+            var noChannels = bytes.ToUInt64(ref msgPtr);
             if (noChannels > 0)
             {
                 this.Channels = new List<MeshChannel>();
@@ -159,16 +160,13 @@ namespace AARC.Mesh.Model
                     var channel = new MeshChannel
                     {
                         Name = bytes.DecodeString(ref msgPtr),
-                        Instance = BitConverter.ToUInt64(bytes, msgPtr)
+                        Instance = bytes.ToUInt64(ref msgPtr)
                     };
-                    msgPtr += sizeof(UInt64);
 
                     channel.ChannelType = (MeshChannel.ChannelTypes)bytes[msgPtr++];
                     channel.EncodingType = bytes[msgPtr++];
-                    var payloadRadix = Radix.BytesToRadix(bytes, ref msgPtr);
-                    channel.PayloadType = Radix.Decode(payloadRadix);
-                    var noAddresses = BitConverter.ToUInt64(bytes, msgPtr);
-                    msgPtr += sizeof(UInt64);
+                    channel.PayloadType = bytes.DecodeString(ref msgPtr);
+                    var noAddresses = bytes.ToUInt64(ref msgPtr);
                     if (noAddresses > 0)
                     {
                         channel.Addresses = new HashSet<Uri>();

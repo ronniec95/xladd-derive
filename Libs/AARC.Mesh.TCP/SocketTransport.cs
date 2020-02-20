@@ -9,6 +9,7 @@ namespace AARC.Mesh.TCP
     using System.Threading.Channels;
     using System.Threading.Tasks;
     using AARC.Mesh.Interface;
+    using AARC.Mesh.SubService;
 
     /// <summary>
     /// An asynchronous client socket does not suspend the application while waiting for network operations to complete.
@@ -28,7 +29,7 @@ namespace AARC.Mesh.TCP
         // Client  socket.  
         protected Socket _socket { get; private set; }
 
-        public Uri Url { get; private set; }
+        public Uri URI { get; private set; }
 
         // Receive buffer.  
         private readonly byte[] _rawReceiveBuffer;
@@ -51,7 +52,7 @@ namespace AARC.Mesh.TCP
             _logger = logger;
             _localCancelSource = new CancellationTokenSource();
             _rawReceiveBuffer = new byte[BufferSize];
-            Url = NetworkExt.GetHostNameUrl();
+            URI = NetworkExt.GetHostNameUrl();
             _senderChannel = Channel.CreateUnbounded<byte[]>();
 
             _packetizer = new PacketProtocol(PacketSize);
@@ -59,27 +60,22 @@ namespace AARC.Mesh.TCP
             // Pass the assembled bytes message to the IMeshObservers (subscriber)
             _packetizer.MessageArrived += async (bytes) =>
             {
-                _logger?.LogDebug($"Rx {bytes.Length}");
-                await ReceiverChannel.WriteAsync(bytes, _localCancelSource.Token);
+                // Ignore 0 bytes...
+                if (bytes.Length > 0)
+                {
+#if DEBUG_EXTRA
+                    _logger?.LogDebug($"Rx {bytes.Length}");
+#endif
+                    await ReceiverChannel.WriteAsync(bytes, _localCancelSource.Token);
+                }
+#if DEBUG_EXTRA
+                else
+                    logger.LogDebug("Received message size 0");
+#endif
                 //foreach (var observer in _publishers)
                 //    observer.OnPublish(bytes);
             };
-            ChannelSenderProcessor = Task.Factory.StartNew(async () =>
-            {
-                var reader = _senderChannel.Reader;
-                try
-                {
-                    while (!_localCancelSource.IsCancellationRequested)
-                    {
-                        var bytes = await reader.ReadAsync(_localCancelSource.Token);
-                        OnPublish(bytes);
-                    }
-                }
-                finally
-                {
-                    _logger.LogInformation("Parent Reader complete");
-                }
-            });
+            ChannelSenderProcessor = MeshChannelReader.ReadTask(_senderChannel.Reader, OnPublish, _logger, _localCancelSource.Token);
         }
 
         //public SocketTransport(IServiceProvider serviceProvider) : this(serviceProvider.GetService<ILogger<SocketTransport>>()) { }
@@ -87,7 +83,7 @@ namespace AARC.Mesh.TCP
         public SocketTransport(Socket socket, ILogger logger = null) : this(logger)
         {
             _socket = socket;
-            Url = socket?.GetServiceHost();
+            URI = socket?.GetServiceHost();
         }
 
         /// <summary>
@@ -113,7 +109,7 @@ namespace AARC.Mesh.TCP
             }
             if (_socket.Connected)
             {
-                Url = new Uri(url.AbsolutePath);
+                URI = new Uri(url.AbsolutePath);
             }
         }
 
@@ -170,7 +166,7 @@ namespace AARC.Mesh.TCP
         {
             if ((_localCancelSource?.IsCancellationRequested ?? true) || (!_socket?.Connected ?? true))
                 // Need to signal socket is dead if not cancelled
-                _logger?.LogInformation($"[{Url}]: ReadAsync cancelled or not connected");
+                _logger?.LogInformation($"[{URI}]: ReadAsync cancelled or not connected");
             else
             {
                 var result = _socket?.BeginReceive(_rawReceiveBuffer, 0, SocketTransport.BufferSize, 0, new AsyncCallback(ReadCallback), this);
@@ -182,7 +178,7 @@ namespace AARC.Mesh.TCP
         {
             // ToDo : Cancellation token
             _localCancelSource.Cancel();
-            _logger?.LogInformation($"[{Url}]: Closing Socket");
+            _logger?.LogInformation($"[{URI}]: Closing Socket");
             if (_socket?.Connected ?? false)
             {
                 _socket?.Shutdown(SocketShutdown.Both);
@@ -213,6 +209,13 @@ namespace AARC.Mesh.TCP
                     // Clone the buffer to the size we want.
                     // Read
                     var rawmessage = service._rawReceiveBuffer.CloneReduce(bytesRead);
+
+#if DEBUG_EXTRA
+                    if (bytesRead == 4)
+                        _logger.LogDebug($"RAW Rx {bytesRead} {rawmessage[0]},{rawmessage[1]},{rawmessage[2]},{rawmessage[3]}");
+                    else
+                        _logger.LogDebug($"RAW Rx {bytesRead}");
+#endif
                     _packetizer.DataReceived(rawmessage, bytesRead);
                 }
                 ReadAsync();
@@ -243,7 +246,7 @@ namespace AARC.Mesh.TCP
 
         public bool ConnectionAlive() => !(_socket.Poll(5000, SelectMode.SelectRead) && _socket.Available == 0);
 
-        #region IObserver Support
+#region IObserver Support
         public void OnCompleted()
         {
             Dispose();
@@ -267,7 +270,9 @@ namespace AARC.Mesh.TCP
                 var message = PacketProtocol.WrapMessage(bytes);
                 if (_socket?.Connected ?? false)
                 {
+#if DEBUG_EXTRA
                     _logger?.LogDebug($"Tx {bytes.Length}");
+#endif
                     _socket?.BeginSend(message, 0, message.Length, 0, new AsyncCallback(SendCallback), _socket);
                 }
                 else
@@ -281,9 +286,9 @@ namespace AARC.Mesh.TCP
                 OnError(ex);
             }
         }
-        #endregion
+#endregion
 
-        #region IDisposable Support
+#region IDisposable Support
         private bool disposedValue = false; // To detect redundant calls
 
         protected virtual void Dispose(bool disposing)
@@ -318,6 +323,6 @@ namespace AARC.Mesh.TCP
             // GC.SuppressFinalize(this);
         }
 
-        #endregion
+#endregion
     }
 }

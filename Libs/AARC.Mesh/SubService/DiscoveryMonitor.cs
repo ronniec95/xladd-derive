@@ -18,7 +18,7 @@ namespace AARC.Mesh.SubService
         private readonly Task ChannelReceiverProcessor;
         private readonly byte _msgEncoding;
 
-        private IMeshServiceTransport _discoveryService;
+        private IMeshServiceTransport _transportService;
 
         public Action<T> DiscoveryReceiveMessage { get; set; }
 
@@ -29,79 +29,77 @@ namespace AARC.Mesh.SubService
 
         public DiscoveryMonitor(ILogger<DiscoveryMonitor<T>> logger, IMeshTransportFactory qServiceFactory)
         {
+            _transportService = null;
             _msgEncoding = 0;
             _localCancelSource = new CancellationTokenSource();
             _logger = logger;
             _qServiceFactory = qServiceFactory;
             _parentReceiver = Channel.CreateUnbounded<byte[]>();
-            ChannelReceiverProcessor = Task.Factory.StartNew(async () =>
-            {
-                var reader = _parentReceiver.Reader;
-                try
-                {
-                    while (!_localCancelSource.IsCancellationRequested)
-                    {
-                        var bytes = await reader.ReadAsync(_localCancelSource.Token);
-                        OnPublish(bytes);
-                    }
-                }
-                finally
-                {
-                    _logger.LogInformation("Parent Reader complete");
-                }
-            });
+            ChannelReceiverProcessor = MeshChannelReader.ReadTask(_parentReceiver.Reader, OnPublish, _logger, _localCancelSource.Token);
         }
 
         public async Task StartListeningServices(Uri discoveryUrl, CancellationToken cancellationToken)
         {
             await Task.Factory.StartNew(() =>
             {
-                _logger?.LogInformation($"Looking for Discovery Service");
-
-                var delay = 1000;
-
-                var hostname = $"{Dns.GetHostName()}";
+                var retries = 0;
                 using (var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_localCancelSource.Token, cancellationToken))
-                    do
-                    {
+                    while (!linkedCts.IsCancellationRequested && retries < 3)
                         try
                         {
-                            if (_discoveryService == null)
-                            {
-                                ResetDiscoveryState.Invoke();
-                                _discoveryService = _qServiceFactory.Create(discoveryUrl);
-                                _discoveryService.ReceiverChannel = _parentReceiver.Writer;
-                            }
+                            var hostname = MeshUtilities.GetLocalHostFQDN();
 
-                            if (_discoveryService.Connected)
-                            {
-                                var message = new T();
-                                DiscoverySendMessage.Invoke(message, hostname);
+                            _logger?.LogInformation($"Looking for Discovery Service [{hostname}]");
 
-                                OnSend(message);
-                            }
-                            else
+                            var delay = 1000;
+
+                            do
                             {
-                                // Bad state shutdown services
-                                _discoveryService.Dispose();
-                                _discoveryService = null;
-                            }
+                                try
+                                {
+                                    if (_transportService == null)
+                                    {
+                                        ResetDiscoveryState.Invoke();
+                                        _transportService = _qServiceFactory.Create(discoveryUrl);
+                                        _transportService.ReceiverChannel = _parentReceiver.Writer;
+                                    }
+
+                                    if (_transportService.Connected)
+                                    {
+                                        var message = new T();
+                                        DiscoverySendMessage.Invoke(message, hostname);
+
+                                        OnSend(message);
+                                    }
+                                    else
+                                    {
+                                        // Bad state shutdown services
+                                        _transportService.Dispose();
+                                        _transportService = null;
+                                    }
+                                    retries = 0;
+                                }
+                                catch (SocketException se)
+                                {
+                                    _logger.LogError(se, $"DS Connection Error: {se.Message}");
+                                    delay = 1000;
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.LogError(ex, "DS General error");
+                                    delay = 1000;
+                                }
+                                finally
+                                {
+                                    Task.Delay(delay, linkedCts.Token).Wait();
+                                }
+                            } while (!linkedCts.IsCancellationRequested);
                         }
-                        catch (SocketException se)
+                        catch (Exception e)
                         {
-                            _logger.LogError(se, $"DS Connection Error: {se.Message}");
-                            delay = 1000;
+                            ++retries;
+                            _logger.LogError(e, "DS error");
                         }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "DS General error");
-                            delay = 1000;
-                        }
-                        finally
-                        {
-                            Task.Delay(delay, linkedCts.Token).Wait();
-                        }
-                    } while (!linkedCts.IsCancellationRequested);
                 _logger?.LogInformation("DS Exiting");
             }, cancellationToken);
         }
@@ -131,7 +129,7 @@ namespace AARC.Mesh.SubService
         {
             var obytes = message.Encode(_msgEncoding);
             // Todo: Not sure I like this
-            _discoveryService.SenderChannel.WriteAsync(obytes);
+            _transportService.SenderChannel.WriteAsync(obytes);
         }
 
         #region IDisposable Support
