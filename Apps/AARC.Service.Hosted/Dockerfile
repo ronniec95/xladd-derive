@@ -1,42 +1,33 @@
-FROM mcr.microsoft.com/dotnet/core/sdk:3.0 AS build
-WORKDIR /Apps
+#See https://aka.ms/containerfastmode to understand how Visual Studio uses this Dockerfile to build your images for faster debugging.
 
-# copy csproj and restore as distinct layers
-COPY ./Apps/AARC.Service.Hosted/*.csproj ./AARC.Service.Hosted/
+FROM mcr.microsoft.com/dotnet/core/runtime:3.1-buster-slim AS base
+WORKDIR /app
 
-WORKDIR /Libs
-COPY ./Libs/AARC.Compression/*.csproj ./AARC.Compression/
-COPY ./Libs/AARC.Mesh/*.csproj ./AARC.Mesh/
-COPY ./Libs/AARC.Mesh.Dataflow/*.csproj ./AARC.Mesh.Dataflow/
-COPY ./Libs/AARC.Mesh.TCP/*.csproj ./AARC.Mesh.TCP/
-COPY ./Libs/AARC.Model/*.csproj ./AARC.Model/
-COPY ./Libs/AARC.RDS/*.csproj ./AARC.RDS/
-COPY ./Libs/AARC.Repository.EF/*.csproj ./AARC.Repository.EF/
-COPY ./Libs/AARC.Repository.Interfaces/*.csproj ./AARC.Repository.Interfaces/
-COPY ./Libs/AARC.Utilities/*.csproj ./AARC.Utilities/
+FROM mcr.microsoft.com/dotnet/core/sdk:3.1-buster AS build
+WORKDIR /src
+COPY Apps/AARC.Service.Hosted/AARC.Service.Hosted.csproj Apps/AARC.Service.Hosted/
+COPY Libs/AARC.Mesh/AARC.Mesh.csproj Libs/AARC.Mesh/
+COPY Libs/AARC.Compression/AARC.Compression.csproj Libs/AARC.Compression/
+COPY Libs/AARC.Utilities/AARC.Utilities.csproj Libs/AARC.Utilities/
+COPY Libs/AARC.Mesh.TCP/AARC.Mesh.TCP.csproj Libs/AARC.Mesh.TCP/
+COPY Libs/AARC.Mesh.Dataflow/AARC.Mesh.Dataflow.csproj Libs/AARC.Mesh.Dataflow/
+COPY Libs/AARC.Model/AARC.Model.csproj Libs/AARC.Model/
+COPY Libs/AARC.Repository.Interfaces/AARC.Repository.Interfaces.csproj Libs/AARC.Repository.Interfaces/
+COPY Libs/AARC.RDS/AARC.RDS.csproj Libs/AARC.RDS/
+COPY Libs/AARC.Repository.EF/AARC.Repository.EF.csproj Libs/AARC.Repository.EF/
+COPY Libs/AARC.Mesh.AutoWireUp/AARC.Mesh.AutoWireUp.csproj Libs/AARC.Mesh.AutoWireUp/
+COPY Libs/AARC.Mesh.Reflection/AARC.Mesh.Reflection.csproj Libs/AARC.Mesh.Reflection/
+RUN dotnet restore "Apps/AARC.Service.Hosted/AARC.Service.Hosted.csproj"
+COPY . .
+WORKDIR "/src/Apps/AARC.Service.Hosted"
+RUN dotnet build "AARC.Service.Hosted.csproj" -c Release -o /app/build
 
-WORKDIR /Apps/AARC.Service.Hosted
-RUN dotnet restore
+FROM build AS publish
+RUN dotnet publish "AARC.Service.Hosted.csproj" -c Release -o /app/publish
 
-# copy and publish app and libraries
-WORKDIR /Apps
-COPY ./AARC.Service.Hosted/. ./AARC.Service.Hosted/
-
-WORKDIR /Libs
-COPY ./Libs/AARC.Compression/. ./Libs/AARC.Compression/
-COPY ./Libs/AARC.Mesh/. ./Libs/AARC.Mes/
-COPY ./Libs/AARC.Mesh.Dataflow/. ./Libs/AARC.Mesh.Dataflow/
-COPY ./Libs/AARC.Mesh.TCP/. ./Libs/AARC.Mesh.TCP/
-COPY ./Libs/AARC.Model/. ./Libs/AARC.Mode/
-COPY ./Libs/AARC.RDS/. ./Libs/AARC.RDS/
-COPY ./Libs/AARC.Repository.EF/. ./Libs/AARC.Repository.EF/
-COPY ./Libs/AARC.Repository.Interfaces/. ./Libs/AARC.Repository.Interface/
-COPY ./Libs/AARC.Utilities/. ./Libs/AARC.Utilitie/
-
-WORKDIR /Apps
-RUN dotnet publish -c Release -o out
-
-FROM mcr.microsoft.com/dotnet/core/runtime:3.0 AS runtime
-WORKDIR /Apps
-COPY --from=build ./AARC.Service.Hosted/out ./
+FROM base AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
+EXPOSE 1024-65335
 ENTRYPOINT ["dotnet", "AARC.Service.Hosted.dll"]
+CMD [ds=tcp://192.168.0.202:9999 services=NasdaqTradableTickers,biggeststock]

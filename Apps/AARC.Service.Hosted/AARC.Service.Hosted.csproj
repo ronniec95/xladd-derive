@@ -3,7 +3,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp3.1</TargetFramework>
-    <DockerComposeProjectPath>../ReactSample/docker-compose.dcproj</DockerComposeProjectPath>
+    <DockerComposeProjectPath>../../docker-compose.dcproj</DockerComposeProjectPath>
   </PropertyGroup>
 
   <ItemGroup>
@@ -42,7 +42,6 @@
     <ProjectReference Include="..\..\Libs\AARC.Repository.EF\AARC.Repository.EF.csproj" />
     <ProjectReference Include="..\..\Libs\AARC.Repository.Interfaces\AARC.Repository.Interfaces.csproj" />
     <ProjectReference Include="..\..\Libs\AARC.Utilities\AARC.Utilities.csproj" />
-    <ProjectReference Include="..\..\UT\AARC.Graph.Test\AARC.Graph.Test.csproj" />
     <ProjectReference Include="..\..\Libs\AARC.Mesh.AutoWireUp\AARC.Mesh.AutoWireUp.csproj" />
   </ItemGroup>
 </Project>
