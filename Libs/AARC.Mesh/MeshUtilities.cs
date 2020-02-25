@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using AARC.Utilities;
 
 namespace AARC.Mesh
@@ -126,22 +127,22 @@ namespace AARC.Mesh
 
         public static string GetLocalHostFQDN()
         {
-//            var hostname = $"{Dns.GetHostName()}";
+            string hostname;
+            if (WhichOS.IsMacOS)
+            {
+                var ipProperties = System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties();
+                var domain = ipProperties.DomainName;
+                hostname = ipProperties.HostName;
+                if (hostname.EndsWith(".local"))
+                    return hostname;
 
-            var ipProperties = System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties();
-            var domain = ipProperties.DomainName;
-            var hostname = ipProperties.HostName;
-#if MACOS
-            if (hostname.EndsWith(".local"))
-                return hostname;
+                if (string.IsNullOrEmpty(domain))
+                    return $"{hostname}.local";
+            }
+                hostname = $"{Dns.GetHostName()}";
 
-            if (string.IsNullOrEmpty(domain))
-                return $"{hostname}.local";
-#else
-            if (string.IsNullOrEmpty(domain))
-                return hostname;
-#endif
-            return $"{hostname}.{domain}";
+            return hostname;
+
         }
     }
 }

@@ -33,6 +33,8 @@ namespace AARC.Mesh.SubService
             _chServiceFactory = transportFactory;
             _logger = logger;
             _uri = new Uri("tcp://ronniepc:9900");
+            _logger.LogDebug($"tcp://{MeshUtilities.GetLocalHostFQDN()}");
+
             URI = new Uri($"tcp://{MeshUtilities.GetLocalHostFQDN()}");
 
             MessageRelay = MeshChannelReader.ReadTask(_sendMessageChannel.Reader, OnPublish, _logger, _localCancelSource.Token);
