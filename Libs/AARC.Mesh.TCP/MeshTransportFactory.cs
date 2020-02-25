@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Net.Sockets;
+using System.Threading.Channels;
 using AARC.Mesh.Interface;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -10,32 +11,28 @@ namespace AARC.Mesh.TCP
     {
         protected readonly IServiceProvider _serviceProvider;
         private Uri _uri;
-        private MeshMonitor _mm;
 
         public MeshTransportFactory(IServiceProvider serviceProvider)
         {
             _serviceProvider = serviceProvider;
-
-            _mm = new MeshMonitor(new Uri("tcp://ronniepc:9900"), this, serviceProvider.GetService<ILogger<MeshMonitor>>());
         }
 
         /// <summary>
         /// Using _serviceHost details to create connection
         /// </summary>
         /// <returns></returns>
-        public IMeshServiceTransport Create() => Create(_uri);
-
+//        public IMeshServiceTransport Create() => Create(_uri);
 
         /// <summary>
         /// Uses servicedetails work work out how to setup this MeshQueueService
         /// </summary>
         /// <param name="uri"></param>
         /// <returns></returns>
-        public IMeshServiceTransport Create(string uri)
+        public IMeshServiceTransport Create(string uri, ChannelWriter<byte[]> channelWriter)
         {
             _uri = new Uri(uri);
 
-            return Create(_uri);
+            return Create(_uri, channelWriter);
         }
 
         /// <summary>
@@ -43,12 +40,13 @@ namespace AARC.Mesh.TCP
         /// </summary>
         /// <param name="uri">Host name or IP address</param>
         /// <returns></returns>
-        public IMeshServiceTransport Create(Uri uri)
+        public IMeshServiceTransport Create(Uri uri, ChannelWriter<byte[]> channelWriter)
         {
-            var qss = new SocketTransport(_serviceProvider.GetService<ILogger<SocketTransport>>());
-            qss.ManageConnection(uri, false);
-            qss.ReadAsync();
-            return qss;
+            var serviceTransport = new SocketTransport(_serviceProvider.GetService<IMonitor>(), _serviceProvider.GetService<ILogger<SocketTransport>>());
+            serviceTransport.ManageConnection(uri, false);
+            serviceTransport.ReceiverChannel = channelWriter;
+            serviceTransport.ReadAsync();
+            return serviceTransport;
         }
 
         /// <summary>
@@ -56,21 +54,20 @@ namespace AARC.Mesh.TCP
         /// </summary>
         /// <param name="dispose"></param>
         /// <returns></returns>
-        public IMeshServiceTransport Create(IDisposable dispose)
+        public IMeshServiceTransport Create(IDisposable dispose, ChannelWriter<byte[]> channelWriter)
         {
             var socket = dispose as Socket;
             if (socket != null)
             {
-                var qss = Create(socket);
-                qss.ReadAsync();
-                return qss;
+                var serviceTransport = Create(socket);
+                serviceTransport.ReceiverChannel = channelWriter;
+                serviceTransport.ReadAsync();
+                return serviceTransport;
             }
 
             throw new NotSupportedException($"Cant create a IMeshQueueService from {dispose.GetType()}");
         }
 
-        public SocketTransport Create(Socket socket) => new SocketTransport(socket, _serviceProvider.GetService<ILogger<SocketTransport>>());
-
-        public void MessageRelay(byte[] bytes) => _mm.OnNext(bytes);
+        public SocketTransport Create(Socket socket) => new SocketTransport(socket, _serviceProvider.GetService<IMonitor>(), _serviceProvider.GetService<ILogger<SocketTransport>>());
     }
 }

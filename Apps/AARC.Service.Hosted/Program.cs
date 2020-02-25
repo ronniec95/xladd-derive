@@ -6,7 +6,6 @@ using Microsoft.Extensions.Logging;
 
 namespace AARC.Service.Hosted
 {
-    using AARC.Mesh.AutoWireUp;
     using AARC.Mesh.Dataflow;
     using AARC.Mesh.Interface;
     using AARC.Mesh.SubService;

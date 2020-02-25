@@ -60,8 +60,7 @@ namespace AARC.Mesh.SubService
                                     if (_transportService == null)
                                     {
                                         ResetDiscoveryState.Invoke();
-                                        _transportService = _qServiceFactory.Create(discoveryUrl);
-                                        _transportService.ReceiverChannel = _parentReceiver.Writer;
+                                        _transportService = _qServiceFactory.Create(discoveryUrl, _parentReceiver.Writer);
                                     }
 
                                     if (_transportService.Connected)

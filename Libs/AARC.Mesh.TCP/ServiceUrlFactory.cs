@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Net;
 
 namespace AARC.Mesh.TCP
 {
@@ -9,7 +8,7 @@ namespace AARC.Mesh.TCP
 
         public ServiceUrlFactory()
         {
-            _url = new Uri(MeshUtilities.GetLocalHostFQDN());
+            _url = new Uri($"tcp://{MeshUtilities.GetLocalHostFQDN()}");
         }
 
         public string TransportId => _url.AbsoluteUri;

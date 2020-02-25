@@ -33,6 +33,7 @@ namespace AARC.Mesh.TCP
 
         // Receive buffer.  
         private readonly byte[] _rawReceiveBuffer;
+        private readonly IMonitor _monitor;
         private readonly ILogger _logger;
         private readonly PacketProtocol _packetizer;
         private Channel<byte[]> _senderChannel;
@@ -47,8 +48,9 @@ namespace AARC.Mesh.TCP
         /// </summary>
         //public Action<string, byte[]> NewMessageBytes { get; set; }
 
-        public SocketTransport(ILogger logger = null)
+        public SocketTransport(IMonitor monitor, ILogger logger = null)
         {
+            _monitor = monitor;
             _logger = logger;
             _localCancelSource = new CancellationTokenSource();
             _rawReceiveBuffer = new byte[BufferSize];
@@ -78,9 +80,7 @@ namespace AARC.Mesh.TCP
             ChannelSenderProcessor = MeshChannelReader.ReadTask(_senderChannel.Reader, OnPublish, _logger, _localCancelSource.Token);
         }
 
-        //public SocketTransport(IServiceProvider serviceProvider) : this(serviceProvider.GetService<ILogger<SocketTransport>>()) { }
-
-        public SocketTransport(Socket socket, ILogger logger = null) : this(logger)
+        public SocketTransport(Socket socket, IMonitor monitor, ILogger logger = null) : this(monitor, logger)
         {
             _socket = socket;
             URI = socket?.GetServiceHost();
@@ -137,11 +137,11 @@ namespace AARC.Mesh.TCP
                 }
                 catch (SocketException se)
                 {
-                    _logger?.LogInformation($"SS {se.Message}");
+                    OnError(se);
                 }
                 catch (Exception ex)
                 {
-                    _logger?.LogError(ex, $"SS {ex.Message}");
+                    OnError(ex);
                 }
                 finally
                 {
@@ -155,8 +155,6 @@ namespace AARC.Mesh.TCP
         protected Socket Connect(Uri url) => Connect(url.Host, url.Port);
 
         public bool Connected { get { return _socket?.Connected ?? false; } }
-
-        //private void PacketNewMessageBytes(byte[] bytes) => NewMessageBytes?.Invoke(TransportId.ToString(), bytes);
 
         /// <summary>
         /// We read message packets from the connected subscriber and forward them to MeshSocketServer to
@@ -178,7 +176,8 @@ namespace AARC.Mesh.TCP
         {
             // ToDo : Cancellation token
             _localCancelSource.Cancel();
-            _logger?.LogInformation($"[{URI}]: Closing Socket");
+            var status = $"[{URI}]: Closing Socket";
+            _logger?.LogInformation(status);
             if (_socket?.Connected ?? false)
             {
                 _socket?.Shutdown(SocketShutdown.Both);
@@ -222,11 +221,11 @@ namespace AARC.Mesh.TCP
             }
             catch (SocketException se)
             {
-                _logger?.LogError(se, "Connection Read error");
+                OnError(se);
             }
             catch (Exception e)
             {
-                _logger?.LogError(e, "General Socket Read error");
+                OnError(e);
             }
         }
 
@@ -240,21 +239,19 @@ namespace AARC.Mesh.TCP
             }
             catch (Exception e)
             {
-                _logger?.LogError(e, $"[{_socket.TransportId()}]: Failed to Send");
+                OnError(e);
             }
         }
 
         public bool ConnectionAlive() => !(_socket.Poll(5000, SelectMode.SelectRead) && _socket.Available == 0);
 
 #region IObserver Support
-        public void OnCompleted()
-        {
-            Dispose();
-        }
+        public void OnCompleted() => Dispose();
 
         // Todo: Notifiy who sent it?
         public void OnError(Exception error)
         {
+            _monitor.OnError(error, "ERROR");
             _logger.LogError(error, "Send error");
         }
 

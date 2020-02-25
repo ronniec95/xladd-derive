@@ -12,11 +12,11 @@ namespace AARC.Graph.Test
             switch (name)
             {
                 case @"testcloserandom":
-                    return new Method1QueueTransform();
+                    return new Method1TransformChannel();
                 case @"closepriceservice":
-                    return new ClosePriceQueueTransform();
+                    return new ClosePriceTransformChannel();
                 case @"randompriceservice":
-                    return new RandomPriceQueueTransform();
+                    return new RandomPriceTransformChannel();
                 default:
                     //return new QueueListener(new string[] { name });
                     throw new NotImplementedException();

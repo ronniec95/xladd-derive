@@ -1,4 +1,5 @@
-﻿using AARC.Mesh.Model;
+﻿using AARC.Mesh.Interface;
+using AARC.Mesh.Model;
 using AARC.Mesh.SubService;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -67,6 +68,7 @@ namespace AARC.Mesh.TCP
         {
             var observable = new MeshObservable<T>(channel);
             msm.RegisterChannels(observable);
+            
             return observable;
         }
 

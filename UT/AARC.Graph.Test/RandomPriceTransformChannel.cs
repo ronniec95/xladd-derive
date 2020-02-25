@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using AARC.Mesh.Interface;
 using AARC.Mesh.Model;
 using AARC.Mesh;
@@ -11,9 +10,9 @@ namespace AARC.Graph.Test
     /// Example wrapper class for a simple Method of multiplication based on the subscription of two independently supplied subscriptions.
     /// </summary>
     /// <typeparam name="T">Using T to help with the Serialization/Deserialization - work in progrees</typeparam>
-    public class RandomPriceQueueTransform : IMeshReactor<MeshMessage>
+    public class RandomPriceTransformChannel : IMeshReactor<MeshMessage>
     {
-        public RandomPriceQueueTransform()
+        public RandomPriceTransformChannel()
         {
             //InputQueueNames = new string[] { GraphNewRamdomPrice.setrandomprice.ToString() };
             //OutputQueueNames = new string[] { GraphMethod1.newrandom.ToString() };

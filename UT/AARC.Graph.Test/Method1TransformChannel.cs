@@ -11,7 +11,7 @@ namespace AARC.Graph.Test
     /// Example wrapper class for a simple Method of multiplication based on the subscription of two independently supplied subscriptions.
     /// </summary>
     /// <typeparam name="T">Using T to help with the Serialization/Deserialization - work in progrees</typeparam>
-    public class Method1QueueTransform : IMeshReactor<MeshMessage>
+    public class Method1TransformChannel : IMeshReactor<MeshMessage>
     {
         private ConcurrentDictionary<string, double> lastprice;
         private ConcurrentDictionary<string, double> lastrandom;
@@ -20,7 +20,7 @@ namespace AARC.Graph.Test
 
         public IList<IRouteRegister<MeshMessage>> ChannelRouters => throw new NotImplementedException();
 
-        public Method1QueueTransform()
+        public Method1TransformChannel()
         {
             lastprice = new ConcurrentDictionary<string, double>();
             lastrandom = new ConcurrentDictionary<string, double>();

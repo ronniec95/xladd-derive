@@ -1,16 +1,14 @@
 ﻿using System;
-using System.Net;
-using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using AARC.Mesh.Interface;
-using AARC.Mesh.SubService;
+using AARC.Mesh.Model;
 using Microsoft.Extensions.Logging;
 
-namespace AARC.Mesh.TCP
+namespace AARC.Mesh.SubService
 {
-    public class  MeshMonitor : IDisposable
+    public class  MeshMonitor : IMonitor,  IDisposable
     {
         private readonly Channel<byte[]> _sendMessageChannel;
         private readonly Channel<byte[]> _receiveMessageChannel;
@@ -19,21 +17,23 @@ namespace AARC.Mesh.TCP
         private readonly CancellationTokenSource _localCancelSource;
         private readonly Uri _uri;
         private readonly IMeshTransportFactory _chServiceFactory;
-
         private IMeshServiceTransport _transportService = null;
 
+        public Uri URI { get; set; }
         public Task MessageRelay { get; }
         public Task MonitorReceive { get; }
 
-        public MeshMonitor(Uri URI, IMeshTransportFactory transportFactory, ILogger<MeshMonitor> logger)
+
+        public MeshMonitor(Channel<byte[]> sendMessageChannel, IMeshTransportFactory transportFactory, ILogger<MeshMonitor> logger)
         {
             _localCancelSource = new CancellationTokenSource();
-            _sendMessageChannel = Channel.CreateUnbounded<byte[]>();
+            _sendMessageChannel = sendMessageChannel;
             _receiveMessageChannel = Channel.CreateUnbounded<byte[]>();
             _byteWriter = _sendMessageChannel.Writer;
             _chServiceFactory = transportFactory;
             _logger = logger;
-            _uri = URI;
+            _uri = new Uri("tcp://ronniepc:9900");
+            URI = new Uri($"tcp://{MeshUtilities.GetLocalHostFQDN()}");
 
             MessageRelay = MeshChannelReader.ReadTask(_sendMessageChannel.Reader, OnPublish, _logger, _localCancelSource.Token);
             MonitorReceive = MeshChannelReader.ReadTask(_receiveMessageChannel.Reader, OnReceive, _logger, _localCancelSource.Token);
@@ -44,17 +44,51 @@ namespace AARC.Mesh.TCP
             _logger.LogDebug($"MON Got a message {bytes}");
         }
 
+        public void OnInfo(string message, string channel = @"INFO")
+        {
+            var m = new MeshMessage
+            {
+                Service = URI,
+                EncodingType = 0,
+                GraphId = 0,
+                Channel = channel,
+                XId = MeshUtilities.NewXId,
+                State = MeshMessage.States.INFO,
+                PayLoad = message
+            };
+
+            var bytes = m.Encode(0);
+
+            OnNext(bytes);
+        }
+
+        public void OnError(Exception ex, string channel = @"ERROR")
+        {
+            var m = new MeshMessage
+            {
+                Service = URI,
+                EncodingType = 0,
+                GraphId = 0,
+                Channel = channel,
+                XId = MeshUtilities.NewXId,
+                State = MeshMessage.States.ERROR,
+                PayLoad = ex.StackTrace
+            };
+
+            var bytes = m.Encode(0);
+
+            OnNext(bytes);
+        }
+
         public void OnNext(byte[] value) => _byteWriter.WriteAsync(value, _localCancelSource.Token);
 
         protected void OnPublish(byte[] bytes)
         {
             try
             {
-                _transportService = _chServiceFactory.Create(_uri);
                 if (_transportService == null)
                 {
-                    _transportService = _chServiceFactory.Create(_uri);
-                    _transportService.ReceiverChannel = _receiveMessageChannel.Writer;
+                    _transportService = _chServiceFactory.Create(_uri, _receiveMessageChannel.Writer);
                 }
 
                 if (_transportService.Connected)

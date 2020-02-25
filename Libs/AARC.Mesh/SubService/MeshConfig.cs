@@ -1,4 +1,4 @@
-﻿using System;
+﻿using System.Threading.Channels;
 using AARC.Mesh.Interface;
 using AARC.Mesh.Model;
 using Microsoft.Extensions.DependencyInjection;
@@ -9,7 +9,8 @@ namespace AARC.Mesh.SubService
     {
         public static void Server(IServiceCollection services)
         {
-//            services.AddSingleton<ServiceHostNameFactory>();
+            services.AddSingleton<Channel<byte[]>>(Channel.CreateUnbounded<byte[]>());
+            services.AddSingleton<IMonitor, MeshMonitor>();
             services.AddSingleton<DiscoveryServiceStateMachine<MeshMessage>>();
             services.AddSingleton<DiscoveryMonitor<DiscoveryMessage>>();
             services.AddSingleton<MeshServiceManager>();

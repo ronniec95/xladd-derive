@@ -14,9 +14,11 @@ namespace AARC.Mesh.Interface
         /// </summary>
         string OutputChannelAlias { get; }
 
-        void RegisterReceiverChannels(MeshDictionary<MeshMessage> inputQChannels);
+        void RegisterReceiverChannels(MeshDictionary<MeshMessage> inputChannels);
 
         void RegistePublisherChannels(MeshDictionary<MeshMessage> outputChannels);
+
+        void RegisterMonitor(IMonitor monitor);
 
         MeshChannelResult<T> PublishChannel { get; set; }
     }

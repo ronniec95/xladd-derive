@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading.Channels;
 
 namespace AARC.Mesh.Interface
 {
@@ -9,29 +10,27 @@ namespace AARC.Mesh.Interface
         /// what kind of Q service this is.
         /// </summary>
         /// <returns></returns>
-        IMeshServiceTransport Create();
+        //IMeshServiceTransport Create();
 
         /// <summary>
         /// Uses servicedetails work work out how to setup this MeshQueueService
         /// </summary>
         /// <param name="url"></param>
         /// <returns></returns>
-        IMeshServiceTransport Create(string url);
+        IMeshServiceTransport Create(string url, ChannelWriter<byte[]> channelWriter);
 
         /// <summary>
         /// Creates a transport connection using the Url
         /// </summary>
         /// <param name="URI"></param>
         /// <returns></returns>
-        IMeshServiceTransport Create(Uri URI);
+        IMeshServiceTransport Create(Uri URI, ChannelWriter<byte[]> channelWriter);
 
         /// <summary>
         /// Bit of a hack to allow a socket to be passed in to create Q service
         /// </summary>
         /// <param name="dispose"></param>
         /// <returns></returns>
-        IMeshServiceTransport Create(IDisposable dispose);
-
-        void MessageRelay(byte[] bytes);
+        IMeshServiceTransport Create(IDisposable dispose, ChannelWriter<byte[]> channelWriter);
     }
 }

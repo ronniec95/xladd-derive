@@ -1,14 +1,11 @@
 ﻿using System;
 using AARC.Mesh.Interface;
 using AARC.Mesh.Model;
-using Microsoft.Extensions.Logging;
-using System.Reactive.Linq;
 using System.Collections.Generic;
-using AARC.Mesh;
 
 namespace AARC.Graph.Test
 {
-    public class QueueListener : IMeshReactor<MeshMessage>
+    public class ChannelListener : IMeshReactor<MeshMessage>
     {
         public string Name => throw new NotImplementedException();
 

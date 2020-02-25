@@ -21,6 +21,7 @@ namespace AARC.Mesh.SubService
         protected readonly ILogger _logger;
 
         private IMeshTransport<MeshMessage> _transportServer;
+        private readonly IMonitor _monitor;
         private DiscoveryMonitor<DiscoveryMessage> _discoveryMonitor;
 
         public int ListeningPort { get { return _dssmc.Port; } set { _dssmc.Port = value; } }
@@ -29,7 +30,7 @@ namespace AARC.Mesh.SubService
         public Task ListenService { get; private set; }
         public Task PublishService { get; private set; }
 
-        public MeshServiceManager(ILogger<MeshServiceManager> logger, DiscoveryServiceStateMachine<MeshMessage> discoveryServiceState, DiscoveryMonitor<DiscoveryMessage> discoveryMonitor, IMeshTransport<MeshMessage> meshTransport)
+        public MeshServiceManager(ILogger<MeshServiceManager> logger, DiscoveryServiceStateMachine<MeshMessage> discoveryServiceState, DiscoveryMonitor<DiscoveryMessage> discoveryMonitor, IMonitor monitor, IMeshTransport<MeshMessage> meshTransport)
         {
             _dssmc = discoveryServiceState;
             _logger = logger;
@@ -40,6 +41,8 @@ namespace AARC.Mesh.SubService
             _discoveryMonitor.DiscoveryErrorMessage += _dssmc.CreateErrorMessage;
 
             _transportServer = meshTransport;
+
+            _monitor = monitor;
 
             // MeshMessages from transportserver
             // Todo: But this should really be any transportservice {socketservice}
@@ -58,6 +61,7 @@ namespace AARC.Mesh.SubService
         {
             route.RegisterReceiverChannels(_dssmc.LocalInputChannels);
             route.RegistePublisherChannels(_dssmc.LocalOutputChannels);
+            route.RegisterMonitor(_monitor);
 
             route.PublishChannel += OnNext;
         }
@@ -84,7 +88,11 @@ namespace AARC.Mesh.SubService
                 // Find the external routes
                 var routes = channelRoute.SelectMany(c => c.Item2);
                 if (routes == null || !routes.Any())
-                    _logger.LogWarning($"NO ROUTE Message GraphId={message.GraphId}, Xid={message.XId}, Channel={channel}");
+                {
+                    var status = $"NO ROUTE Message GraphId={message.GraphId}, Xid={message.XId}, Channel={channel}";
+                    _monitor.OnInfo(status, channel);
+                    _logger.LogWarning(status);
+                }
                 else
                 {
                     if (message.Routes == null)
@@ -95,16 +103,22 @@ namespace AARC.Mesh.SubService
                         if (intersection.Any())
                             _logger.LogInformation($"ROUTE CONFIRMED Message GraphId={message.GraphId}, Xid={message.XId}, Channel={channel} Routes={string.Join(",", intersection)}");
                         else
-                            // Todo: Tell Monitor?
-                            _logger.LogWarning($"ROUTE NOT FOUND Message GraphId={message.GraphId}, Xid={message.XId}, Channel={channel} Routes={string.Join(",", message.Routes)}");
+                        // Todo: Tell Monitor?
+                        {
+                            var status = $"ROUTE NOT FOUND Message GraphId={message.GraphId}, Xid={message.XId}, Channel={channel} Routes={string.Join(",", message.Routes)}";
+                            _monitor.OnInfo(status, channel);
+                            _logger.LogWarning(status);
+                        }
                     }
                     _transportServer.OnNext(message);
                 }
             }
             else
-                // Todo: Unknown destination?
-                // Send to Monitor
-                _logger.LogInformation($"[{channel}] NO ROUTE");
+            {
+                var status = $"[{channel}] NO ROUTE";
+                _monitor.OnInfo(status, channel);
+                _logger.LogInformation(status);
+            }
         }
 
         /// <summary>
@@ -141,7 +155,9 @@ namespace AARC.Mesh.SubService
         {
             RegistrationComplition.WaitOne();
             _logger.LogInformation($"Listener Enabled on {_dssmc.Port}");
-            await _transportServer.StartListeningServices(_dssmc.Port, cancellationToken);
+            _transportServer.SetPort(_dssmc.Port);
+            _monitor.URI = _transportServer.URI;
+            await _transportServer.StartListeningServices(cancellationToken);
         }
 
         public async Task StartPublisherConnections(CancellationToken cancellationToken)
@@ -184,7 +200,6 @@ namespace AARC.Mesh.SubService
                                             {
                                                 var o = _dssmc.LocalOutputChannels[c];
                                                 o.OnConnect(transportUrl);
-
                                             }
                                         }
                                     }
@@ -192,6 +207,7 @@ namespace AARC.Mesh.SubService
                             }
                             catch (Exception e)
                             {
+                                OnError(e);
                                 _logger?.LogError(e, "MSM General Error with connections");
                             }
                             finally
@@ -203,6 +219,7 @@ namespace AARC.Mesh.SubService
                 }
                 catch(Exception ex)
                 {
+                    OnError(ex);
                     _logger?.LogError(ex, "MSM Route determin errors");
                 }
             }, cancellationToken);
@@ -251,16 +268,13 @@ namespace AARC.Mesh.SubService
             // GC.SuppressFinalize(this);
         }
 
-        // ToDo: Send to DS
+        // ToDo: To Monitor?
         public void OnCompleted()
         {
             throw new NotImplementedException();
         }
-        // Todo: Send to DS
-        public void OnError(Exception error)
-        {
-            this._discoveryMonitor.OnError(error.Message, _transportServer.URI);
-        }
+        
+        public void OnError(Exception error) => _monitor?.OnError(error, "ERROR");
 
         /// <summary>
         /// Messages from transportserver need to be sent to MeshObservables

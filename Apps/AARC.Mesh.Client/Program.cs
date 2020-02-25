@@ -62,8 +62,11 @@ namespace AARC.Mesh.Client
             var o = mc.CreateObserver<List<string>>(channel);
             for (; ; )
             {
-                var data = Console.ReadLine();
-                o.OnNext(new List<string> { data });
+                //var data = 
+                logger.LogInformation("Sending tickers AAPL,MSFT");
+                o.OnNext(new List<string> { "AAPL", "MSFT" });
+                System.Threading.Thread.Sleep(1000);
+
             }
 
         }

@@ -31,6 +31,8 @@ namespace AARC.Mesh.Model
 
         public void RegistePublisherChannels(MeshDictionary<MeshMessage> outputChannels) {}
 
+        public void RegisterMonitor(IMonitor monitor) => _channelProxy.RegisterMonitor(monitor);
+
         public MeshChannelResult<MeshMessage> PublishChannel { get { return _channelProxy.PublishChannel; } set { _channelProxy.PublishChannel += value; } }
     }
 }

@@ -11,11 +11,11 @@ namespace AARC.Graph.Test
     /// Example wrapper class for a simple Method of multiplication based on the subscription of two independently supplied subscriptions.
     /// </summary>
     /// <typeparam name="T">Using T to help with the Serialization/Deserialization - work in progrees</typeparam>
-    public class ClosePriceQueueTransform : IMeshReactor<MeshMessage>
+    public class ClosePriceTransformChannel : IMeshReactor<MeshMessage>
     {
         protected ConcurrentDictionary<string, double> _latestClosePrices = new ConcurrentDictionary<string, double>();
 
-        public ClosePriceQueueTransform()
+        public ClosePriceTransformChannel()
         {
             //InputQueueNames = new string[] { GraphNewClosePrice.setcloseprice.ToString() };
            // OutputQueueNames = new string[] { GraphMethod1.newcloseprice.ToString() };

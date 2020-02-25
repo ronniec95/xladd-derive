@@ -32,6 +32,11 @@ namespace AARC.Mesh.Dataflow
                         var repository = _provider.GetService<IMarketDataRepository>();
                         return new NasdaqTradableTickers(logger, repository);
                     }
+                case @"test":
+                    {
+                        var logger = _provider.GetService<ILogger<DataFlowChannelListener>>();
+                        return new DataFlowChannelListener(logger);
+                    }
                 default:
                     //return new QueueListener(new string[] { name });
                     throw new NotImplementedException();

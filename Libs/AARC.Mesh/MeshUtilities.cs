@@ -23,6 +23,12 @@ namespace AARC.Mesh
         public static IEnumerable<byte> EncodeBytes(this string str)
         {
             var bytes = new List<byte>();
+
+            if (string.IsNullOrEmpty(str))
+            {
+                bytes.AddRange(BitConverter.GetBytes((UInt32)0));
+                return bytes;
+            }
             bytes.AddRange(BitConverter.GetBytes((UInt32)str.Length));
             bytes.AddRange(System.Text.Encoding.ASCII.GetBytes(str));
             return bytes;
@@ -125,8 +131,16 @@ namespace AARC.Mesh
             var ipProperties = System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties();
             var domain = ipProperties.DomainName;
             var hostname = ipProperties.HostName;
-            if (string.IsNullOrEmpty(domain) && !hostname.EndsWith(".local"))
-                domain = "local";
+#if MACOS
+            if (hostname.EndsWith(".local"))
+                return hostname;
+
+            if (string.IsNullOrEmpty(domain))
+                return $"{hostname}.local";
+#else
+            if (string.IsNullOrEmpty(domain))
+                return hostname;
+#endif
             return $"{hostname}.{domain}";
         }
     }

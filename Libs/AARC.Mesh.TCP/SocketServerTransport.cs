@@ -30,14 +30,14 @@ namespace AARC.Mesh.TCP
 
         public int MonitorPeriod { get; set; }
 
-        public Uri URI { get; private set; }
+        public Uri URI { get;  set; }
 
         private Task ChannelReceiverProcessor;
         private Task MonitorServices;
 
-        private Action<byte[]> _messageRelay;
+        private IMonitor _monitor;
 
-        public SocketServerTransport(ILogger<SocketServerTransport<T>> logger, IMeshTransportFactory qServiceFactory)
+        public SocketServerTransport(IMonitor monitor, ILogger<SocketServerTransport<T>> logger, IMeshTransportFactory qServiceFactory)
         {
             _localCancelSource = new CancellationTokenSource();
             _listenAcceptEvent = new ManualResetEvent(false);
@@ -47,12 +47,12 @@ namespace AARC.Mesh.TCP
             _meshServices = new ConcurrentDictionary<Uri, IMeshServiceTransport>();
             MonitorPeriod = 15000;
             _localct = _localCancelSource.Token;
-            _messageRelay = qServiceFactory.MessageRelay;
+            _monitor = monitor;
 
             ChannelReceiverProcessor = MeshChannelReader.ReadTask(_parentReceiver.Reader, OnPublish, _logger, _localCancelSource.Token);
         }
 
-        public async Task StartListeningServices(int port, CancellationToken cancellationToken) => await Task.Factory.StartNew(() => Listen(port, cancellationToken));
+        public async Task StartListeningServices(CancellationToken cancellationToken) => await Task.Factory.StartNew(() => Listen(cancellationToken));
 
         public async Task Cancel()
         {
@@ -76,31 +76,31 @@ namespace AARC.Mesh.TCP
             {
                 var service = _meshServices[servicedetails];
                 if (service.ConnectionAlive())
-                    return true;
+                    // Not a new connection
+                    return false;
 
                 if (_meshServices.TryRemove(servicedetails, out service))
                     service.Dispose();
             }
 
             _logger.LogInformation($"Creating a connecting to {servicedetails}");
-            var qss = _qServiceFactory.Create(servicedetails);
+            var qss = _qServiceFactory.Create(servicedetails, _parentReceiver.Writer);
             _meshServices[servicedetails] = qss;
             return qss.Connected;
         }
 
-        public void Listen(int port, CancellationToken cancellationToken)
+        public void SetPort(int port) => URI = NetworkExt.GetHostNameUrl(port);
+
+        public void Listen(CancellationToken cancellationToken)
         {
-
-            URI = NetworkExt.GetHostNameUrl(port);
-
             var ipAddress = NetworkExt.GetHostIPAddress(URI.Host);
-            var localEndPoint = new IPEndPoint(IPAddress.Any, port);
+            var localEndPoint = new IPEndPoint(IPAddress.Any, URI.Port);
             try
             {
                 using (var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_localct, cancellationToken))
                 {
                     var listener = new Socket(ipAddress.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-                    _logger?.LogDebug($"Created Listener on {port}");
+                    _logger?.LogDebug($"Created Listener on {URI}");
                     // Bind the socket to the local endpoint and   
                     // listen for incoming connections.  
                     listener.Bind(localEndPoint);
@@ -110,7 +110,7 @@ namespace AARC.Mesh.TCP
                     while (!linkedCts.IsCancellationRequested)
                     {
                         _listenAcceptEvent.Reset();
-                        _logger?.LogInformation($"[{ipAddress}:{port}] Accepting connections...");
+                        _logger?.LogInformation($"[{ipAddress}:{URI.Port}] Accepting connections...");
                         listener.BeginAccept(new AsyncCallback(NewConnectionCallback), listener);
                         _listenAcceptEvent.WaitOne();
                     }
@@ -118,6 +118,7 @@ namespace AARC.Mesh.TCP
             }
             catch (Exception e)
             {
+                _monitor.OnError(e, "ERROR");
                 _logger?.LogCritical(e.ToString());
             }
             finally
@@ -142,10 +143,11 @@ namespace AARC.Mesh.TCP
             var socket = listener.EndAccept(ar);
 
             // Create the state object.  
-            var service = _qServiceFactory.Create(socket);
+            var service = _qServiceFactory.Create(socket, _parentReceiver.Writer);
             socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
-            _logger?.LogInformation($"[{service.URI}]: New Connection");
-            service.ReceiverChannel = _parentReceiver.Writer;
+            var status = $"[{service.URI}]: New Connection";
+            _logger?.LogInformation(status);
+            //service.ReceiverChannel = _parentReceiver.Writer;
         }
 
         /// <summary>
@@ -165,6 +167,7 @@ namespace AARC.Mesh.TCP
             }
             catch (Exception e)
             {
+                _monitor.OnError(e, "ERROR");
                 _logger?.LogError(e, $"MSS UNKNOWN ERROR");
             }
             return false;
@@ -182,21 +185,21 @@ namespace AARC.Mesh.TCP
             {
                 while (!_localct.IsCancellationRequested)
                 {
-                    _logger?.LogDebug($"MSS MonitoringSockets connections[{_meshServices.Count}]");
                     foreach (var kvp in _meshServices)
                     {
                         var service = kvp.Value;
+                        _logger?.LogDebug($"SS Checking Connection to {service.URI}");
                         if (DropClosedConnections(service))
                         {
-                            IMeshServiceTransport ss;
-                            if (_meshServices.TryRemove(kvp.Key, out ss))
+                            if (_meshServices.TryRemove(kvp.Key, out IMeshServiceTransport ss))
                             {
-                                _logger?.LogInformation($"MSS dropped connections[{ss.URI}]");
+                                var status = $"SS dropped connections[{ss.URI}]";
+                                _monitor.OnInfo(status, "STATUS");
+                                _logger?.LogInformation(status);
                             }
                             else
-                                _logger?.LogInformation($"MSS failed to drop [{service.URI}]");
+                                _logger?.LogInformation($"SS failed to drop [{service.URI}]");
                         }
-
                     }
 
                     Task.Delay(MonitorPeriod, _localct).Wait();
@@ -209,14 +212,11 @@ namespace AARC.Mesh.TCP
             throw new NotImplementedException();
         }
 
-        public void OnError(Exception error)
-        {
-            throw new NotImplementedException();
-        }
+        public void OnError(Exception error) =>_monitor.OnError(error, "ERROR");
 
         public void OnPublish(byte[] value)
         {
-            _messageRelay?.Invoke(value);
+            _monitor.OnNext(value);
             var m = new T();
             m.Decode(value);
             foreach (var observer in _observers)
@@ -227,7 +227,7 @@ namespace AARC.Mesh.TCP
         {
             // Todo: Need something to allow encoding switching
             var bytes = value.Encode(0);
-            _messageRelay?.Invoke(bytes);
+            _monitor.OnNext(bytes);
             foreach (var transportId in value.Routes)
                 if (_meshServices.ContainsKey(transportId))
                 {
@@ -237,7 +237,8 @@ namespace AARC.Mesh.TCP
                     else
                     {
                         // Todo: What if we cant remove?
-                        _logger.LogInformation($"{transportId}: Disconnected - Removing");
+                        var status = $"{transportId}: Disconnected - Removing";
+                        _logger.LogInformation(status);
                         if (_meshServices.TryRemove(transportId, out service))
                             service.Dispose();
                     }

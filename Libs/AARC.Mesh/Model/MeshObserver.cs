@@ -42,5 +42,7 @@ namespace AARC.Mesh.Model
         public void RegisterReceiverChannels(MeshDictionary<MeshMessage> inputQChannels) { }
 
         public void RegistePublisherChannels(MeshDictionary<MeshMessage> outputChannels) => _channelProxy.RegistePublisherChannels(outputChannels);
+
+        public void RegisterMonitor(IMonitor monitor) => _channelProxy.RegisterMonitor(monitor);
     }
 }

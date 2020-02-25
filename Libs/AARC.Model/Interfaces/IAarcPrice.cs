@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace AARC.Model.Interfaces
+﻿namespace AARC.Model.Interfaces
 {
     public interface IAarcPrice
     {

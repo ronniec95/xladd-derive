@@ -12,7 +12,10 @@ namespace AARC.Mesh.Model
             MessageIn = 0,
             MessageOut = 1,
             NTPMode = 2,
-            ONConnect = 3,
+            OnConnect = 3,
+            INFO = 252,
+            DEBUG = 253,
+            WARN = 254,
             ERROR = 255
         };
         /// <summary>

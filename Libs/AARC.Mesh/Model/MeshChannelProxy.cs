@@ -10,6 +10,10 @@ namespace AARC.Mesh.Model
         private readonly ChannelMetrics _metrics;
 
         /// <summary>
+        /// Mechanism for signalling errors or status to the MonitorService
+        /// </summary>
+        private IMonitor _monitor;
+        /// <summary>
         /// Input Channel Names are past to the discovery service to help client/servers find matches
         /// </summary>
         public string InputChannelAlias { get; }
@@ -24,12 +28,16 @@ namespace AARC.Mesh.Model
         /// </summary>
         public Action<Uri> OnConnect { get; set; }
 
+        /// <summary>
+        /// Future extension that Ronnie asked for
+        /// </summary>
         public int ClusterType { get; }
 
         private MeshChannelProxy()
         {
             _metrics = new ChannelMetrics { ReturnType = typeof(T) };
             _observers = new List<IObserver<T>>();
+            _monitor = null;
         }
 
         public MeshChannelProxy(string inputChannelName = null, string outputChannelName = null, int clusterType = 0)
@@ -70,6 +78,12 @@ namespace AARC.Mesh.Model
         }
 
         /// <summary>
+        /// The monitor provides 
+        /// </summary>
+        /// <param name="monitor"></param>
+        public void RegisterMonitor(IMonitor monitor) => _monitor = monitor;
+
+        /// <summary>
         /// Register receiver channels and subscribe to updates
         /// </summary>
         /// <param name="inputChannels"></param>
@@ -99,8 +113,7 @@ namespace AARC.Mesh.Model
         public void OnError(Exception error)
         {
             ++_metrics.Errors;
-            // Todo: Send to DS
-            //throw new NotImplementedException();
+            _monitor?.OnError(error, InputChannelAlias ?? OutputChannelAlias);
         }
 
         public void OnNext(MeshMessage item)
