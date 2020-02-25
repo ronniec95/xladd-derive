@@ -15,22 +15,23 @@ namespace AARC.MeshTests
             throw new NotImplementedException();
         }
 
-        public IMeshServiceTransport Create(string url)
-        {
-            throw new NotImplementedException();
-        }
-
-        public IMeshServiceTransport Create(Uri url)
-        {
-            throw new NotImplementedException();
-        }
 
         public IMeshServiceTransport Create(IDisposable dispose)
         {
             throw new NotImplementedException();
         }
 
-        public void MessageRelay(byte[] bytes)
+        public IMeshServiceTransport Create(string url, ChannelWriter<byte[]> channelWriter)
+        {
+            throw new NotImplementedException();
+        }
+
+        public IMeshServiceTransport Create(Uri URI, ChannelWriter<byte[]> channelWriter)
+        {
+            throw new NotImplementedException();
+        }
+
+        public IMeshServiceTransport Create(IDisposable dispose, ChannelWriter<byte[]> channelWriter)
         {
             throw new NotImplementedException();
         }

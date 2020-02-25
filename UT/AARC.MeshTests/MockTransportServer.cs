@@ -17,18 +17,21 @@ namespace AARC.MeshTests
         private readonly ConcurrentDictionary<Uri, IMeshServiceTransport> _meshServices;
 
         public int MonitorPeriod { get; }
+        public int Port { get; set; }
         private CancellationTokenSource _localCancelSource;
         private ManualResetEvent _listenAcceptEvent;
         private ILogger<MockTransportServer> _logger;
         private IMeshTransportFactory _qServiceFactory;
         private readonly Channel<byte[]> _parentReceiver;
+        private readonly IMonitor _monitor;
         private CancellationToken _localct;
         protected byte _msgEncoderType;
 
-        public MockTransportServer(ILogger<MockTransportServer> logger, IMeshTransportFactory qServiceFactory)
+        public MockTransportServer(ILogger<MockTransportServer> logger, IMonitor monitor, IMeshTransportFactory qServiceFactory)
         {
             _localCancelSource = new CancellationTokenSource();
             _listenAcceptEvent = new ManualResetEvent(false);
+            _monitor = monitor;
             _logger = logger;
             _qServiceFactory = qServiceFactory;
             _parentReceiver = Channel.CreateUnbounded<byte[]>();
@@ -38,6 +41,8 @@ namespace AARC.MeshTests
             _msgEncoderType = 0;
             URI = new Uri("tcp://localhost:0");
         }
+
+        public void SetPort(int port) => Port = port;
 
         public Uri URI { get; set; }
 
@@ -96,12 +101,12 @@ namespace AARC.MeshTests
             }
 
             _logger.LogInformation($"Creating a connecting to {servicedetails}");
-            var qss = _qServiceFactory.Create(servicedetails);
+            var qss = _qServiceFactory.Create(servicedetails, _parentReceiver.Writer);
             _meshServices[servicedetails] = qss;
             return qss.Connected;
         }
 
-        public Task StartListeningServices(int port, CancellationToken cancellationToken)
+        public Task StartListeningServices(CancellationToken cancellationToken)
         {
             throw new NotImplementedException();
         }

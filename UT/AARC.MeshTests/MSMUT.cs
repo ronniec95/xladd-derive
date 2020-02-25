@@ -10,6 +10,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Newtonsoft.Json;
 using System.Reactive.Linq;
 using System;
+using AARC.Mesh.Interface;
 
 namespace AARC.MeshTests
 {
@@ -29,10 +30,10 @@ namespace AARC.MeshTests
         {
             var sentdata = new ConcurrentDictionary<string, ConcurrentQueue<IAarcPrice>>();
             var dssm = new DiscoveryServiceStateMachine<MeshMessage>();
-            var transport = new MockTransportServer(null, new MockTransportFactory());
+            var monitor = new MockMonitor();
+            var transport = new MockTransportServer(null, monitor, new MockTransportFactory());
 
-
-            var msm = new MeshServiceManager(new NullLogger<MeshServiceManager>(), dssm, new DiscoveryMonitor<DiscoveryMessage>(new NullLogger<DiscoveryMonitor<DiscoveryMessage>>(), null), transport);
+            var msm = new MeshServiceManager(new NullLogger<MeshServiceManager>(), dssm, new DiscoveryMonitor<DiscoveryMessage>(new NullLogger<DiscoveryMonitor<DiscoveryMessage>>(), null), monitor, transport);
             Assert.IsNotNull(msm);
 
             var receiveSubscriber = new MeshObservable<int>("receivechannel");
@@ -85,10 +86,10 @@ namespace AARC.MeshTests
         {
             var sentdata = new ConcurrentDictionary<string, ConcurrentQueue<IAarcPrice>>();
             var dssm = new DiscoveryServiceStateMachine<MeshMessage>();
-            var transport = new MockTransportServer(null, new MockTransportFactory());
+            var monitor = new MockMonitor();
+            var transport = new MockTransportServer(null, monitor, new MockTransportFactory());
 
-
-            var msm = new MeshServiceManager(new NullLogger<MeshServiceManager>(), dssm, new DiscoveryMonitor<DiscoveryMessage>(new NullLogger<DiscoveryMonitor<DiscoveryMessage>>(), null), transport);
+            var msm = new MeshServiceManager(new NullLogger<MeshServiceManager>(), dssm, new DiscoveryMonitor<DiscoveryMessage>(new NullLogger<DiscoveryMonitor<DiscoveryMessage>>(), null), monitor, transport);
             Assert.IsNotNull(msm);
 
             // Subscribe to portfolio tag/list of tickers
@@ -208,10 +209,10 @@ foreach (var ticker in message.Item2)
         public void TestMeshSetObserable()
         {
             var dssm = new DiscoveryServiceStateMachine<MeshMessage>();
-            var transport = new MockTransportServer(null, new MockTransportFactory());
+            var monitor = new MockMonitor();
+            var transport = new MockTransportServer(null, monitor, new MockTransportFactory());
 
-
-            var msm = new MeshServiceManager(new NullLogger<MeshServiceManager>(), dssm, new DiscoveryMonitor<DiscoveryMessage>(new NullLogger<DiscoveryMonitor<DiscoveryMessage>>(), null), transport);
+            var msm = new MeshServiceManager(new NullLogger<MeshServiceManager>(), dssm, new DiscoveryMonitor<DiscoveryMessage>(new NullLogger<DiscoveryMonitor<DiscoveryMessage>>(), null), monitor, transport);
             Assert.IsNotNull(msm);
 
             // Subscribe to portfolio tag/list of tickers
