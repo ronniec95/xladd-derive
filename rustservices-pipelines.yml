@@ -9,11 +9,13 @@ trigger:
 pool:
   vmImage: 'ubuntu-latest'
   
-container: 'rust:latest'
-
 steps:
-    - script: rustup component add rustfmt
-      displayName: Install Rustfmt
-    - script: cargo fmt --all -- --check
-      displayName: Run Rustfmt
+  - script: |
+      curl https://sh.rustup.rs -sSf | sh -s -- -y
+      echo "##vso[task.setvariable variable=PATH;]$PATH:$HOME/.cargo/bin"
+    displayName: Install rust
+  - script: cargo build --all
+    displayName: Cargo build
+  - script: cargo test --all
+    displayName: Cargo test
 
