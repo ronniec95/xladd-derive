@@ -8,13 +8,16 @@ trigger:
 
 pool:
   vmImage: 'ubuntu-latest'
-  
+
+variables:
+  net_lib_path: $Build.Repository.LocalPath/Rust/net_lib
+
 steps:
   - script: |
       curl https://sh.rustup.rs -sSf | sh -s -- -y
       echo "##vso[task.setvariable variable=PATH;]$PATH:$HOME/.cargo/bin"
-    displayName: Install rust
-    workingDirectory: rust/net_lib
+    displayName: Install rust '$net_lib_path'
+    workingDirectory: '$net_lib_path'
   - script: cargo build --all
     displayName: Cargo build
   - script: cargo test --all
