@@ -16,7 +16,7 @@ steps:
   - script: |
       curl https://sh.rustup.rs -sSf | sh -s -- -y
       echo "##vso[task.setvariable variable=PATH;]$PATH:$HOME/.cargo/bin"
-    displayName: Install rust '$net_lib_path'
+    displayName: Install rust '$(net_lib_path)'
     workingDirectory: '$(net_lib_path)'
   - script: cargo build --all
     displayName: Cargo build
