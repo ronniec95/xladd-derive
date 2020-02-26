@@ -1,0 +1,19 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- master
+
+pool:
+  vmImage: 'ubuntu-latest'
+  
+container: 'rust:latest'
+
+steps:
+    - script: rustup component add rustfmt
+      displayName: Install Rustfmt
+    - script: cargo fmt --all -- --check
+      displayName: Run Rustfmt
+
