@@ -13,3 +13,4 @@ obj
 /.history
 /.vscode
 Cargo.lock
+!src/bin
