@@ -1,6 +1,7 @@
 *~
 .DS_Store
-bin
+bin/Debug
+bin/Release
 obj
 .vs
 .bin
