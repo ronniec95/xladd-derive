@@ -7,6 +7,7 @@ use chrono::{Duration, Utc};
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::executor::ThreadPool;
 use futures::task::SpawnExt;
+use log::*;
 use serde::Serialize;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -49,7 +50,7 @@ impl SmartMonitor {
         self.pool.spawn(async move {
             match SmartMonitor::consume(&channel_name, receiver).await {
                 Ok(_) => (),
-                Err(e) => eprintln!("failed creating database {:?}", e),
+                Err(e) => error!("failed creating database {:?}", e),
             }
         })?;
         if let Ok(mut senders) = self.senders.try_lock() {
@@ -65,7 +66,7 @@ impl SmartMonitor {
         let mut latency = 0i64;
         loop {
             let mut msg: Cow<'_, MonitorMsg> = Cow::Owned(read_sm_message(&mut stream).await?);
-            eprintln!("Got smart mon msg {:?}", msg);
+            debug!("Got smart mon msg {:?}", msg);
             match msg.payload {
                 Payload::NtpTimestamp => {
                     read_timestamp_async(&mut stream).await?;
@@ -92,7 +93,7 @@ impl SmartMonitor {
 
     pub async fn listen(&self, addr: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
         let listener = TcpListener::bind(addr).await.unwrap();
-        eprintln!("Listening on {:?}", listener.local_addr());
+        info!("Listening on {:?}", listener.local_addr());
         let mut incoming = listener.incoming();
         while let Some(stream) = incoming.next().await {
             let stream = stream?;
@@ -100,7 +101,7 @@ impl SmartMonitor {
             self.pool.spawn(async move {
                 match SmartMonitor::manage_monitor(stream, sender_map).await {
                     Ok(_) => (),
-                    Err(e) => eprintln!("error {:?}", e),
+                    Err(e) => error!("error {:?}", e),
                 }
             })?;
         }
@@ -159,7 +160,7 @@ impl SmartMonitorClient {
         loop {
             match self.run(addr).await {
                 Ok(_) => (),
-                Err(e) => eprintln!("Socket disconnected, retrying after a few seconds {:?}", e),
+                Err(e) => error!("Socket disconnected, retrying after a few seconds {:?}", e),
             }
             async_std::task::sleep(std::time::Duration::from_secs(5)).await;
         }
@@ -172,7 +173,7 @@ impl SmartMonitorClient {
                     write_sm_message(&mut conn, msg).await?;
                 }
             } else {
-                eprintln!("No message to receive, waiting 2s");
+                error!("No message to receive, waiting 2s");
                 async_std::task::sleep(std::time::Duration::from_secs(2)).await;
             }
         }

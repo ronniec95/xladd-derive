@@ -1,11 +1,14 @@
 use async_std::net::TcpStream;
+use async_std::sync::Arc;
 use chrono::NaiveDateTime;
 use cookie_factory::{bytes::*, combinator::slice, gen, GenError};
 use futures::io::{AsyncReadExt, AsyncWriteExt};
+use log::*;
 use nom::bytes::streaming::*;
 use nom::combinator::*;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
+use serde_derive::Serialize;
 use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::convert::TryInto;
@@ -22,13 +25,17 @@ pub enum DiscoveryState {
     Error = 255,
 }
 
-#[derive(PartialEq, Debug, Copy, Clone, PartialOrd, Ord, Eq, FromPrimitive, ToPrimitive)]
+#[derive(
+    PartialEq, Debug, Copy, Clone, PartialOrd, Ord, Eq, FromPrimitive, ToPrimitive, Serialize,
+)]
 pub enum ChannelType {
     Input,
     Output,
 }
 
-#[derive(Clone, Copy, Ord, PartialEq, PartialOrd, Eq, Debug, FromPrimitive, ToPrimitive)]
+#[derive(
+    Clone, Copy, Ord, PartialEq, PartialOrd, Eq, Debug, FromPrimitive, ToPrimitive, Serialize,
+)]
 pub enum MsgFormat {
     Bincode = 0,
     MsgPack = 1,
@@ -72,7 +79,7 @@ impl Eq for Channel {}
 pub struct DiscoveryMessage {
     pub state: DiscoveryState,
     pub uri: Url,
-    pub channels: Vec<Channel>,
+    pub channels: Vec<Arc<Channel>>,
 }
 
 #[derive(Clone, Ord, PartialEq, PartialOrd, Eq, FromPrimitive, ToPrimitive, Debug)]
@@ -80,7 +87,7 @@ pub enum Payload {
     Entry,
     Exit,
     NtpTimestamp,
-    Error,
+    Error = 255,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -117,7 +124,7 @@ impl fmt::Display for Channel {
 impl fmt::Display for DiscoveryMessage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "{:?} {} =>", self.state, self.uri.unparse())?;
-        for ch in &self.channels {
+        for ch in &*self.channels {
             write!(f, "\t{}", ch)?;
         }
         Ok(())
@@ -126,10 +133,13 @@ impl fmt::Display for DiscoveryMessage {
 
 impl fmt::Display for MonitorMsg {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} [{}] [{:?}] [{:?}] => ", self.channel_name,self.adj_time_stamp,self.payload,&self.data)
+        write!(
+            f,
+            "{} [{}] [{:?}] [{:?}] => ",
+            self.channel_name, self.adj_time_stamp, self.payload, &self.data
+        )
     }
 }
-
 
 // Helper functions
 
@@ -257,7 +267,7 @@ fn read_ds_msg(input: &[u8]) -> nom::IResult<&[u8], DiscoveryMessage> {
     let mut input = input;
     for _ in 0..channel_cnt {
         let (rest, channel) = read_channel(input)?;
-        channels.push(channel);
+        channels.push(Arc::new(channel));
         input = rest;
     }
     Ok((
@@ -280,7 +290,7 @@ fn write_ds_msg<'a>(
     let (output, sz) = gen(le_u64(msg.channels.len() as u64), output)?;
     let mut rest = output;
     let mut sz = sz;
-    for ch in &msg.channels {
+    for ch in &*msg.channels {
         let (output, _) = write_channel(&ch, rest)?;
         rest = output;
         sz = sz;
@@ -313,7 +323,7 @@ pub async fn write_msg(
     buf.resize(1024, 0u8);
     let (remain, _) = write_ds_msg(&msg, buf.as_mut_slice())?;
     let sz = 1024 - remain.len();
-    eprintln!("Sending msg {}", &msg);
+    debug!("Sending msg {}", &msg);
     stream.write(&u32::to_le_bytes(sz as u32)).await?;
     stream.write_all(&buf[0..sz]).await?;
     Ok(())
@@ -342,7 +352,7 @@ fn read_timestamp(input: &[u8]) -> nom::IResult<&[u8], NaiveDateTime> {
 }
 
 pub async fn read_timestamp_async(
-    mut stream: &mut TcpStream,
+    stream: &mut TcpStream,
 ) -> Result<NaiveDateTime, Box<dyn std::error::Error>> {
     let mut buf = [0u8; 12];
     stream.read_exact(&mut buf).await?;
@@ -353,7 +363,7 @@ pub async fn read_timestamp_async(
 }
 
 pub async fn write_timestamp_async(
-    mut stream: &mut TcpStream,
+    stream: &mut TcpStream,
     dt: NaiveDateTime,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut buf = [0u8; 12];
@@ -368,7 +378,7 @@ fn read_sm_msg(input: &[u8]) -> nom::IResult<&[u8], MonitorMsg> {
     let (input, payload) = read_enum::<Payload>(input)?;
     let (input, _) = read_u32(input)?; // graph id
     let (input, _) = read_u32(input)?; // execution id
-    let (input, _) = read_str(input)?; // transport
+    let (input, _) = read_str(input)?; // service
     let (input, name) = read_str(input)?; // channel name
 
     let (input, data) = match payload {
@@ -517,7 +527,7 @@ mod tests {
         let msg = DiscoveryMessage {
             state: DiscoveryState::Connect,
             uri: urlparse("tcp://127.0.0.1:12345"),
-            channels: vec![Channel {
+            channels: vec![Arc::new(Channel {
                 name: "mychannel".to_string(),
                 instance: 0,
                 channel_type: ChannelType::Input,
@@ -526,7 +536,7 @@ mod tests {
                     urlparse("tcp://192.168.1.1:55126"),
                     urlparse("tcp://192.145.0.27:156"),
                 ],
-            }],
+            })],
         };
         let mut buf = SmallVec::<[u8; 1024]>::with_capacity(1024);
         buf.resize(1024, 0u8);

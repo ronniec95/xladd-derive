@@ -22,6 +22,9 @@ nom="^5"
 cookie-factory="^0.3"
 urlparse = "^0.7"
 smallvec="^1"
+log = "^0.4.8"
+simplelog = "^0.7"
+tide = "0.6"
 
 [dependencies.rand]
 version = "^0.7"

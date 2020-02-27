@@ -32,7 +32,7 @@ pub fn insert(conn: &Connection, msg: &MonitorMsg) -> Result<usize, Box<dyn std:
             blob.write(&msg.data)?;
             Ok(1)
         }
-        Payload::Exit | _ => Ok(conn.execute(
+        Payload::Exit | Payload::NtpTimestamp => Ok(conn.execute(
             "INSERT INTO TS_DATA (Timestamp,Enter,Format) VALUES (?1,?2,?3)",
             params![msg.adj_time_stamp, 1, 0],
         )?),

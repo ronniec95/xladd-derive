@@ -1,12 +1,13 @@
+use crate::discovery_ws::web_service;
 use crate::msg_serde::*;
 use async_std::net::SocketAddr;
 use async_std::net::{TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::sync::{Arc, Mutex};
 use async_std::task::sleep;
-use chrono::Utc;
 use futures::executor::ThreadPool;
 use futures::task::SpawnExt;
+use log::*;
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use std::collections::BTreeSet;
@@ -68,20 +69,30 @@ impl DiscoveryServer {
     async fn on_queue_data(
         &self,
         msg: DiscoveryMessage,
-        channels: &mut BTreeSet<Channel>,
+        channels: Arc<Mutex<BTreeSet<Arc<Channel>>>>,
+        local_channels: &mut BTreeSet<Arc<Channel>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        msg.channels.iter().for_each(|ch| {
-            channels.insert(ch.clone());
-        });
-        write_msg(
-            self.stream.clone(),
-            DiscoveryMessage {
-                state: DiscoveryState::QueueData,
-                uri: msg.uri,
-                channels: channels.iter().cloned().collect::<Vec<_>>(),
-            },
-        )
-        .await?;
+        loop {
+            for ch in msg.channels.iter() {
+                local_channels.insert(ch.clone());
+            }
+            if let Some(mut channels) = channels.try_lock() {
+                for ch in local_channels.iter() {
+                    channels.insert(ch.clone());
+                }
+
+                write_msg(
+                    self.stream.clone(),
+                    DiscoveryMessage {
+                        state: DiscoveryState::QueueData,
+                        uri: msg.uri,
+                        channels: channels.iter().cloned().collect::<Vec<_>>(),
+                    },
+                )
+                .await?;
+                break;
+            }
+        }
         Ok(())
     }
 
@@ -91,25 +102,21 @@ impl DiscoveryServer {
 
     async fn run_loop(
         &self,
-        channels: Arc<Mutex<BTreeSet<Channel>>>,
-        local_channels: &mut Vec<Channel>,
+        channels: Arc<Mutex<BTreeSet<Arc<Channel>>>>,
+        mut local_channels: &mut BTreeSet<Arc<Channel>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut rng = SmallRng::from_entropy();
         loop {
-            let msg = read_msg(self.stream.clone()).await?;
-            eprintln!("Received message {} {}", Utc::now(), msg);
+            let stream = self.stream.clone();
+            let msg = read_msg(stream).await?;
+            info!("Received message {}", msg);
             match msg.state {
                 DiscoveryState::Connect => self.on_connect(msg, &mut rng).await?,
                 DiscoveryState::ConnectResponse => self.on_connect_response(msg).await?,
-                DiscoveryState::QueueData => loop {
-                    if let Some(mut channels) = channels.try_lock() {
-                        self.on_queue_data(msg, &mut channels).await?;
-                        for ch in channels.iter() {
-                            local_channels.push(ch.clone());
-                        }
-                        break;
-                    }
-                },
+                DiscoveryState::QueueData => {
+                    self.on_queue_data(msg, channels.clone(), &mut local_channels)
+                        .await?;
+                }
                 DiscoveryState::Error => self.on_error(msg).await?,
             }
         }
@@ -121,29 +128,35 @@ pub async fn run_server(addr: SocketAddr) -> Result<(), Box<dyn std::error::Erro
     let channels = Arc::new(Mutex::new(BTreeSet::new()));
 
     let listener = TcpListener::bind(addr).await.unwrap();
-    eprintln!("Server is listening on {:?}", listener.local_addr());
+    info!("Server is listening on {:?}", listener.local_addr());
     let mut incoming = listener.incoming();
+
+    let web_channels = channels.clone();
+    // Spawn off the web server
+    pool.spawn(async {
+        web_service(web_channels).await;
+    })?;
     while let Some(stream) = incoming.next().await {
         let stream = stream?.clone();
         let global_channels = channels.clone();
         pool.spawn(async move {
             let discovery_service = DiscoveryServer::new(stream.clone());
-            let mut local_channels = Vec::new();
+            let mut local_channels = BTreeSet::new();
             match discovery_service
                 .run_loop(global_channels.clone(), &mut local_channels)
                 .await
             {
                 Ok(_) => (),
                 Err(e) => {
-                    eprintln!(
+                    error!(
                         "failed connection from {} error: {}",
                         stream.peer_addr().unwrap(),
                         e
                     );
                     loop {
                         if let Some(mut channels) = global_channels.try_lock() {
-                            for ch in &local_channels {
-                                eprintln!("Removing channels {}", ch);
+                            for ch in local_channels.iter() {
+                                debug!("Removing channels {}", ch);
                                 channels.remove(ch);
                             }
                             break;
@@ -163,43 +176,43 @@ fn local_address() -> Url {
     urlparse::urlparse("tcp://127.0.0.1:0")
 }
 
-fn process_msg(msg: &DiscoveryMessage, channels: &[Channel]) -> DiscoveryMessage {
+fn process_msg(msg: &DiscoveryMessage, channels: Vec<Arc<Channel>>) -> DiscoveryMessage {
     match msg.state {
         DiscoveryState::Error => DiscoveryMessage {
             state: DiscoveryState::Connect,
             uri: local_address(),
-            channels: channels.to_vec(),
+            channels: channels,
         },
         DiscoveryState::Connect => DiscoveryMessage {
             state: DiscoveryState::ConnectResponse,
             uri: local_address(),
-            channels: channels.to_vec(),
+            channels: channels,
         },
         DiscoveryState::ConnectResponse => DiscoveryMessage {
             state: DiscoveryState::QueueData,
             uri: local_address(),
-            channels: channels.to_vec(),
+            channels: channels,
         },
         DiscoveryState::QueueData => DiscoveryMessage {
             state: DiscoveryState::QueueData,
             uri: local_address(),
-            channels: channels.to_vec(),
+            channels: channels,
         },
     }
 }
 
 pub async fn run_client(
     server: SocketAddr,
-    channels: &[Channel],
+    channels: Vec<Arc<Channel>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     loop {
         let stream = TcpStream::connect(server).await?;
         let msg = read_msg(stream).await?;
-        let next_msg = process_msg(&msg, &channels);
+        let next_msg = process_msg(&msg, channels.clone());
         if next_msg.state == DiscoveryState::QueueData {
             // tcpserver.init(next_msg.uri,channels); send mmessages to tcpservice using channels
         } else {
-            eprintln!("Waiting for 10 seconds");
+            debug!("Waiting for 10 seconds");
             sleep(std::time::Duration::from_secs(10)).await;
         }
     }
