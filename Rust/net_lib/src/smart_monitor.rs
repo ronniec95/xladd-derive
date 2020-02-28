@@ -1,8 +1,10 @@
 use crate::msg_serde::*;
 use crate::smart_monitor_sqlite;
+use crate::smart_monitor_ws;
 use async_std::net::SocketAddr;
 use async_std::net::{TcpListener, TcpStream};
 use async_std::stream::StreamExt;
+use async_std::sync::{Arc, Mutex};
 use chrono::{Duration, Utc};
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::executor::ThreadPool;
@@ -11,7 +13,7 @@ use log::*;
 use serde::Serialize;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex, Once};
+use std::sync::Once;
 
 //
 // Server Implmentation
@@ -53,7 +55,7 @@ impl SmartMonitor {
                 Err(e) => error!("failed creating database {:?}", e),
             }
         })?;
-        if let Ok(mut senders) = self.senders.try_lock() {
+        if let Some(mut senders) = self.senders.try_lock() {
             senders.insert(ch, sender);
         }
         Ok(())
@@ -68,15 +70,25 @@ impl SmartMonitor {
             let mut msg: Cow<'_, MonitorMsg> = Cow::Owned(read_sm_message(&mut stream).await?);
             debug!("Got smart mon msg {:?}", msg);
             match msg.payload {
-                Payload::NtpTimestamp => {
+                Payload::Latency => {
                     read_timestamp_async(&mut stream).await?;
                     let t1 = Utc::now().naive_utc();
                     write_timestamp_async(&mut stream, t1).await?;
                     let ntp = read_ntp_msg(&mut stream).await?;
                     latency = ntp.offset as i64 + ntp.delay as i64;
+                    if let Some(mut sender_map) = sender_map.try_lock() {
+                        if let Some(sender) = sender_map.get_mut(&msg.channel_name) {
+                            msg.to_mut().adj_time_stamp =
+                                msg.adj_time_stamp + Duration::milliseconds(latency);
+                            msg.to_mut().data.extend(&i64::to_le_bytes(latency));
+                            while let Err(_) = sender.try_send(msg.clone()) {
+                                std::thread::sleep(std::time::Duration::from_micros(100));
+                            }
+                        }
+                    }
                 }
-                _ => loop {
-                    if let Ok(mut sender_map) = sender_map.try_lock() {
+                Payload::Cpu | Payload::Memory | _ => loop {
+                    if let Some(mut sender_map) = sender_map.try_lock() {
                         if let Some(sender) = sender_map.get_mut(&msg.channel_name) {
                             msg.to_mut().adj_time_stamp =
                                 msg.adj_time_stamp + Duration::milliseconds(latency);
@@ -95,6 +107,16 @@ impl SmartMonitor {
         let listener = TcpListener::bind(addr).await.unwrap();
         info!("Listening on {:?}", listener.local_addr());
         let mut incoming = listener.incoming();
+        {
+            let sender_map = self.senders.lock().await;
+            let channels = sender_map.keys().cloned().collect::<Vec<_>>();
+            self.pool.spawn(async move {
+                match smart_monitor_ws::web_service(&channels).await {
+                    Ok(_) => (),
+                    Err(e) => error!("error serving website {:?}", e),
+                }
+            })?;
+        }
         while let Some(stream) = incoming.next().await {
             let stream = stream?;
             let sender_map = self.senders.clone();

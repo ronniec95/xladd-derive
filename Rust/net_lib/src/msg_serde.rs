@@ -86,7 +86,9 @@ pub struct DiscoveryMessage {
 pub enum Payload {
     Entry,
     Exit,
-    NtpTimestamp,
+    Latency,
+    Cpu,
+    Memory,
     Error = 255,
 }
 
@@ -382,13 +384,13 @@ fn read_sm_msg(input: &[u8]) -> nom::IResult<&[u8], MonitorMsg> {
     let (input, name) = read_str(input)?; // channel name
 
     let (input, data) = match payload {
-        Payload::Entry | Payload::Error => {
+        Payload::Entry | Payload::Cpu | Payload::Memory | Payload::Error => {
             let rest = input;
             let (input, sz) = read_usize(rest)?;
             let (input, sz) = take(sz)(input)?;
             Ok((input, sz))
         }
-        Payload::NtpTimestamp => Ok((input, &[][..])),
+        Payload::Latency => Ok((input, &[][..])),
         Payload::Exit => Ok((input, &[][..])),
     }?;
     Ok((

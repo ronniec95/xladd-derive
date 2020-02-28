@@ -9,6 +9,21 @@ pub fn create_channel_table(name: &str) -> Result<Connection, Box<dyn std::error
             Enter BOOLEAN NOT NULL, Format INTEGER NOT NULL, Msg BLOB NULL DEFAULT (x''))",
         params![],
     )?;
+    // Latency
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS LATENCY (Timestamp TEXT PRIMARY KEY NOT NULL UNIQUE, VALUE DOUBLE NOT NULL)",
+        params![],
+    )?;
+    // Memory
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS MEMORY (Timestamp TEXT PRIMARY KEY NOT NULL UNIQUE, VALUE DOUBLE NOT NULL)",
+        params![],
+    )?;
+    // CPU
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS CPU (Timestamp TEXT PRIMARY KEY NOT NULL UNIQUE, VALUE DOUBLE NOT NULL)",
+        params![],
+    )?;
     Ok(conn)
 }
 
@@ -32,7 +47,19 @@ pub fn insert(conn: &Connection, msg: &MonitorMsg) -> Result<usize, Box<dyn std:
             blob.write(&msg.data)?;
             Ok(1)
         }
-        Payload::Exit | Payload::NtpTimestamp => Ok(conn.execute(
+        Payload::Latency => Ok(conn.execute(
+            "INSERT INTO LATENCY (Timestamp,VALUE) VALUES (?1,?2)",
+            params![msg.adj_time_stamp, msg.data.first().unwrap()],
+        )?),
+        Payload::Cpu => Ok(conn.execute(
+            "INSERT INTO CPU (Timestamp,VALUE) VALUES (?1,?2)",
+            params![msg.adj_time_stamp, msg.data.first().unwrap()],
+        )?),
+        Payload::Memory => Ok(conn.execute(
+            "INSERT INTO MEMORY (Timestamp,VALUE) VALUES (?1,?2)",
+            params![msg.adj_time_stamp, msg.data.first().unwrap()],
+        )?),
+        Payload::Exit => Ok(conn.execute(
             "INSERT INTO TS_DATA (Timestamp,Enter,Format) VALUES (?1,?2,?3)",
             params![msg.adj_time_stamp, 1, 0],
         )?),
