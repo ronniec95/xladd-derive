@@ -16,21 +16,15 @@ namespace AARC.Service.Hosted
     {
         private readonly ILogger<MeshHostedService> _logger;
         private readonly MeshServiceManager _msm;
-        private readonly Uri _discoveryUri;
         private readonly List<IMeshReactor<MeshMessage>> _meshServices;
 
-        public MeshHostedService(ILogger<MeshHostedService> logger, MeshServiceManager meshServiceManager, IMeshNodeFactory nodeFactory, IConfiguration configuration)
+        public MeshHostedService(ILogger<MeshHostedService> logger, MeshServiceManager meshServiceManager, MeshConfig config, IMeshNodeFactory nodeFactory)
         {
             _msm = meshServiceManager;
-            _discoveryUri = new Uri(configuration.GetValue<string>("ds", "tcp://localhost:9999"));
 
             _logger = logger;
-            // Todo: Bit of a hack as DS should supply port
-            _msm.ListeningPort = configuration.GetValue<Int32>("port", 0);
 
-            var rawservices = configuration.GetValue<string>("services", null);
-
-            var services = rawservices?.Split(',');
+            var services = config.Services?.Split(',');
 
             if (services != null)
             {
@@ -50,7 +44,7 @@ namespace AARC.Service.Hosted
         {
             _logger?.LogInformation($"Starting {this.GetType().Name}");
 
-            var tasks = _msm.StartService(_discoveryUri, cancellationToken);
+            var tasks = _msm.StartService(cancellationToken);
 
             foreach (var service in _meshServices)
                 try

@@ -4,6 +4,7 @@ using System.Threading.Channels;
 using System.Threading.Tasks;
 using AARC.Mesh.Interface;
 using AARC.Mesh.Model;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace AARC.Mesh.SubService
@@ -24,7 +25,7 @@ namespace AARC.Mesh.SubService
         public Task MonitorReceive { get; }
 
 
-        public MeshMonitor(Channel<byte[]> sendMessageChannel, IMeshTransportFactory transportFactory, ILogger<MeshMonitor> logger)
+        public MeshMonitor(Channel<byte[]> sendMessageChannel, MeshConfig configuration, IMeshTransportFactory transportFactory, ILogger<MeshMonitor> logger)
         {
             _localCancelSource = new CancellationTokenSource();
             _sendMessageChannel = sendMessageChannel;
@@ -32,10 +33,10 @@ namespace AARC.Mesh.SubService
             _byteWriter = _sendMessageChannel.Writer;
             _chServiceFactory = transportFactory;
             _logger = logger;
-            _uri = new Uri("tcp://ronniepc:9900");
-            _logger.LogDebug($"tcp://{MeshUtilities.GetLocalHostFQDN()}");
+            _uri = configuration.SmartMonitor;
 
             URI = new Uri($"tcp://{MeshUtilities.GetLocalHostFQDN()}");
+            _logger.LogDebug(URI.ToString());
 
             MessageRelay = MeshChannelReader.ReadTask(_sendMessageChannel.Reader, OnPublish, _logger, _localCancelSource.Token);
             MonitorReceive = MeshChannelReader.ReadTask(_receiveMessageChannel.Reader, OnReceive, _logger, _localCancelSource.Token);

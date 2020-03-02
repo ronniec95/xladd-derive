@@ -24,8 +24,6 @@ namespace AARC.Mesh.SubService
         private readonly IMonitor _monitor;
         private DiscoveryMonitor<DiscoveryMessage> _discoveryMonitor;
 
-        public int ListeningPort { get { return _dssmc.Port; } set { _dssmc.Port = value; } }
-
         public Task DiscoveryService { get; private set; }
         public Task ListenService { get; private set; }
         public Task PublishService { get; private set; }
@@ -136,15 +134,15 @@ namespace AARC.Mesh.SubService
             }
         }
 
-        public Task StartService(Uri discoveryUrl, CancellationToken token)
+        public Task StartService(CancellationToken token)
         {
-            DiscoveryService = StartDiscoveryServices(discoveryUrl, token);
+            DiscoveryService = StartDiscoveryServices(token);
             ListenService = StartListeningServices(token);
             PublishService = StartPublisherConnections(token);
             return Task.WhenAll(DiscoveryService, ListenService, PublishService);
         }
 
-        public async Task StartDiscoveryServices(Uri uri, CancellationToken cancellationToken) => await _discoveryMonitor.StartListeningServices(uri, cancellationToken);
+        public async Task StartDiscoveryServices(CancellationToken cancellationToken) => await _discoveryMonitor.StartListeningServices(cancellationToken);
 
         /// <summary>
         /// down stream services will lookup the output queues from the DS and find out IP address and connect.

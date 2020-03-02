@@ -31,8 +31,9 @@ namespace AARC.Mesh.SubService
 
         protected DiscoveryStates _state = DiscoveryStates.Connect;
 
-        public DiscoveryServiceStateMachine()
+        public DiscoveryServiceStateMachine(MeshConfig config)
         {
+            Port = config.ListeningPort;
             RegistrationComplete = new ManualResetEvent(false);
             LocalInputChannels = new MeshDictionary<T>();
             LocalOutputChannels = new MeshDictionary<T>();

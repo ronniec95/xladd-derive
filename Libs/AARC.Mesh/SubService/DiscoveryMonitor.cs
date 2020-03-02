@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using AARC.Mesh.Interface;
 using System.Threading.Channels;
+using AARC.Mesh.Model;
 
 namespace AARC.Mesh.SubService
 {
@@ -17,6 +18,7 @@ namespace AARC.Mesh.SubService
         private readonly Channel<byte[]> _parentReceiver;
         private readonly Task ChannelReceiverProcessor;
         private readonly byte _msgEncoding;
+        private readonly Uri _discoveryUrl;
 
         private IMeshServiceTransport _transportService;
 
@@ -27,8 +29,9 @@ namespace AARC.Mesh.SubService
         public Action<T, string, string> DiscoveryErrorMessage { get; set; }
         public Action ResetDiscoveryState { get;  set; }
 
-        public DiscoveryMonitor(ILogger<DiscoveryMonitor<T>> logger, IMeshTransportFactory qServiceFactory)
+        public DiscoveryMonitor(ILogger<DiscoveryMonitor<T>> logger, MeshConfig config, IMeshTransportFactory qServiceFactory)
         {
+            _discoveryUrl = config.DiscoveryService;
             _transportService = null;
             _msgEncoding = 0;
             _localCancelSource = new CancellationTokenSource();
@@ -38,7 +41,7 @@ namespace AARC.Mesh.SubService
             ChannelReceiverProcessor = MeshChannelReader.ReadTask(_parentReceiver.Reader, OnPublish, _logger, _localCancelSource.Token);
         }
 
-        public async Task StartListeningServices(Uri discoveryUrl, CancellationToken cancellationToken)
+        public async Task StartListeningServices(CancellationToken cancellationToken)
         {
             await Task.Factory.StartNew(() =>
             {
@@ -60,7 +63,7 @@ namespace AARC.Mesh.SubService
                                     if (_transportService == null)
                                     {
                                         ResetDiscoveryState.Invoke();
-                                        _transportService = _qServiceFactory.Create(discoveryUrl, _parentReceiver.Writer);
+                                        _transportService = _qServiceFactory.Create(_discoveryUrl, _parentReceiver.Writer);
                                     }
 
                                     if (_transportService.Connected)

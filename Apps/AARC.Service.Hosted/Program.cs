@@ -50,13 +50,12 @@ namespace AARC.Service.Hosted
                                 .CreateLogger();
 
                     var service = hostContext.Configuration.GetValue<string>("service", "MeshDataFlow");
-                    var port = hostContext.Configuration.GetValue<string>("port", "");
 
                     // DiscoveryMonitor connects remotely? Needs Host/Port  
                     // MeshSocketServer allows remote and internal connections
                     services.AddOptions();
 
-                    MeshServiceConfig.Server(services);
+                    MeshServiceConfig.Server(hostContext.Configuration, services);
                     SocketServiceConfig.Transport(services);
 
                     services.AddDbContext<RDS.AARCContext>
