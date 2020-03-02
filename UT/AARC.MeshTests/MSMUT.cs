@@ -11,12 +11,30 @@ using Newtonsoft.Json;
 using System.Reactive.Linq;
 using System;
 using AARC.Mesh.Interface;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AARC.MeshTests
 {
     [TestClass]
     public class MSMUT
     {
+        MeshConfig _meshConfig;
+        DiscoveryServiceStateMachine<MeshMessage> dssm;
+
+        [TestInitialize]
+        public void SetUp()
+        {
+            var args = new string[] { };
+            var configuation = new ConfigurationBuilder()
+              .AddCommandLine(args)
+                .Build();
+
+            _meshConfig = new MeshConfig(configuation);
+
+            dssm = new DiscoveryServiceStateMachine<MeshMessage>(_meshConfig);
+        }
+
         [TestMethod]
         public void CreateStringObserver()
         {
@@ -29,11 +47,10 @@ namespace AARC.MeshTests
         public void TestMsM()
         {
             var sentdata = new ConcurrentDictionary<string, ConcurrentQueue<IAarcPrice>>();
-            var dssm = new DiscoveryServiceStateMachine<MeshMessage>();
             var monitor = new MockMonitor();
             var transport = new MockTransportServer(null, monitor, new MockTransportFactory());
 
-            var msm = new MeshServiceManager(new NullLogger<MeshServiceManager>(), dssm, new DiscoveryMonitor<DiscoveryMessage>(new NullLogger<DiscoveryMonitor<DiscoveryMessage>>(), null), monitor, transport);
+            var msm = new MeshServiceManager(new NullLogger<MeshServiceManager>(), dssm, new DiscoveryMonitor<DiscoveryMessage>(new NullLogger<DiscoveryMonitor<DiscoveryMessage>>(), _meshConfig, null), monitor, transport);
             Assert.IsNotNull(msm);
 
             var receiveSubscriber = new MeshObservable<int>("receivechannel");
@@ -85,11 +102,10 @@ namespace AARC.MeshTests
         public void TestDictionary()
         {
             var sentdata = new ConcurrentDictionary<string, ConcurrentQueue<IAarcPrice>>();
-            var dssm = new DiscoveryServiceStateMachine<MeshMessage>();
             var monitor = new MockMonitor();
             var transport = new MockTransportServer(null, monitor, new MockTransportFactory());
 
-            var msm = new MeshServiceManager(new NullLogger<MeshServiceManager>(), dssm, new DiscoveryMonitor<DiscoveryMessage>(new NullLogger<DiscoveryMonitor<DiscoveryMessage>>(), null), monitor, transport);
+            var msm = new MeshServiceManager(new NullLogger<MeshServiceManager>(), dssm, new DiscoveryMonitor<DiscoveryMessage>(new NullLogger<DiscoveryMonitor<DiscoveryMessage>>(), _meshConfig, null), monitor, transport);
             Assert.IsNotNull(msm);
 
             // Subscribe to portfolio tag/list of tickers
@@ -208,11 +224,10 @@ foreach (var ticker in message.Item2)
         [TestMethod]
         public void TestMeshSetObserable()
         {
-            var dssm = new DiscoveryServiceStateMachine<MeshMessage>();
             var monitor = new MockMonitor();
             var transport = new MockTransportServer(null, monitor, new MockTransportFactory());
 
-            var msm = new MeshServiceManager(new NullLogger<MeshServiceManager>(), dssm, new DiscoveryMonitor<DiscoveryMessage>(new NullLogger<DiscoveryMonitor<DiscoveryMessage>>(), null), monitor, transport);
+            var msm = new MeshServiceManager(new NullLogger<MeshServiceManager>(), dssm, new DiscoveryMonitor<DiscoveryMessage>(new NullLogger<DiscoveryMonitor<DiscoveryMessage>>(), _meshConfig, null), monitor, transport);
             Assert.IsNotNull(msm);
 
             // Subscribe to portfolio tag/list of tickers
