@@ -1,4 +1,5 @@
-use crate::msg_serde::{MonitorMsg, MsgFormat, Payload};
+use crate::msg_serde::{ChannelState, MonitorMsg, MsgFormat, Payload};
+use chrono::NaiveDateTime;
 use rusqlite::{params, Connection, DatabaseName};
 use std::io::Write;
 
@@ -64,6 +65,25 @@ pub fn insert(conn: &Connection, msg: &MonitorMsg) -> Result<usize, Box<dyn std:
             params![msg.adj_time_stamp, 1, 0],
         )?),
     }
+}
+
+pub fn select_msg(
+    conn: &Connection,
+    start: &NaiveDateTime,
+    end: &NaiveDateTime,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut stmt = conn.prepare(
+        "SELECT Timestamp,Enter,Format,Msg FROM TS_DATA WHERE TIMESTAMP >= ?1 AND TIMESTAMP <= ?2",
+    )?;
+    let mut rows = stmt.query(params![start, end])?;
+
+    let mut results: Vec<ChannelState> = Vec::new();
+    while let Some(row) = rows.next()? {
+        let ts = row.get::<usize, NaiveDateTime>(0)?;
+        let msg_type = row.get::<usize, bool>(1)?;
+        let msg_encoding = row.get::<usize, i64>(2)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

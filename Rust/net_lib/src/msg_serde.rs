@@ -113,6 +113,8 @@ pub struct NtpMsg {
     pub delay: i32,
 }
 
+pub struct ChannelState {}
+
 impl fmt::Display for Channel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?} {} => ", self.channel_type, self.name,)?;
