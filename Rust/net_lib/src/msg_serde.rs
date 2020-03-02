@@ -1,5 +1,6 @@
 use async_std::net::TcpStream;
 use async_std::sync::Arc;
+use chrono::naive::serde::ts_milliseconds;
 use chrono::NaiveDateTime;
 use cookie_factory::{bytes::*, combinator::slice, gen, GenError};
 use futures::io::{AsyncReadExt, AsyncWriteExt};
@@ -82,7 +83,7 @@ pub struct DiscoveryMessage {
     pub channels: Vec<Arc<Channel>>,
 }
 
-#[derive(Clone, Ord, PartialEq, PartialOrd, Eq, FromPrimitive, ToPrimitive, Debug)]
+#[derive(Clone, Ord, PartialEq, PartialOrd, Eq, FromPrimitive, ToPrimitive, Debug, Serialize)]
 pub enum Payload {
     Entry,
     Exit,
@@ -113,7 +114,15 @@ pub struct NtpMsg {
     pub delay: i32,
 }
 
-pub struct ChannelState {}
+#[derive(Serialize)]
+pub struct SmartMonitorMsg {
+    pub row_id: i64,
+    #[serde(with = "ts_milliseconds")]
+    pub ts: NaiveDateTime,
+    pub encoding: MsgFormat,
+    pub payload: Payload,
+    pub data: SmallVec<[u8; 1024]>,
+}
 
 impl fmt::Display for Channel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

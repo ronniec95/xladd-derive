@@ -134,7 +134,10 @@ pub async fn run_server(addr: SocketAddr) -> Result<(), Box<dyn std::error::Erro
     let web_channels = channels.clone();
     // Spawn off the web server
     pool.spawn(async {
-        web_service(web_channels).await;
+        match web_service(web_channels).await {
+            Ok(_) => (),
+            Err(e) => error!("failed webservice error {}", e),
+        }
     })?;
     while let Some(stream) = incoming.next().await {
         let stream = stream?.clone();

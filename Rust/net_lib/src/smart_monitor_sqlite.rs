@@ -1,7 +1,9 @@
-use crate::msg_serde::{ChannelState, MonitorMsg, MsgFormat, Payload};
+use crate::msg_serde::{MonitorMsg, MsgFormat, Payload, SmartMonitorMsg};
 use chrono::NaiveDateTime;
+use num_traits::FromPrimitive;
 use rusqlite::{params, Connection, DatabaseName};
-use std::io::Write;
+use smallvec::SmallVec;
+use std::io::{Read, Write};
 
 pub fn create_channel_table(name: &str) -> Result<Connection, Box<dyn std::error::Error>> {
     let conn = Connection::open(&format!("{}.db3", name))?;
@@ -67,23 +69,50 @@ pub fn insert(conn: &Connection, msg: &MonitorMsg) -> Result<usize, Box<dyn std:
     }
 }
 
-pub fn select_msg(
+// Select all messages in the queue
+pub fn select_all_msg(
     conn: &Connection,
     start: &NaiveDateTime,
     end: &NaiveDateTime,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<SmallVec<[SmartMonitorMsg; 1024]>, Box<dyn std::error::Error>> {
     let mut stmt = conn.prepare(
-        "SELECT Timestamp,Enter,Format,Msg FROM TS_DATA WHERE TIMESTAMP >= ?1 AND TIMESTAMP <= ?2",
+        "SELECT ROWID,TIMESTAMP,ENTER,FORMAT FROM TS_DATA WHERE TIMESTAMP >= ?1 AND TIMESTAMP <= ?2",
     )?;
     let mut rows = stmt.query(params![start, end])?;
-
-    let mut results: Vec<ChannelState> = Vec::new();
+    let mut results = SmallVec::<[SmartMonitorMsg; 1024]>::new();
     while let Some(row) = rows.next()? {
-        let ts = row.get::<usize, NaiveDateTime>(0)?;
-        let msg_type = row.get::<usize, bool>(1)?;
-        let msg_encoding = row.get::<usize, i64>(2)?;
+        let row_id = row.get::<usize, i64>(0)?;
+        let ts = row.get::<usize, NaiveDateTime>(1)?;
+        let payload = FromPrimitive::from_u8(row.get::<usize, u8>(2)?).unwrap();
+        let encoding = FromPrimitive::from_i64(row.get::<usize, i64>(3)?).unwrap();
+        results.push(SmartMonitorMsg {
+            row_id,
+            ts,
+            encoding,
+            payload,
+            data: SmallVec::<[u8; 1024]>::new(),
+        })
     }
-    Ok(())
+    Ok(results)
+}
+
+// Drill down to specific message
+pub fn select_msg(
+    conn: &Connection,
+    row_id: i64,
+) -> Result<SmartMonitorMsg, Box<dyn std::error::Error>> {
+    let mut blob = conn.blob_open(DatabaseName::Main, "TS_DATA", "Msg", row_id, false)?;
+    let sz = blob.size() as usize;
+    let mut data = SmallVec::<[u8; 1024]>::new();
+    data.resize(sz, 0u8);
+    blob.read_exact(&mut data)?;
+    Ok(SmartMonitorMsg {
+        row_id,
+        ts: NaiveDateTime::from_timestamp(0, 0),
+        encoding: MsgFormat::Bincode,
+        payload: Payload::Entry,
+        data,
+    })
 }
 
 #[cfg(test)]
