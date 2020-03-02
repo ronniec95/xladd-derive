@@ -11,14 +11,14 @@ struct Args {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    CombinedLogger::init(vec![WriteLogger::new(
+    WriteLogger::init(
         LevelFilter::Debug,
         ConfigBuilder::new()
-            .set_time_level(LevelFilter::Debug)
+            .set_time_level(LevelFilter::Error)
             .set_time_format_str("%Y-%m-%d %H:%M:%S%.3f")
             .build(),
         File::create("discovery.log").unwrap(),
-    )])
+    )
     .unwrap();
     let mut args = pico_args::Arguments::from_env();
     let args = Args {
