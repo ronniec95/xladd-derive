@@ -13,7 +13,6 @@ namespace AARC.Mesh.TCP
     public class MeshClient : IDisposable
     {
         MeshServiceManager msm;
-        private readonly Uri discoveryAddress;
         static CancellationTokenSource _cts = new CancellationTokenSource();
         public IServiceProvider ServiceProvider;
         public readonly IConfigurationRoot Configuration;
@@ -27,33 +26,25 @@ namespace AARC.Mesh.TCP
                 .AddLogging()
                 .AddOptions();
 
-            MeshServiceConfig.Server(Services);
-            SocketServiceConfig.Transport(Services);
-
             Configuration = new ConfigurationBuilder()
                 .AddCommandLine(args)
                 .AddJsonFile("appsettings.json", optional: true)
                 .AddEnvironmentVariables()
                 .Build();
 
-            discoveryAddress = new Uri(Configuration.GetValue<string>("ds", "tcp://localhost:9999"));
+            MeshServiceConfig.Server(Configuration, Services);
+            SocketServiceConfig.Transport(Services);
         }
 
         public void BuildServiceProvider() => ServiceProvider = Services.BuildServiceProvider();
         
         public Task Start()
         {
-            var logger = GetLogger<MeshClient>();
             msm = ServiceProvider.GetService<MeshServiceManager>();
-            // Todo: Bit of a hack as DS should supply port
-            msm.ListeningPort = Configuration.GetValue<Int32>("port", 0);
-
-            logger.LogInformation($"Discovery Service {discoveryAddress}");
-            logger.LogInformation($"Listening Address {msm.ListeningPort}");
 
             var cancellationToken = _cts.Token;
 
-            DiscoveryService = msm.StartDiscoveryServices(discoveryAddress, cancellationToken);
+            DiscoveryService = msm.StartDiscoveryServices(cancellationToken);
             // Listen for subscibers for output Qs
             ChannelSubscriber = msm.StartListeningServices(cancellationToken);
             // Connect to publishers of the data we want

@@ -5,6 +5,7 @@ using AARC.Mesh;
 using AARC.Mesh.Model;
 using AARC.Mesh.SubService;
 using AARC.Utilities;
+using Microsoft.Extensions.Configuration;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static AARC.Mesh.Model.DiscoveryMessage;
 
@@ -13,6 +14,7 @@ namespace AARC.MeshTests
     [TestClass]
     public class DiscoveryMessageSerialization
     {
+        private MeshConfig _meshConfig;
         private DiscoveryMessage _refMessage;
         private byte[] _rawBytes;
         private byte[] _inputBytes;
@@ -20,6 +22,13 @@ namespace AARC.MeshTests
         [TestInitialize]
         public void SetUp()
         {
+            var args = new string[] { };
+            var configuation = new ConfigurationBuilder()
+              .AddCommandLine(args)
+                .Build();
+
+            _meshConfig = new MeshConfig(configuation);
+
             _refMessage = new DiscoveryMessage
             {
                 Service = new Uri("tcp://localhost:7777"),
@@ -179,7 +188,7 @@ namespace AARC.MeshTests
         [TestMethod]
         public void TestDiscoveryStateInitialState()
         {
-            var dsm = new DiscoveryServiceStateMachine<DiscoveryMessage>();
+            var dsm = new DiscoveryServiceStateMachine<DiscoveryMessage>(_meshConfig);
 
             var hostname = new Uri("tcp://testhostname:9999");
 
@@ -191,7 +200,7 @@ namespace AARC.MeshTests
         [TestMethod]
         public void TestDiscoveryStateChannelDataState()
         {
-            var dsm = new DiscoveryServiceStateMachine<DiscoveryMessage>();
+            var dsm = new DiscoveryServiceStateMachine<DiscoveryMessage>(_meshConfig);
 
             var hostname = new Uri("tcp://testhostname:9999");
 
@@ -204,7 +213,7 @@ namespace AARC.MeshTests
         [TestMethod]
         public void TestDiscoveryStateChannelDataStateWithChannel()
         {
-            var dsm = new DiscoveryServiceStateMachine<MeshMessage>();
+            var dsm = new DiscoveryServiceStateMachine<MeshMessage>(_meshConfig);
 
             var transportId = new Uri($"tcp://testhostname:9999");
 
@@ -222,7 +231,7 @@ namespace AARC.MeshTests
         [TestMethod]
         public void TestDiscoveryStateChannelDataStateWithChannelEncode()
         {
-            var dsm = new DiscoveryServiceStateMachine<MeshMessage>();
+            var dsm = new DiscoveryServiceStateMachine<MeshMessage>(_meshConfig);
 
             var transportId = new Uri("tcp://testhostname:9999");
 
