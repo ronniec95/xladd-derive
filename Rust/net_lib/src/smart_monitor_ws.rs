@@ -1,22 +1,31 @@
-use crate::msg_serde::{ChannelType, MsgFormat};
+use crate::msg_serde::{MsgFormat, SmartMonitorMsg};
 use crate::smart_monitor_sqlite::{select_all_msg, select_msg};
 use async_std::sync::{Arc, Mutex};
+use chrono::NaiveDateTime;
+use log::*;
 use rusqlite::{Connection, OpenFlags};
-use serde_derive::Serialize;
+use smallvec::SmallVec;
 use tide::{self, Request};
 
-#[derive(Debug, Clone, Serialize)]
-pub struct ChannelResponse {
-    pub name: String,
-    pub instance: usize,
-    pub channel_type: ChannelType,
-    pub encoding_type: MsgFormat, // This is either msgpack,json or binary
-    pub addresses: Vec<String>,
+fn get_all_channel_data(
+    req: &Request<()>,
+    connections: &[Connection],
+) -> Result<std::vec::Vec<smallvec::SmallVec<[SmartMonitorMsg; 1024]>>, Box<dyn std::error::Error>>
+{
+    let start = NaiveDateTime::from_timestamp(req.param::<i64>("start")?, 0);
+    let end = NaiveDateTime::from_timestamp(req.param::<i64>("end")?, 0);
+    connections
+        .iter()
+        .map(|conn| select_all_msg(conn, &start, &end))
+        .collect::<Result<Vec<SmallVec<[SmartMonitorMsg; 1024]>>, _>>()
 }
 
 pub async fn web_service(channels: &[String]) -> Result<(), Box<dyn std::error::Error>> {
-    let connections = Arc::new(Mutex::new(
-        channels
+    let mut app = tide::new();
+    let channels = channels.iter().cloned().collect::<Vec<String>>();
+    app.at("/all").get(move |req: Request<()>| {
+        let channels = channels.clone();
+        let connections = channels
             .iter()
             .map(|ch| {
                 Connection::open_with_flags(
@@ -25,18 +34,16 @@ pub async fn web_service(channels: &[String]) -> Result<(), Box<dyn std::error::
                 )
                 .unwrap()
             })
-            .collect::<Vec<_>>(),
-    ));
-    let mut app = tide::with_state(connections);
-    app.at("/all")
-        .get(move |req: Request<Arc<Mutex<Vec<Connection>>>>| {
-            let connections = req.state();
-            async move {
-                // if let Some(connections) = connections.try_lock() {
-                //     for conn in *connections {}
-                // }
-                tide::Response::new(200)
+            .collect::<Vec<_>>();
+        async move {
+            match get_all_channel_data(&req, &connections) {
+                Ok(v) => tide::Response::new(200).body_json(&v).unwrap(),
+                Err(e) => {
+                    error!("Error processing channels {}", e);
+                    tide::Response::new(501).body_string(e.to_string())
+                }
             }
-        });
+        }
+    });
     Ok(app.listen("0.0.0.0:8080").await?)
 }
