@@ -1,9 +1,9 @@
-use crate::msg_serde::Channel;
 use crate::msg_serde::{ChannelType, MsgFormat};
+use crate::smart_monitor_sqlite::{select_all_msg, select_msg};
 use async_std::sync::{Arc, Mutex};
+use rusqlite::{Connection, OpenFlags};
 use serde_derive::Serialize;
-use std::borrow::Cow;
-use std::collections::BTreeMap;
+use tide::{self, Request};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ChannelResponse {
@@ -15,7 +15,28 @@ pub struct ChannelResponse {
 }
 
 pub async fn web_service(channels: &[String]) -> Result<(), Box<dyn std::error::Error>> {
-    let mut app = tide::new();
-    app.at("/").get(|_| async move { tide::Response::new(200) });
+    let connections = Arc::new(Mutex::new(
+        channels
+            .iter()
+            .map(|ch| {
+                Connection::open_with_flags(
+                    &format!("{}.db3", ch),
+                    OpenFlags::SQLITE_OPEN_READ_ONLY,
+                )
+                .unwrap()
+            })
+            .collect::<Vec<_>>(),
+    ));
+    let mut app = tide::with_state(connections);
+    app.at("/all")
+        .get(move |req: Request<Arc<Mutex<Vec<Connection>>>>| {
+            let connections = req.state();
+            async move {
+                // if let Some(connections) = connections.try_lock() {
+                //     for conn in *connections {}
+                // }
+                tide::Response::new(200)
+            }
+        });
     Ok(app.listen("0.0.0.0:8080").await?)
 }

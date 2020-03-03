@@ -22,6 +22,7 @@ nom="^5"
 cookie-factory="^0.3"
 urlparse = "^0.7"
 smallvec= {version="^1", features=["serde"] }
+rayon = "^1"
 log = "^0.4.8"
 simplelog = "^0.7"
 tide = "0.6"
