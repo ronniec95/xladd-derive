@@ -1,5 +1,6 @@
 use crate::msg_serde::{MonitorMsg, MsgFormat, Payload, SmartMonitorMsg};
 use chrono::NaiveDateTime;
+use log::*;
 use num_traits::FromPrimitive;
 use rusqlite::{params, Connection, DatabaseName};
 use smallvec::SmallVec;
@@ -85,6 +86,7 @@ pub fn select_all_msg(
         let ts = row.get::<usize, NaiveDateTime>(1)?;
         let payload = FromPrimitive::from_u8(row.get::<usize, u8>(2)?).unwrap();
         let encoding = FromPrimitive::from_i64(row.get::<usize, i64>(3)?).unwrap();
+        trace!("Retrieving row {} {} ", row_id, ts);
         results.push(SmartMonitorMsg {
             row_id,
             ts,
@@ -101,11 +103,13 @@ pub fn select_msg(
     conn: &Connection,
     row_id: i64,
 ) -> Result<SmartMonitorMsg, Box<dyn std::error::Error>> {
+    trace!("Retrieving blob for row {} ", row_id);
     let mut blob = conn.blob_open(DatabaseName::Main, "TS_DATA", "Msg", row_id, false)?;
     let sz = blob.size() as usize;
     let mut data = SmallVec::<[u8; 1024]>::new();
     data.resize(sz, 0u8);
     blob.read_exact(&mut data)?;
+    trace!("Succeeded reading {} bytes", data.len());
     Ok(SmartMonitorMsg {
         row_id,
         ts: NaiveDateTime::from_timestamp(0, 0),

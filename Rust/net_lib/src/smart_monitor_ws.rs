@@ -14,10 +14,22 @@ fn get_all_channel_data(
 {
     let start = NaiveDateTime::from_timestamp(req.param::<i64>("start")?, 0);
     let end = NaiveDateTime::from_timestamp(req.param::<i64>("end")?, 0);
+    debug!("Request for all channels {} {}", start, end);
     connections
         .iter()
         .map(|conn| select_all_msg(conn, &start, &end))
         .collect::<Result<Vec<SmallVec<[SmartMonitorMsg; 1024]>>, _>>()
+}
+
+fn get_channel_msg(req: &Request<()>) -> Result<SmartMonitorMsg, Box<dyn std::error::Error>> {
+    let channel_name = req.param::<String>("channel_id")?;
+    let row_id = req.param::<i64>("row_id")?;
+    debug!("Request for msg  {}", row_id);
+    let conn = Connection::open_with_flags(
+        &format!("{}.db3", channel_name),
+        OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?;
+    select_msg(&conn, row_id)
 }
 
 pub async fn web_service(channels: &[String]) -> Result<(), Box<dyn std::error::Error>> {
@@ -28,6 +40,7 @@ pub async fn web_service(channels: &[String]) -> Result<(), Box<dyn std::error::
         let connections = channels
             .iter()
             .map(|ch| {
+                trace!("Connecting to {}.db3", ch);
                 Connection::open_with_flags(
                     &format!("{}.db3", ch),
                     OpenFlags::SQLITE_OPEN_READ_ONLY,
@@ -42,6 +55,15 @@ pub async fn web_service(channels: &[String]) -> Result<(), Box<dyn std::error::
                     error!("Error processing channels {}", e);
                     tide::Response::new(501).body_string(e.to_string())
                 }
+            }
+        }
+    });
+    app.at("/msg").get(move |req: Request<()>| async move {
+        match get_channel_msg(&req) {
+            Ok(v) => tide::Response::new(200).body_json(&v).unwrap(),
+            Err(e) => {
+                error!("Error processing channels {}", e);
+                tide::Response::new(501).body_string(e.to_string())
             }
         }
     });
