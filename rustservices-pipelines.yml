@@ -20,3 +20,5 @@ steps:
   - script: cargo build --release
     workingDirectory: '$(net_lib_path)'
     displayName: Cargo build '$(net_lib_path)'
+  - publish: $(net_lib_path)/target
+    artifact: Rust
