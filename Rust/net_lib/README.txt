@@ -29,6 +29,6 @@ The returned format has the row ids. How we then visually display this informati
 
 To drill down to a specific msg in a queue
 
-http://<ip>:<port>/msg&row_id=123456 <- use the row id returned by the previous request to see the actual message.
+http://<ip>:<port>/msg/:channel_name/:row_id  <- use the row id returned by the previous request to see the actual message.
 The message payload is opaque bytes so a suitable decoder would be necessary in order to visualise
 the message appropriately.

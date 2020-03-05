@@ -20,7 +20,7 @@ fn get_all_channel_data(
 }
 
 fn get_channel_msg(req: &Request<()>) -> Result<SmartMonitorMsg, Box<dyn std::error::Error>> {
-    let channel_name = req.param::<String>("channel_id")?;
+    let channel_name = req.param::<String>("channel")?;
     let row_id = req.param::<i64>("row_id")?;
     debug!("Request for msg  {}", row_id);
     let conn = Connection::open_with_flags(
@@ -57,14 +57,15 @@ pub async fn web_service(channels: &[String]) -> Result<(), Box<dyn std::error::
             }
         }
     });
-    app.at("/msg").get(move |req: Request<()>| async move {
-        match get_channel_msg(&req) {
-            Ok(v) => tide::Response::new(200).body_json(&v).unwrap(),
-            Err(e) => {
-                error!("Error processing channels {}", e);
-                tide::Response::new(501).body_string(e.to_string())
+    app.at("/msg/:channel/:row_id")
+        .get(move |req: Request<()>| async move {
+            match get_channel_msg(&req) {
+                Ok(v) => tide::Response::new(200).body_json(&v).unwrap(),
+                Err(e) => {
+                    error!("Error processing channels {}", e);
+                    tide::Response::new(501).body_string(e.to_string())
+                }
             }
-        }
-    });
+        });
     Ok(app.listen("0.0.0.0:8080").await?)
 }
