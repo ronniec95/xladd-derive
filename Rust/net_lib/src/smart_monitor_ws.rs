@@ -1,6 +1,5 @@
-use crate::msg_serde::{MsgFormat, SmartMonitorMsg};
+use crate::msg_serde::SmartMonitorMsg;
 use crate::smart_monitor_sqlite::{select_all_msg, select_msg};
-use async_std::sync::{Arc, Mutex};
 use chrono::NaiveDateTime;
 use log::*;
 use rusqlite::{Connection, OpenFlags};
@@ -10,15 +9,14 @@ use tide::{self, Request};
 fn get_all_channel_data(
     req: &Request<()>,
     connections: &[Connection],
-) -> Result<std::vec::Vec<smallvec::SmallVec<[SmartMonitorMsg; 1024]>>, Box<dyn std::error::Error>>
-{
+) -> Result<std::vec::Vec<smallvec::SmallVec<[SmartMonitorMsg; 64]>>, Box<dyn std::error::Error>> {
     let start = NaiveDateTime::from_timestamp(req.param::<i64>("start")?, 0);
     let end = NaiveDateTime::from_timestamp(req.param::<i64>("end")?, 0);
     debug!("Request for all channels {} {}", start, end);
     connections
         .iter()
         .map(|conn| select_all_msg(conn, &start, &end))
-        .collect::<Result<Vec<SmallVec<[SmartMonitorMsg; 1024]>>, _>>()
+        .collect::<Result<Vec<SmallVec<[SmartMonitorMsg; 64]>>, _>>()
 }
 
 fn get_channel_msg(req: &Request<()>) -> Result<SmartMonitorMsg, Box<dyn std::error::Error>> {
@@ -35,7 +33,7 @@ fn get_channel_msg(req: &Request<()>) -> Result<SmartMonitorMsg, Box<dyn std::er
 pub async fn web_service(channels: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let mut app = tide::new();
     let channels = channels.iter().cloned().collect::<Vec<String>>();
-    app.at("/all").get(move |req: Request<()>| {
+    app.at("/all/:start/:end").get(move |mut req: Request<()>| {
         let channels = channels.clone();
         let connections = channels
             .iter()
@@ -49,6 +47,7 @@ pub async fn web_service(channels: &[String]) -> Result<(), Box<dyn std::error::
             })
             .collect::<Vec<_>>();
         async move {
+            dbg!(&req.body_string().await.unwrap());
             match get_all_channel_data(&req, &connections) {
                 Ok(v) => tide::Response::new(200).body_json(&v).unwrap(),
                 Err(e) => {

@@ -75,12 +75,12 @@ pub fn select_all_msg(
     conn: &Connection,
     start: &NaiveDateTime,
     end: &NaiveDateTime,
-) -> Result<SmallVec<[SmartMonitorMsg; 1024]>, Box<dyn std::error::Error>> {
+) -> Result<SmallVec<[SmartMonitorMsg; 64]>, Box<dyn std::error::Error>> {
     let mut stmt = conn.prepare(
         "SELECT ROWID,TIMESTAMP,ENTER,FORMAT FROM TS_DATA WHERE TIMESTAMP >= ?1 AND TIMESTAMP <= ?2",
     )?;
     let mut rows = stmt.query(params![start, end])?;
-    let mut results = SmallVec::<[SmartMonitorMsg; 1024]>::new();
+    let mut results = SmallVec::<[SmartMonitorMsg; 64]>::new();
     while let Some(row) = rows.next()? {
         let row_id = row.get::<usize, i64>(0)?;
         let ts = row.get::<usize, NaiveDateTime>(1)?;
@@ -136,5 +136,20 @@ mod tests {
         };
         let conn = create_channel_table("channel1").unwrap();
         insert(&conn, &msg).expect("could not insert");
+    }
+
+    #[test]
+    fn select_db() {
+        let conn = Connection::open_with_flags(
+            "nasdaqtestin.db3",
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .unwrap();
+        select_all_msg(
+            &conn,
+            &NaiveDateTime::from_timestamp(0, 0),
+            &NaiveDateTime::from_timestamp(1000, 0),
+        )
+        .unwrap();
     }
 }

@@ -25,6 +25,6 @@ smallvec= {version="^1", features=["serde"] }
 rayon = "^1"
 log = "^0.4.8"
 simplelog = "^0.7"
-tide = "0.6"
+tide = "^0.6"
 rand = { version = "^0.7", features = ["small_rng"]}
 rusqlite = { version = "0.21.0", features = ["bundled","chrono","blob"] }
