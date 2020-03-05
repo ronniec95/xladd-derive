@@ -12,7 +12,7 @@ fn get_all_channel_data(
 ) -> Result<std::vec::Vec<smallvec::SmallVec<[SmartMonitorMsg; 64]>>, Box<dyn std::error::Error>> {
     let start = NaiveDateTime::from_timestamp(req.param::<i64>("start")?, 0);
     let end = NaiveDateTime::from_timestamp(req.param::<i64>("end")?, 0);
-    debug!("Request for all channels {} {}", start, end);
+    info!("Request for all channels {} {}", start, end);
     connections
         .iter()
         .map(|conn| select_all_msg(conn, &start, &end))
@@ -22,7 +22,7 @@ fn get_all_channel_data(
 fn get_channel_msg(req: &Request<()>) -> Result<SmartMonitorMsg, Box<dyn std::error::Error>> {
     let channel_name = req.param::<String>("channel")?;
     let row_id = req.param::<i64>("row_id")?;
-    debug!("Request for msg  {}", row_id);
+    info!("Request for msg  {}", row_id);
     let conn = Connection::open_with_flags(
         &format!("{}.db3", channel_name),
         OpenFlags::SQLITE_OPEN_READ_ONLY,
@@ -38,7 +38,7 @@ pub async fn web_service(channels: &[String]) -> Result<(), Box<dyn std::error::
         let connections = channels
             .iter()
             .map(|ch| {
-                trace!("Connecting to {}.db3", ch);
+                debug!("Connecting to {}.db3", ch);
                 Connection::open_with_flags(
                     &format!("{}.db3", ch),
                     OpenFlags::SQLITE_OPEN_READ_ONLY,
@@ -47,7 +47,6 @@ pub async fn web_service(channels: &[String]) -> Result<(), Box<dyn std::error::
             })
             .collect::<Vec<_>>();
         async move {
-            dbg!(&req.body_string().await.unwrap());
             match get_all_channel_data(&req, &connections) {
                 Ok(v) => tide::Response::new(200).body_json(&v).unwrap(),
                 Err(e) => {
