@@ -48,7 +48,7 @@ impl SmartMonitor {
         debug!("Connection to database ok {}", name);
         loop {
             if let Ok(msg) = msg_receiver.try_next() {
-                debug!("Got message on receiver, attempting to write to db");
+                trace!("Got message on receiver, attempting to write to db");
                 if let Some(msg) = msg {
                     handle_error::<usize, _>(smart_monitor_sqlite::insert(&conn, &msg));
                 }
@@ -91,14 +91,14 @@ impl SmartMonitor {
                     if let Some(sender) = sender_map.get(&msg.channel_name) {
                         msg.to_mut().adj_time_stamp =
                             msg.adj_time_stamp + chrono::Duration::milliseconds(latency);
-                        debug!("Found channel {}", msg.channel_name);
+                        trace!("Found channel {}", msg.channel_name);
                         let sender = sender.lock().await;
                         handle_error::<(), _>(sender.unbounded_send(msg.clone()));
                     }
                 }
                 Payload::Cpu | Payload::Memory | _ => {
                     if let Some(sender) = sender_map.get(&msg.channel_name) {
-                        debug!("Found channel {}", msg.channel_name);
+                        trace!("Found channel {}", msg.channel_name);
                         msg.to_mut().adj_time_stamp =
                             msg.adj_time_stamp + chrono::Duration::milliseconds(latency);
                         let sender = sender.lock().await;
@@ -196,7 +196,7 @@ impl SmartMonitorClient {
     }
     async fn run(&mut self, addr: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
         let mut conn = TcpStream::connect(addr).await?;
-        debug!("Connected to addr {}", addr);
+        info!("Connected to addr {}", addr);
         loop {
             while let Ok(msg) = self.receiver.try_next() {
                 if let Some(msg) = msg {
