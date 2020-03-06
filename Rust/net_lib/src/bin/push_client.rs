@@ -3,6 +3,7 @@ use futures::executor::ThreadPool;
 use futures::task::SpawnExt;
 use net_lib::smart_monitor::*;
 use simplelog::*;
+use std::borrow::Cow;
 use std::net::*;
 use std::str::FromStr;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -17,7 +18,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .unwrap();
 
     let mut smc = SmartMonitorClient::new();
-    let mut sender = smc.create_sender::<i64>("nasdaqtestin".into());
+    let mut sender =
+        smc.create_sender::<i64>("nasdaqtestin".to_string(), Cow::Borrowed("pull_service"));
     let pool = ThreadPool::new().unwrap();
     pool.spawn(async move {
         smc.run_auto_reconnect(SocketAddr::from_str("127.0.0.1:9900").unwrap())

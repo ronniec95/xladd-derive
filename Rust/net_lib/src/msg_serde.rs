@@ -11,6 +11,7 @@ use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 use serde_derive::Serialize;
 use smallvec::SmallVec;
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::convert::TryInto;
 use std::fmt;
@@ -99,6 +100,7 @@ pub enum Payload {
 #[derive(Clone, PartialEq, Debug)]
 pub struct MonitorMsg {
     pub channel_name: String,
+    pub service: Cow<'static, str>,
     pub adj_time_stamp: NaiveDateTime,
     pub msg_format: MsgFormat,
     pub payload: Payload,
@@ -391,7 +393,7 @@ fn read_sm_msg(input: &[u8]) -> nom::IResult<&[u8], MonitorMsg> {
     let (input, msg_format) = read_enum::<MsgFormat>(input)?;
     let (input, _) = read_u32(input)?; // graph id
     let (input, _) = read_u32(input)?; // execution id
-    let (input, _) = read_str(input)?; // service
+    let (input, service) = read_str(input)?; // service
     let (input, name) = read_str(input)?; // channel name
     let (input, data) = match payload {
         Payload::Entry
@@ -415,6 +417,7 @@ fn read_sm_msg(input: &[u8]) -> nom::IResult<&[u8], MonitorMsg> {
         input,
         MonitorMsg {
             channel_name: name.to_string(),
+            service: Cow::Owned(service.to_owned()),
             adj_time_stamp,
             msg_format,
             payload,
@@ -580,6 +583,7 @@ mod tests {
             adj_time_stamp: NaiveDateTime::from_timestamp(124563, 345),
             msg_format: MsgFormat::Json,
             payload: Payload::Entry,
+            service: Cow::Borrowed("myservice"),
             data: b"abdgeriuger".to_vec(),
         };
         let mut buf = SmallVec::<[u8; 1024]>::with_capacity(1024);

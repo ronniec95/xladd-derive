@@ -126,6 +126,7 @@ mod tests {
     use super::*;
     use crate::msg_serde::*;
     use chrono::prelude::*;
+    use std::borrow::Cow;
     #[test]
     fn insert_db() {
         let utc = Utc::now();
@@ -134,6 +135,7 @@ mod tests {
             adj_time_stamp: utc.naive_local(),
             msg_format: MsgFormat::Json,
             payload: Payload::Entry,
+            service: Cow::Borrowed("service_name"),
             data: b"123456".to_vec(),
         };
         let conn = create_channel_table("channel1").unwrap();

@@ -167,6 +167,7 @@ where
 {
     sender: UnboundedSender<MonitorMsg>,
     channel: ChannelId,
+    service: Cow<'static, str>,
     _phantom: std::marker::PhantomData<T>,
 }
 
@@ -176,13 +177,14 @@ impl SmartMonitorClient {
         Self { sender, receiver }
     }
 
-    pub fn create_sender<T>(&self, channel: ChannelId) -> SMLogger<T>
+    pub fn create_sender<T>(&self, channel: ChannelId, service: Cow<'static, str>) -> SMLogger<T>
     where
         T: Serialize,
     {
         SMLogger {
             sender: self.sender.clone(),
             channel,
+            service: service,
             _phantom: std::marker::PhantomData,
         }
     }
@@ -225,6 +227,7 @@ where
             adj_time_stamp: now.naive_utc(),
             msg_format: MsgFormat::Bincode,
             payload: Payload::Entry,
+            service: self.service.clone(),
             data: bytes,
         };
         if let Ok(_) = self.sender.unbounded_send(msg) {}
@@ -238,6 +241,7 @@ where
             adj_time_stamp: now.naive_utc(),
             msg_format: MsgFormat::Bincode,
             payload: Payload::Entry,
+            service: self.service.clone(),
             data: bytes,
         };
         if let Ok(_) = self.sender.unbounded_send(msg) {}
@@ -250,6 +254,7 @@ where
             adj_time_stamp: now.naive_utc(),
             msg_format: MsgFormat::Bincode,
             payload: Payload::Exit,
+            service: self.service.clone(),
             data: vec![],
         };
         if let Ok(_) = self.sender.unbounded_send(msg) {}

@@ -7,7 +7,7 @@ use futures::executor::block_on;
 use futures::lock::Mutex;
 use futures::Future;
 use serde::{Deserialize, Serialize};
-use std::borrow::BorrowMut;
+use std::borrow::{BorrowMut, Cow};
 use std::clone::Clone;
 use std::collections::{BTreeMap, BTreeSet};
 use std::net::SocketAddr;
@@ -54,28 +54,31 @@ pub struct OutputQueue<T: Clone + Serialize + Send + 'static> {
     last_value_consumers: Vec<LastValueQueue<T>>,
     burst_consumers: Vec<BurstQueue<T>>,
     tcp_consumer: Vec<TcpScalarQueue<T>>,
+    service: Cow<'static, str>,
 }
 
 impl<T> OutputQueue<T>
 where
     T: Clone + Serialize + Send + for<'de> Deserialize<'de> + std::fmt::Debug + 'static,
 {
-    pub fn new() -> Self {
+    pub fn new(service: &'static str) -> Self {
         Self {
             last_value_consumers: Vec::new(),
             burst_consumers: Vec::new(),
             tcp_consumer: Vec::new(),
+            service: Cow::Borrowed(service),
         }
     }
 
     pub fn lv_pull_queue(&mut self, channel_id: ChannelId) -> &LastValueQueue<T> {
         self.last_value_consumers
-            .push(LastValueQueue::new(channel_id));
+            .push(LastValueQueue::new(channel_id, self.service.clone()));
         self.last_value_consumers.last().unwrap()
     }
 
     pub fn burst_pull_queue(&mut self, channel_id: ChannelId) -> &BurstQueue<T> {
-        self.burst_consumers.push(BurstQueue::new(channel_id));
+        self.burst_consumers
+            .push(BurstQueue::new(channel_id, self.service.clone()));
         self.burst_consumers.last().unwrap()
     }
 
@@ -83,7 +86,7 @@ where
         self.tcp_consumer.push(TcpScalarQueue {
             msg_format: MsgFormat::Bincode,
             sender,
-            sm_log: logger().create_sender::<T>(channel_id),
+            sm_log: logger().create_sender::<T>(channel_id, self.service.clone()),
             _data: std::marker::PhantomData,
         });
     }
@@ -106,10 +109,10 @@ impl<T> BurstQueue<T>
 where
     T: Serialize + for<'de> Deserialize<'de>,
 {
-    fn new(channel_id: ChannelId) -> Self {
+    fn new(channel_id: ChannelId, service: Cow<'static, str>) -> Self {
         Self {
             values: Arc::new(Mutex::new(Vec::new())),
-            sm_log: logger().create_sender::<T>(channel_id),
+            sm_log: logger().create_sender::<T>(channel_id, service),
         }
     }
 
@@ -158,10 +161,10 @@ impl<T> LastValueQueue<T>
 where
     T: Serialize + for<'de> Deserialize<'de> + std::fmt::Debug,
 {
-    pub fn new(channel_id: ChannelId) -> Self {
+    pub fn new(channel_id: ChannelId, service: Cow<'static, str>) -> Self {
         Self {
             value: Arc::new(Mutex::new(None)),
-            sm_log: logger().create_sender::<T>(channel_id),
+            sm_log: logger().create_sender::<T>(channel_id, service),
         }
     }
 
@@ -361,7 +364,7 @@ mod tests {
     #[test]
     fn fifo_queue() {
         let mut pool = LocalPool::new();
-        let queue = BurstQueue::<i32>::new(ChannelId::from("hello"));
+        let queue = BurstQueue::<i32>::new(ChannelId::from("hello"), Cow::Borrowed("myservice"));
         let spawner = pool.spawner();
         let mut l_queue = queue.clone();
         spawner
@@ -392,7 +395,8 @@ mod tests {
     #[test]
     fn last_value_queue() {
         let mut pool = LocalPool::new();
-        let queue = LastValueQueue::<i32>::new(ChannelId::from("channel1"));
+        let queue =
+            LastValueQueue::<i32>::new(ChannelId::from("channel1"), Cow::Borrowed("myservice"));
         let spawner = pool.spawner();
         let mut l_queue = queue.clone();
         spawner
@@ -427,7 +431,7 @@ mod tests {
     impl ProducerService {
         fn new() -> Self {
             Self {
-                q1: BurstQueue::<i32>::new(ChannelId::from("channel1")),
+                q1: BurstQueue::<i32>::new(ChannelId::from("channel1"), Cow::Borrowed("myservice")),
             }
         }
 
@@ -479,7 +483,7 @@ mod tests {
     impl SourceNode {
         fn new() -> Self {
             Self {
-                oq: OutputQueue::new(),
+                oq: OutputQueue::new("service"),
             }
         }
 
