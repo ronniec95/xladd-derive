@@ -4,6 +4,7 @@ use chrono::NaiveDateTime;
 use log::*;
 use rusqlite::{Connection, OpenFlags};
 use smallvec::SmallVec;
+use std::borrow::Cow;
 use std::sync::{Arc, Mutex};
 use tide::{self, Request};
 
@@ -43,7 +44,7 @@ fn get_channel_msg(req: &Request<()>) -> Result<SmartMonitorMsg, Box<dyn std::er
     select_msg(&conn, row_id)
 }
 
-pub async fn web_service(channels: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn web_service(channels: &[Cow<'_, str>]) -> Result<(), Box<dyn std::error::Error>> {
     let mut app = tide::new();
     let connections = channels
         .iter()

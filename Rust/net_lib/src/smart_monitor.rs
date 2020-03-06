@@ -27,12 +27,12 @@ where
 //
 // Server Implmentation
 //
-pub struct SmartMonitor {
+pub struct SmartMonitor<'a> {
     pool: ThreadPool,
-    senders: BTreeMap<ChannelId, Arc<Mutex<UnboundedSender<Cow<'static, MonitorMsg>>>>>,
+    senders: BTreeMap<Cow<'a, str>, Arc<Mutex<UnboundedSender<Cow<'static, MonitorMsg>>>>>,
 }
 
-impl SmartMonitor {
+impl<'a> SmartMonitor<'static> {
     pub fn new() -> Self {
         Self {
             pool: ThreadPool::new().unwrap(),
@@ -41,7 +41,7 @@ impl SmartMonitor {
     }
 
     async fn consume(
-        name: String,
+        name: Cow<'a, str>,
         mut msg_receiver: UnboundedReceiver<Cow<'static, MonitorMsg>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let conn = smart_monitor_sqlite::create_channel_table(&name)?;
@@ -58,11 +58,10 @@ impl SmartMonitor {
         }
     }
 
-    pub fn create(&mut self, ch: ChannelId) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn create(&mut self, ch: Cow<'static, str>) -> Result<(), Box<dyn std::error::Error>> {
         let (sender, receiver) = unbounded();
-        let channel_name = String::from(&ch);
         self.pool.spawn({
-            let channel_name = channel_name.clone();
+            let channel_name = ch.to_owned();
             async move {
                 match SmartMonitor::consume(channel_name, receiver).await {
                     Ok(_) => (),
@@ -77,7 +76,7 @@ impl SmartMonitor {
 
     async fn manage_monitor(
         mut stream: TcpStream,
-        sender_map: BTreeMap<ChannelId, Arc<Mutex<UnboundedSender<Cow<'_, MonitorMsg>>>>>,
+        sender_map: BTreeMap<Cow<'_, str>, Arc<Mutex<UnboundedSender<Cow<'_, MonitorMsg>>>>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut latency = 0i64;
         loop {
@@ -90,7 +89,7 @@ impl SmartMonitor {
                     write_timestamp_async(&mut stream, t1).await?;
                     let ntp = read_ntp_msg(&mut stream).await?;
                     latency = ntp.offset as i64 + ntp.delay as i64;
-                    if let Some(sender) = sender_map.get(&msg.channel_name) {
+                    if let Some(sender) = sender_map.get(&Cow::Owned(msg.channel_name.clone())) {
                         msg.to_mut().adj_time_stamp =
                             msg.adj_time_stamp + chrono::Duration::milliseconds(latency);
                         trace!("Found channel {}", msg.channel_name);
@@ -99,7 +98,7 @@ impl SmartMonitor {
                     }
                 }
                 Payload::Cpu | Payload::Memory | _ => {
-                    if let Some(sender) = sender_map.get(&msg.channel_name) {
+                    if let Some(sender) = sender_map.get(&Cow::Owned(msg.channel_name.clone())) {
                         trace!("Found channel {}", msg.channel_name);
                         msg.to_mut().adj_time_stamp =
                             msg.adj_time_stamp + chrono::Duration::milliseconds(latency);

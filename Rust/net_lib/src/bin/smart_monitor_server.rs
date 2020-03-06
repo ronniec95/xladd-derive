@@ -4,6 +4,7 @@ use net_lib::smart_monitor::SmartMonitor;
 use pico_args;
 use serde_derive::Deserialize;
 use simplelog::*;
+use std::borrow::Cow;
 use std::fs::File;
 use std::io::Read;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -42,7 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config: Channels = toml::from_str(&contents)?;
     let mut smart_monitor = SmartMonitor::new();
     for channel in &config.names {
-        smart_monitor.create(channel.clone())?;
+        smart_monitor.create(Cow::Owned(channel.to_owned()))?;
     }
     block_on(async {
         smart_monitor
