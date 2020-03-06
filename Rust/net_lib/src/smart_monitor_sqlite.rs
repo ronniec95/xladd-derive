@@ -106,7 +106,7 @@ pub fn select_msg(
     row_id: i64,
 ) -> Result<SmartMonitorMsg, Box<dyn std::error::Error>> {
     trace!("Retrieving blob for row {} ", row_id);
-    let mut blob = conn.blob_open(DatabaseName::Main, "TS_DATA", "Msg", row_id, false)?;
+    let mut blob = conn.blob_open(DatabaseName::Main, "TS_DATA", "Msg", row_id, true)?;
     let sz = blob.size() as usize;
     let mut data = SmallVec::<[u8; 1024]>::new();
     data.resize(sz, 0u8);

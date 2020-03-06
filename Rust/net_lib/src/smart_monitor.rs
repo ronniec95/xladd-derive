@@ -52,6 +52,8 @@ impl SmartMonitor {
                 if let Some(msg) = msg {
                     handle_error::<usize, _>(smart_monitor_sqlite::insert(&conn, &msg));
                 }
+            } else {
+                async_std::task::sleep(std::time::Duration::from_micros(100)).await;
             }
         }
     }
