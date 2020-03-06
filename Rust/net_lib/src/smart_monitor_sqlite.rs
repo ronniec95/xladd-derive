@@ -9,8 +9,8 @@ use std::io::{Read, Write};
 pub fn create_channel_table(name: &str) -> Result<Connection, Box<dyn std::error::Error>> {
     let conn = Connection::open(&format!("{}.db3", name))?;
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS TS_DATA (Timestamp TEXT PRIMARY KEY NOT NULL UNIQUE,
-            Enter BOOLEAN NOT NULL, Format INTEGER NOT NULL, Msg BLOB NULL DEFAULT (x''))",
+        "CREATE TABLE IF NOT EXISTS TS_DATA (Timestamp TEXT NOT NULL UNIQUE,
+            Enter INTEGER NOT NULL, Format INTEGER NOT NULL, Msg BLOB NULL DEFAULT (x''), PRIMARY KEY (Timestamp,Enter))",
         params![],
     )?;
     // Latency
@@ -33,7 +33,7 @@ pub fn create_channel_table(name: &str) -> Result<Connection, Box<dyn std::error
 
 pub fn insert(conn: &Connection, msg: &MonitorMsg) -> Result<usize, Box<dyn std::error::Error>> {
     match &msg.payload {
-        Payload::Entry | Payload::Error => {
+        Payload::Entry | Payload::Error | Payload::Info | Payload::Warn | Payload::Debug => {
             debug!("Writing to database entry/error message");
             let msg_format = match msg.msg_format {
                 MsgFormat::Bincode => 0,

@@ -85,11 +85,14 @@ pub struct DiscoveryMessage {
 
 #[derive(Clone, Ord, PartialEq, PartialOrd, Eq, FromPrimitive, ToPrimitive, Debug, Serialize)]
 pub enum Payload {
-    Entry,
-    Exit,
-    Latency,
-    Cpu,
-    Memory,
+    Entry = 0,
+    Exit = 1,
+    Latency = 2,
+    Cpu = 3,
+    Memory = 4,
+    Info = 252,
+    Debug = 253,
+    Warn = 254,
     Error = 255,
 }
 
@@ -384,18 +387,26 @@ pub async fn write_timestamp_async(
 
 fn read_sm_msg(input: &[u8]) -> nom::IResult<&[u8], MonitorMsg> {
     let (input, adj_time_stamp) = read_timestamp(input)?;
-    let (input, msg_format) = read_enum::<MsgFormat>(input)?;
     let (input, payload) = read_enum::<Payload>(input)?;
+    let (input, msg_format) = read_enum::<MsgFormat>(input)?;
     let (input, _) = read_u32(input)?; // graph id
     let (input, _) = read_u32(input)?; // execution id
     let (input, _) = read_str(input)?; // service
     let (input, name) = read_str(input)?; // channel name
     let (input, data) = match payload {
-        Payload::Entry | Payload::Cpu | Payload::Memory | Payload::Error => {
+        Payload::Entry
+        | Payload::Cpu
+        | Payload::Memory
+        | Payload::Error
+        | Payload::Info
+        | Payload::Warn
+        | Payload::Debug => {
             let rest = input;
             let (input, sz) = read_usize(rest)?;
-            let (input, sz) = take(sz)(input)?;
-            Ok((input, sz))
+            let (input, msg) = take(sz)(input)?;
+            debug!("{}", &sz);
+            debug!("{:?}", &msg);
+            Ok((input, msg))
         }
         Payload::Latency => Ok((input, &[][..])),
         Payload::Exit => Ok((input, &[][..])),
@@ -417,8 +428,8 @@ fn write_sm_msg<'a>(
     output: &'a mut [u8],
 ) -> Result<(&'a mut [u8], u64), GenError> {
     let (output, _) = write_timestamp(&msg.adj_time_stamp, output)?;
-    let (output, _) = write_enum::<MsgFormat>(&msg.msg_format, output)?;
     let (output, _) = write_enum::<Payload>(&msg.payload, output)?;
+    let (output, _) = write_enum::<MsgFormat>(&msg.msg_format, output)?;
     let (output, _) = write_u32(0, output)?;
     let (output, _) = write_u32(0, output)?;
     let (output, _) = write_str("", output)?;
