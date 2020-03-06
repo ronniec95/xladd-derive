@@ -1,3 +1,4 @@
+use chrono::Utc;
 use futures::executor::block_on;
 use net_lib::smart_monitor::SmartMonitor;
 use pico_args;
@@ -23,7 +24,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .set_time_level(LevelFilter::Error)
             .set_time_format_str("%Y-%m-%d %H:%M:%S%.3f")
             .build(),
-        File::create("smart_monitor.log").unwrap(),
+        File::create(format!(
+            "smart_monitor_{}.log",
+            Utc::now().format("%Y%m%d_%H%M%S")
+        ))
+        .unwrap(), // Change path to have timestamp
     )
     .unwrap();
 

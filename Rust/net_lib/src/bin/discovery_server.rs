@@ -1,3 +1,4 @@
+use chrono::Utc;
 use futures::executor::block_on;
 use log::*;
 use net_lib::discovery_service;
@@ -17,7 +18,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .set_time_level(LevelFilter::Error)
             .set_time_format_str("%Y-%m-%d %H:%M:%S%.3f")
             .build(),
-        File::create("discovery.log").unwrap(),
+        File::create(format!(
+            "discovery_{}.log",
+            Utc::now().format("%Y%m%d_%H%M%S")
+        ))
+        .unwrap(),
     )
     .unwrap();
     let mut args = pico_args::Arguments::from_env();

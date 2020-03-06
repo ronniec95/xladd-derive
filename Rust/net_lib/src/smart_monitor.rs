@@ -5,8 +5,8 @@ use async_std::net::SocketAddr;
 use async_std::net::{TcpListener, TcpStream};
 use async_std::stream::StreamExt;
 use async_std::sync::{Arc, Mutex};
-use chrono::{Duration, Utc};
-use futures::channel::mpsc::{channel, Receiver, Sender};
+use chrono::Utc;
+use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures::executor::ThreadPool;
 use futures::task::SpawnExt;
 use log::*;
@@ -15,55 +15,67 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::sync::Once;
 
+fn handle_error<U, E>(f: Result<U, E>)
+where
+    E: std::fmt::Display,
+{
+    match f {
+        Ok(_) => (),
+        Err(e) => error!("Error when processing {}", e),
+    }
+}
 //
 // Server Implmentation
 //
 pub struct SmartMonitor {
     pool: ThreadPool,
-    senders: Arc<Mutex<BTreeMap<ChannelId, Sender<Cow<'static, MonitorMsg>>>>>,
+    senders: BTreeMap<ChannelId, Arc<Mutex<UnboundedSender<Cow<'static, MonitorMsg>>>>>,
 }
-
-//01494790028 - Imran IBB solicitors
-//
 
 impl SmartMonitor {
     pub fn new() -> Self {
         Self {
             pool: ThreadPool::new().unwrap(),
-            senders: Arc::new(Mutex::new(BTreeMap::new())),
+            senders: BTreeMap::new(),
         }
     }
 
     async fn consume(
-        name: &str,
-        mut msg_receiver: Receiver<Cow<'static, MonitorMsg>>,
+        name: String,
+        mut msg_receiver: UnboundedReceiver<Cow<'static, MonitorMsg>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let conn = smart_monitor_sqlite::create_channel_table(name)?;
-        while let Ok(msg) = msg_receiver.try_next() {
-            if let Some(msg) = msg {
-                smart_monitor_sqlite::insert(&conn, &msg)?;
+        let conn = smart_monitor_sqlite::create_channel_table(&name)?;
+        debug!("Connection to database ok {}", name);
+        loop {
+            if let Ok(msg) = msg_receiver.try_next() {
+                debug!("Got message on receiver, attempting to write to db");
+                if let Some(msg) = msg {
+                    handle_error::<usize, _>(smart_monitor_sqlite::insert(&conn, &msg));
+                }
             }
         }
-        Ok(())
     }
+
     pub fn create(&mut self, ch: ChannelId) -> Result<(), Box<dyn std::error::Error>> {
-        let (sender, receiver) = channel(10);
+        let (sender, receiver) = unbounded();
         let channel_name = String::from(&ch);
-        self.pool.spawn(async move {
-            match SmartMonitor::consume(&channel_name, receiver).await {
-                Ok(_) => (),
-                Err(e) => error!("failed creating database {:?}", e),
+        self.pool.spawn({
+            let channel_name = channel_name.clone();
+            async move {
+                match SmartMonitor::consume(channel_name, receiver).await {
+                    Ok(_) => (),
+                    Err(e) => error!("failed creating database {:?}", e),
+                }
             }
         })?;
-        if let Some(mut senders) = self.senders.try_lock() {
-            senders.insert(ch, sender);
-        }
+        self.senders.insert(ch, Arc::new(Mutex::new(sender)));
+
         Ok(())
     }
 
     async fn manage_monitor(
         mut stream: TcpStream,
-        sender_map: Arc<Mutex<BTreeMap<ChannelId, Sender<Cow<'_, MonitorMsg>>>>>,
+        sender_map: BTreeMap<ChannelId, Arc<Mutex<UnboundedSender<Cow<'_, MonitorMsg>>>>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut latency = 0i64;
         loop {
@@ -76,40 +88,32 @@ impl SmartMonitor {
                     write_timestamp_async(&mut stream, t1).await?;
                     let ntp = read_ntp_msg(&mut stream).await?;
                     latency = ntp.offset as i64 + ntp.delay as i64;
-                    if let Some(mut sender_map) = sender_map.try_lock() {
-                        if let Some(sender) = sender_map.get_mut(&msg.channel_name) {
-                            msg.to_mut().adj_time_stamp =
-                                msg.adj_time_stamp + Duration::milliseconds(latency);
-                            msg.to_mut().data.extend(&i64::to_le_bytes(latency));
-                            while let Err(_) = sender.try_send(msg.clone()) {
-                                std::thread::sleep(std::time::Duration::from_micros(100));
-                            }
-                        }
+                    if let Some(sender) = sender_map.get(&msg.channel_name) {
+                        msg.to_mut().adj_time_stamp =
+                            msg.adj_time_stamp + chrono::Duration::milliseconds(latency);
+                        debug!("Found channel {}", msg.channel_name);
+                        let sender = sender.lock().await;
+                        handle_error::<(), _>(sender.unbounded_send(msg.clone()));
                     }
                 }
-                Payload::Cpu | Payload::Memory | _ => loop {
-                    if let Some(mut sender_map) = sender_map.try_lock() {
-                        if let Some(sender) = sender_map.get_mut(&msg.channel_name) {
-                            msg.to_mut().adj_time_stamp =
-                                msg.adj_time_stamp + Duration::milliseconds(latency);
-                            while let Err(_) = sender.try_send(msg.clone()) {
-                                std::thread::sleep(std::time::Duration::from_micros(100));
-                            }
-                        }
+                Payload::Cpu | Payload::Memory | _ => {
+                    if let Some(sender) = sender_map.get(&msg.channel_name) {
+                        debug!("Found channel {}", msg.channel_name);
+                        msg.to_mut().adj_time_stamp =
+                            msg.adj_time_stamp + chrono::Duration::milliseconds(latency);
+                        let sender = sender.lock().await;
+                        handle_error::<(), _>(sender.unbounded_send(msg.clone()));
                     }
-                    break;
-                },
+                }
             }
         }
     }
 
+    // 07832271961
+
     pub async fn listen(&self, addr: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
-        let listener = TcpListener::bind(addr).await.unwrap();
-        info!("Listening on {:?}", listener.local_addr());
-        let mut incoming = listener.incoming();
         {
-            let sender_map = self.senders.lock().await;
-            let channels = sender_map.keys().cloned().collect::<Vec<_>>();
+            let channels = self.senders.keys().cloned().collect::<Vec<_>>();
             self.pool.spawn(async move {
                 match smart_monitor_ws::web_service(&channels).await {
                     Ok(_) => (),
@@ -117,6 +121,9 @@ impl SmartMonitor {
                 }
             })?;
         }
+        let listener = TcpListener::bind(addr).await.unwrap();
+        info!("Listening on {:?}", listener.local_addr());
+        let mut incoming = listener.incoming();
         while let Some(stream) = incoming.next().await {
             let stream = stream?;
             let sender_map = self.senders.clone();
@@ -135,8 +142,8 @@ impl SmartMonitor {
 // Client implmentation
 //
 pub struct SmartMonitorClient {
-    sender: Sender<MonitorMsg>,
-    receiver: Receiver<MonitorMsg>,
+    sender: UnboundedSender<MonitorMsg>,
+    receiver: UnboundedReceiver<MonitorMsg>,
 }
 
 pub fn logger() -> &'static mut SmartMonitorClient {
@@ -156,14 +163,14 @@ pub struct SMLogger<T>
 where
     T: Serialize,
 {
-    sender: Sender<MonitorMsg>,
+    sender: UnboundedSender<MonitorMsg>,
     channel: ChannelId,
     _phantom: std::marker::PhantomData<T>,
 }
 
 impl SmartMonitorClient {
     pub fn new() -> Self {
-        let (sender, receiver) = channel(10);
+        let (sender, receiver) = unbounded();
         Self { sender, receiver }
     }
 
@@ -189,14 +196,12 @@ impl SmartMonitorClient {
     }
     async fn run(&mut self, addr: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
         let mut conn = TcpStream::connect(addr).await?;
+        debug!("Connected to addr {}", addr);
         loop {
-            if let Ok(msg) = self.receiver.try_next() {
+            while let Ok(msg) = self.receiver.try_next() {
                 if let Some(msg) = msg {
                     write_sm_message(&mut conn, msg).await?;
                 }
-            } else {
-                error!("No message to receive, waiting 2s");
-                async_std::task::sleep(std::time::Duration::from_secs(2)).await;
             }
         }
     }
@@ -220,7 +225,7 @@ where
             payload: Payload::Entry,
             data: bytes,
         };
-        if let Ok(_) = self.sender.try_send(msg) {}
+        if let Ok(_) = self.sender.unbounded_send(msg) {}
     }
 
     pub fn entry_vec(&mut self, item: &[T]) {
@@ -233,7 +238,7 @@ where
             payload: Payload::Entry,
             data: bytes,
         };
-        if let Ok(_) = self.sender.try_send(msg) {}
+        if let Ok(_) = self.sender.unbounded_send(msg) {}
     }
 
     pub fn exit(&mut self) {
@@ -245,7 +250,7 @@ where
             payload: Payload::Exit,
             data: vec![],
         };
-        if let Ok(_) = self.sender.try_send(msg) {}
+        if let Ok(_) = self.sender.unbounded_send(msg) {}
     }
 }
 

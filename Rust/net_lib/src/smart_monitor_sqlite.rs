@@ -34,6 +34,7 @@ pub fn create_channel_table(name: &str) -> Result<Connection, Box<dyn std::error
 pub fn insert(conn: &Connection, msg: &MonitorMsg) -> Result<usize, Box<dyn std::error::Error>> {
     match &msg.payload {
         Payload::Entry | Payload::Error => {
+            debug!("Writing to database entry/error message");
             let msg_format = match msg.msg_format {
                 MsgFormat::Bincode => 0,
                 MsgFormat::MsgPack => 1,
@@ -47,9 +48,10 @@ pub fn insert(conn: &Connection, msg: &MonitorMsg) -> Result<usize, Box<dyn std:
                 params![msg.adj_time_stamp, 1, msg_format],
             )?;
             let rowid = conn.last_insert_rowid();
+            debug!("Writing blob with row_id {}", rowid);
             let mut blob = conn.blob_open(DatabaseName::Main, "TS_DATA", "Msg", rowid, false)?;
             blob.write(&msg.data)?;
-            Ok(1)
+            Ok(rowid as usize)
         }
         Payload::Latency => Ok(conn.execute(
             "INSERT INTO LATENCY (Timestamp,VALUE) VALUES (?1,?2)",

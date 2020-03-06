@@ -1,5 +1,6 @@
 use crate::msg_serde::SmartMonitorMsg;
 use crate::smart_monitor_sqlite::{select_all_msg, select_msg};
+use async_std::sync::{Arc, Mutex};
 use chrono::NaiveDateTime;
 use log::*;
 use rusqlite::{Connection, OpenFlags};
@@ -32,10 +33,8 @@ fn get_channel_msg(req: &Request<()>) -> Result<SmartMonitorMsg, Box<dyn std::er
 
 pub async fn web_service(channels: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let mut app = tide::new();
-    let channels = channels.iter().cloned().collect::<Vec<String>>();
-    app.at("/all/:start/:end").get(move |mut req: Request<()>| {
-        let channels = channels.clone();
-        let connections = channels
+    let connections = Arc::new(Mutex::new(
+        channels
             .iter()
             .map(|ch| {
                 debug!("Connecting to {}.db3", ch);
@@ -45,8 +44,12 @@ pub async fn web_service(channels: &[String]) -> Result<(), Box<dyn std::error::
                 )
                 .unwrap()
             })
-            .collect::<Vec<_>>();
+            .collect::<Vec<_>>(),
+    ));
+    app.at("/all/:start/:end").get(move |req: Request<()>| {
+        let connections = connections.clone();
         async move {
+            let connections = connections.lock().await;
             match get_all_channel_data(&req, &connections) {
                 Ok(v) => tide::Response::new(200).body_json(&v).unwrap(),
                 Err(e) => {

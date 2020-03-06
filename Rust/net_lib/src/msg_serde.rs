@@ -351,17 +351,14 @@ fn write_timestamp<'a>(
     output: &'a mut [u8],
 ) -> Result<(&'a mut [u8], u64), GenError> {
     let (output, _) = write_usize(dt.timestamp_millis() as usize / 1000, output)?;
-    let (output, sz) = write_u32(dt.timestamp_subsec_nanos() * 1000, output)?;
+    let (output, sz) = write_u32(dt.timestamp_subsec_nanos(), output)?;
     Ok((output, sz))
 }
 
 fn read_timestamp(input: &[u8]) -> nom::IResult<&[u8], NaiveDateTime> {
     let (input, date) = read_usize(input)?;
     let (input, time) = read_u32(input)?;
-    Ok((
-        input,
-        NaiveDateTime::from_timestamp(date as i64, time / 1000),
-    ))
+    Ok((input, NaiveDateTime::from_timestamp(date as i64, time)))
 }
 
 pub async fn read_timestamp_async(
@@ -393,7 +390,6 @@ fn read_sm_msg(input: &[u8]) -> nom::IResult<&[u8], MonitorMsg> {
     let (input, _) = read_u32(input)?; // execution id
     let (input, _) = read_str(input)?; // service
     let (input, name) = read_str(input)?; // channel name
-
     let (input, data) = match payload {
         Payload::Entry | Payload::Cpu | Payload::Memory | Payload::Error => {
             let rest = input;
@@ -427,11 +423,13 @@ fn write_sm_msg<'a>(
     let (output, _) = write_u32(0, output)?;
     let (output, _) = write_str("", output)?;
     let (output, _) = write_str(&msg.channel_name, output)?;
+    let mut rest = output;
     if !msg.data.is_empty() {
-        let (output, _) = write_usize(msg.data.len(), output)?;
-        let (_, _) = gen(slice(&msg.data), output)?;
+        let (output, _) = write_usize(msg.data.len(), rest)?;
+        let (output, _) = gen(slice(&msg.data), output)?;
+        rest = output;
     }
-    Ok((output, 0))
+    Ok((rest, 0))
 }
 
 pub async fn read_sm_message(
@@ -455,7 +453,8 @@ pub async fn write_sm_message(
     stream: &mut TcpStream,
     msg: MonitorMsg,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut buf = SmallVec::<[u8; 1024]>::with_capacity(1024);
+    let mut buf = SmallVec::<[u8; 1024]>::new();
+    buf.resize(1024, 0u8);
     let (remain, _) = write_sm_msg(&msg, buf.as_mut_slice())?;
     let sz = 1024 - remain.len();
     stream.write(&u32::to_le_bytes(sz as u32)).await?;
@@ -521,9 +520,7 @@ fn read_ntp(input: &[u8]) -> nom::IResult<&[u8], NtpMsg> {
     Ok((input, NtpMsg { offset, delay }))
 }
 
-pub async fn read_ntp_msg(
-    mut stream: &mut TcpStream,
-) -> Result<NtpMsg, Box<dyn std::error::Error>> {
+pub async fn read_ntp_msg(stream: &mut TcpStream) -> Result<NtpMsg, Box<dyn std::error::Error>> {
     let mut buf = [0u8; 8];
     stream.read_exact(&mut buf).await?;
     match read_ntp(&mut buf) {
