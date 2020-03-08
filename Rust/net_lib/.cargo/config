@@ -1,2 +1,3 @@
-[target.release]
-rustflags=["-Ctarget=native"]
+[build]
+pipelining=true
+rustflags=["-Copt-level=3","-Ctarget-cpu=native"]
