@@ -17,4 +17,4 @@ mod smart_monitor_sqlite;
 mod smart_monitor_ws;
 pub use error::MeshError;
 mod discovery_ws;
-mod msg_serde;
+pub mod msg_serde;

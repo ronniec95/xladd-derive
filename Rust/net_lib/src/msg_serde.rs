@@ -1,5 +1,4 @@
 use async_std::net::TcpStream;
-use async_std::sync::Arc;
 use chrono::naive::serde::ts_milliseconds;
 use chrono::NaiveDateTime;
 use cookie_factory::{bytes::*, combinator::slice, gen, GenError};
@@ -78,10 +77,10 @@ impl PartialEq for Channel {
 impl Eq for Channel {}
 
 #[derive(Debug, PartialEq)]
-pub struct DiscoveryMessage {
+pub struct DiscoveryMessage<'a> {
     pub state: DiscoveryState,
     pub uri: Url,
-    pub channels: Vec<Arc<Channel>>,
+    pub channels: Cow<'a, [Channel]>,
 }
 
 #[derive(Clone, Ord, PartialEq, PartialOrd, Eq, FromPrimitive, ToPrimitive, Debug, Serialize)]
@@ -139,7 +138,7 @@ impl fmt::Display for Channel {
     }
 }
 
-impl fmt::Display for DiscoveryMessage {
+impl<'a> fmt::Display for DiscoveryMessage<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "{:?} {} =>", self.state, self.uri.unparse())?;
         for ch in &*self.channels {
@@ -276,30 +275,30 @@ fn write_channel<'a>(ch: &Channel, output: &'a mut [u8]) -> Result<(&'a mut [u8]
 // Discovery Message
 //
 
-fn read_ds_msg(input: &[u8]) -> nom::IResult<&[u8], DiscoveryMessage> {
+fn read_ds_msg(input: &[u8]) -> nom::IResult<&[u8], DiscoveryMessage<'static>> {
     let (input, _) = read_enum::<MsgFormat>(input)?;
     let (input, state) = read_enum::<DiscoveryState>(input)?;
-    let (input, uri) = map(read_str, |v| urlparse(v))(input)?;
+    //   let (input, uri) = map(read_str, |v| urlparse(v))(input)?;
     let (input, channel_cnt) = read_usize(input)?;
     let mut channels = Vec::with_capacity(channel_cnt);
     let mut input = input;
     for _ in 0..channel_cnt {
         let (rest, channel) = read_channel(input)?;
-        channels.push(Arc::new(channel));
+        channels.push(channel);
         input = rest;
     }
     Ok((
         input,
         DiscoveryMessage {
             state,
-            uri,
-            channels,
+            uri: urlparse(""),
+            channels: Cow::Owned(channels),
         },
     ))
 }
 
 fn write_ds_msg<'a>(
-    msg: &DiscoveryMessage,
+    msg: &'a DiscoveryMessage,
     output: &'a mut [u8],
 ) -> Result<(&'a mut [u8], u64), GenError> {
     let (output, _) = write_enum::<MsgFormat>(&MsgFormat::Bincode, output)?;
@@ -316,9 +315,9 @@ fn write_ds_msg<'a>(
     Ok((rest, sz))
 }
 
-pub async fn read_msg(
+pub async fn read_msg<'a>(
     mut stream: TcpStream,
-) -> Result<DiscoveryMessage, Box<dyn std::error::Error>> {
+) -> Result<DiscoveryMessage<'a>, Box<dyn std::error::Error>> {
     let sz = read_u32_async(&mut stream).await? as usize;
     let mut buf = SmallVec::<[u8; 1024]>::with_capacity(sz);
     buf.resize(sz, 0u8);
@@ -333,9 +332,9 @@ pub async fn read_msg(
     }
 }
 
-pub async fn write_msg(
+pub async fn write_msg<'a>(
     mut stream: TcpStream,
-    msg: DiscoveryMessage,
+    msg: DiscoveryMessage<'a>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut buf = SmallVec::<[u8; 1024]>::new();
     buf.resize(1024, 0u8);
@@ -551,7 +550,7 @@ mod tests {
         let msg = DiscoveryMessage {
             state: DiscoveryState::Connect,
             uri: urlparse("tcp://127.0.0.1:12345"),
-            channels: vec![Arc::new(Channel {
+            channels: Cow::Owned(vec![Channel {
                 name: "mychannel".to_string(),
                 instance: 0,
                 channel_type: ChannelType::Input,
@@ -560,7 +559,7 @@ mod tests {
                     urlparse("tcp://192.168.1.1:55126"),
                     urlparse("tcp://192.145.0.27:156"),
                 ],
-            })],
+            }]),
         };
         let mut buf = SmallVec::<[u8; 1024]>::with_capacity(1024);
         buf.resize(1024, 0u8);

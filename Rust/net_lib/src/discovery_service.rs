@@ -10,6 +10,7 @@ use futures::task::SpawnExt;
 use log::*;
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use urlparse::Url;
 
@@ -22,9 +23,9 @@ impl DiscoveryServer {
         Self { stream }
     }
 
-    async fn on_connect(
+    async fn on_connect<'a>(
         &self,
-        msg: DiscoveryMessage,
+        msg: DiscoveryMessage<'a>,
         rng: &mut SmallRng,
     ) -> Result<(), Box<dyn std::error::Error>> {
         match msg.uri.port {
@@ -39,7 +40,7 @@ impl DiscoveryServer {
                     DiscoveryMessage {
                         state: DiscoveryState::ConnectResponse,
                         uri: new_address,
-                        channels: vec![],
+                        channels: Cow::Borrowed(&[]),
                     },
                 )
                 .await?;
@@ -50,7 +51,7 @@ impl DiscoveryServer {
                     DiscoveryMessage {
                         state: DiscoveryState::ConnectResponse,
                         uri: msg.uri,
-                        channels: vec![],
+                        channels: Cow::Borrowed(&[]),
                     },
                 )
                 .await?;
@@ -59,18 +60,18 @@ impl DiscoveryServer {
         Ok(())
     }
 
-    async fn on_connect_response(
+    async fn on_connect_response<'a>(
         &self,
-        _: DiscoveryMessage,
+        _: DiscoveryMessage<'a>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     }
 
-    async fn on_queue_data(
+    async fn on_queue_data<'a>(
         &self,
-        msg: DiscoveryMessage,
-        channels: Arc<Mutex<BTreeSet<Arc<Channel>>>>,
-        local_channels: &mut BTreeSet<Arc<Channel>>,
+        msg: DiscoveryMessage<'a>,
+        channels: &Arc<Mutex<BTreeSet<Channel>>>,
+        local_channels: &mut BTreeSet<Channel>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         loop {
             for ch in msg.channels.iter() {
@@ -86,7 +87,9 @@ impl DiscoveryServer {
                     DiscoveryMessage {
                         state: DiscoveryState::QueueData,
                         uri: msg.uri,
-                        channels: channels.iter().cloned().collect::<Vec<_>>(),
+                        channels: Cow::Owned(
+                            channels.iter().map(|ch| ch.clone()).collect::<Vec<_>>(),
+                        ),
                     },
                 )
                 .await?;
@@ -96,14 +99,17 @@ impl DiscoveryServer {
         Ok(())
     }
 
-    async fn on_error(&self, _: DiscoveryMessage) -> Result<(), Box<dyn std::error::Error>> {
+    async fn on_error<'a>(
+        &self,
+        _: DiscoveryMessage<'a>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     }
 
     async fn run_loop(
         &self,
-        channels: Arc<Mutex<BTreeSet<Arc<Channel>>>>,
-        mut local_channels: &mut BTreeSet<Arc<Channel>>,
+        channels: &Arc<Mutex<BTreeSet<Channel>>>,
+        mut local_channels: &mut BTreeSet<Channel>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut rng = SmallRng::from_entropy();
         loop {
@@ -114,7 +120,7 @@ impl DiscoveryServer {
                 DiscoveryState::Connect => self.on_connect(msg, &mut rng).await?,
                 DiscoveryState::ConnectResponse => self.on_connect_response(msg).await?,
                 DiscoveryState::QueueData => {
-                    self.on_queue_data(msg, channels.clone(), &mut local_channels)
+                    self.on_queue_data(msg, channels, &mut local_channels)
                         .await?;
                 }
                 DiscoveryState::Error => self.on_error(msg).await?,
@@ -146,7 +152,7 @@ pub async fn run_server(addr: SocketAddr) -> Result<(), Box<dyn std::error::Erro
             let discovery_service = DiscoveryServer::new(stream.clone());
             let mut local_channels = BTreeSet::new();
             match discovery_service
-                .run_loop(global_channels.clone(), &mut local_channels)
+                .run_loop(&global_channels, &mut local_channels)
                 .await
             {
                 Ok(_) => (),
@@ -179,41 +185,43 @@ fn local_address() -> Url {
     urlparse::urlparse("tcp://127.0.0.1:0")
 }
 
-fn process_msg(msg: &DiscoveryMessage, channels: Vec<Arc<Channel>>) -> DiscoveryMessage {
+fn process_msg<'a>(msg: &'a DiscoveryMessage, channels: &'a [Channel]) -> DiscoveryMessage<'a> {
     match msg.state {
         DiscoveryState::Error => DiscoveryMessage {
             state: DiscoveryState::Connect,
             uri: local_address(),
-            channels: channels,
+            channels: Cow::Borrowed(channels),
         },
         DiscoveryState::Connect => DiscoveryMessage {
             state: DiscoveryState::ConnectResponse,
             uri: local_address(),
-            channels: channels,
+            channels: Cow::Borrowed(channels),
         },
         DiscoveryState::ConnectResponse => DiscoveryMessage {
             state: DiscoveryState::QueueData,
             uri: local_address(),
-            channels: channels,
+            channels: Cow::Borrowed(channels),
         },
         DiscoveryState::QueueData => DiscoveryMessage {
             state: DiscoveryState::QueueData,
             uri: local_address(),
-            channels: channels,
+            channels: Cow::Borrowed(channels),
         },
     }
 }
 
 pub async fn run_client(
     server: SocketAddr,
-    channels: Vec<Arc<Channel>>,
+    channels: &[Channel],
+    notifier: &dyn Fn(&[Channel]),
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let stream = TcpStream::connect(server).await?;
     loop {
-        let stream = TcpStream::connect(server).await?;
-        let msg = read_msg(stream).await?;
-        let next_msg = process_msg(&msg, channels.clone());
+        let msg = read_msg(stream.clone()).await?;
+        let next_msg = process_msg(&msg, &channels);
         if next_msg.state == DiscoveryState::QueueData {
-            // tcpserver.init(next_msg.uri,channels); send mmessages to tcpservice using channels
+            notifier(&next_msg.channels);
+        // tcpserver.init(next_msg.uri,channels); send mmessages to tcpservice using channels
         } else {
             debug!("Waiting for 10 seconds");
             sleep(std::time::Duration::from_secs(10)).await;

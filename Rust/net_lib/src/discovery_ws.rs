@@ -14,7 +14,7 @@ pub struct ChannelResponse {
 }
 
 pub async fn web_service(
-    channels: Arc<Mutex<BTreeSet<Arc<Channel>>>>,
+    channels: Arc<Mutex<BTreeSet<Channel>>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut app = tide::new();
     app.at("/").get(move |_| {

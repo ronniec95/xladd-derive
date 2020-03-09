@@ -329,11 +329,7 @@ impl TcpQueueManager {
     }
 
     pub async fn listen(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let listener = block_on(async {
-            TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], self.port)))
-                .await
-                .expect("Could not bind to socket")
-        });
+        let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], self.port))).await?;
         let mut incoming = listener.incoming();
         while let Some(stream) = incoming.next().await {
             let stream = stream?;
