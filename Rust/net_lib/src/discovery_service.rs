@@ -5,6 +5,7 @@ use async_std::net::{TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::sync::{Arc, Mutex};
 use async_std::task::sleep;
+use futures::channel::mpsc::Sender;
 use futures::executor::ThreadPool;
 use futures::task::SpawnExt;
 use log::*;
@@ -210,18 +211,17 @@ fn process_msg<'a>(msg: &'a DiscoveryMessage, channels: &'a [Channel]) -> Discov
     }
 }
 
-pub async fn run_client(
+pub async fn run_client<'a, 'b: 'a>(
     server: SocketAddr,
-    channels: &[Channel],
-    notifier: &dyn Fn(&[Channel]),
+    channels: &'a [Channel],
+    mut notifier: Sender<Vec<Channel>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let stream = TcpStream::connect(server).await?;
     loop {
         let msg = read_msg(stream.clone()).await?;
         let next_msg = process_msg(&msg, &channels);
         if next_msg.state == DiscoveryState::QueueData {
-            notifier(&next_msg.channels);
-        // tcpserver.init(next_msg.uri,channels); send mmessages to tcpservice using channels
+            notifier.try_send(next_msg.channels.to_vec()).unwrap();
         } else {
             debug!("Waiting for 10 seconds");
             sleep(std::time::Duration::from_secs(10)).await;

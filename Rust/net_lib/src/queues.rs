@@ -2,8 +2,8 @@ use crate::msg_serde::*;
 use crate::smart_monitor::*;
 use async_std::net::TcpListener;
 use async_std::stream::StreamExt;
-use futures::channel::mpsc::{channel, Sender};
-use futures::executor::block_on;
+use futures::channel::mpsc::{channel, Receiver, Sender};
+use futures::executor::ThreadPool;
 use futures::lock::Mutex;
 use futures::Future;
 use serde::{Deserialize, Serialize};
@@ -271,12 +271,19 @@ where
     }
 }
 
+struct TcpConnection {}
+
 /// Implements a tcp external connection for channels
 ///
 pub struct TcpQueueManager {
-    port: u16,
     input_queue_map: BTreeMap<ChannelId, Vec<Box<dyn ByteDeSerialiser>>>,
     output_queue_map: BTreeMap<ChannelId, Vec<Box<dyn ByteDeSerialiser>>>,
+    tcp_map: BTreeMap<ChannelId, TcpConnection>,
+    port_receiver: Receiver<u16>,
+    channel_receiver: Receiver<Vec<Channel>>,
+    // Senders
+    port_sender: Sender<u16>,
+    pub channel_sender: Sender<Vec<Channel>>,
 }
 
 impl TcpQueueManager {
@@ -284,19 +291,18 @@ impl TcpQueueManager {
     /// # Arguments
     /// * 'port' - A port number
     ///
-    pub fn new_listener(port: u16) -> Self {
+    pub fn new() -> Self {
+        let (port_sender, port_receiver) = channel(0);
+        let (channel_sender, channel_receiver) = channel(0);
         Self {
-            port,
             input_queue_map: BTreeMap::new(),
             output_queue_map: BTreeMap::new(),
+            tcp_map: BTreeMap::new(),
+            port_receiver,
+            channel_receiver,
+            port_sender,
+            channel_sender,
         }
-    }
-
-    /// Updates the port after receiving an update from the discovery service
-    /// # Arguments
-    /// * 'port' - A port number
-    pub fn update_port(&mut self, port: u16) {
-        self.port = port;
     }
 
     /// Register a queue that's going to listen on a tcp port
@@ -316,20 +322,33 @@ impl TcpQueueManager {
         output_q.tcp_sink(id, sender);
     }
 
-    pub fn update_channel_info(&mut self, msg: &DiscoveryMessage) {
-        match msg.state {
-            DiscoveryState::Connect => {
-                let port = msg.uri.port.unwrap();
-                self.port = if port > 0 { self.port } else { port };
+    pub async fn listen_port_updates(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let mut main_port = 0;
+        loop {
+            if let Ok(port) = self.port_receiver.try_next() {
+                if let Some(port) = port {
+                    main_port = port;
+                    break;
+                }
             }
-            DiscoveryState::ConnectResponse => {}
-            DiscoveryState::QueueData => {}
-            DiscoveryState::Error => {}
+        }
+        self.listen(main_port).await
+    }
+
+    pub async fn listen_channel_updates(&mut self, pool: ThreadPool) {
+        while let Ok(channels) = self.channel_receiver.try_next() {
+            if let Some(channels) = channels {
+                for ch in channels {
+                    if let Some(connection) = self.tcp_map.get(&ch.name) {
+                        //pool.spawn(connection.connect(ch.addresses));
+                    }
+                }
+            }
         }
     }
 
-    pub async fn listen(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], self.port))).await?;
+    async fn listen(&mut self, port: u16) -> Result<(), Box<dyn std::error::Error>> {
+        let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], port))).await?;
         let mut incoming = listener.incoming();
         while let Some(stream) = incoming.next().await {
             let stream = stream?;
