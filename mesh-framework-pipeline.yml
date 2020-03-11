@@ -21,8 +21,7 @@ steps:
 - task: NuGetCommand@2
   displayName: 'Restore nuget packages'
   inputs:
-    restoreSolution: '$(mssolution)'
-    restoreSolution: '$(etlsolution)'
+    restoreSolution: '**/aarc*.slh'
     
 - task: VSBuild@1
   displayName: 'Build Mesh windows ms services'
