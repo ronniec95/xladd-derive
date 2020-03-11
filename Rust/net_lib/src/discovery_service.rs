@@ -182,12 +182,6 @@ pub async fn run_server(addr: SocketAddr) -> Result<(), Box<dyn std::error::Erro
     Ok(())
 }
 
-fn local_address() -> Url {
-    use std::net::{IpAddr, Ipv4Addr};
-    SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0);
-    urlparse::urlparse("tcp://127.0.0.1:0")
-}
-
 fn process_msg<'a>(msg: &'a DiscoveryMessage, channels: &'a [Channel]) -> DiscoveryMessage<'a> {
     match msg.state {
         DiscoveryState::Error => DiscoveryMessage {
@@ -233,8 +227,8 @@ pub async fn run_client<'a, 'b: 'a>(
                 .await?;
                 let msg = read_msg(&mut stream).await?;
                 let next_msg = process_msg(&msg, &channels);
-                info!("{}", msg);
-                info!("{}", next_msg);
+                debug!("{}", msg);
+                debug!("{}", next_msg);
                 if msg.state == DiscoveryState::ConnectResponse {
                     if let Some(port) = msg.uri.port {
                         port_sender
@@ -246,8 +240,8 @@ pub async fn run_client<'a, 'b: 'a>(
                 loop {
                     let msg = read_msg(&mut stream).await?;
                     let next_msg = process_msg(&msg, &channels);
-                    info!("{}", msg);
-                    info!("{}", next_msg);
+                    debug!("{}", msg);
+                    debug!("{}", next_msg);
                     match next_msg.state {
                         DiscoveryState::Connect => (),
                         DiscoveryState::ConnectResponse => {

@@ -4,7 +4,7 @@ use futures::task::SpawnExt;
 use log::*;
 use net_lib::discovery_service;
 use net_lib::msg_serde::Channel;
-use net_lib::queues::{LastValueQueue, OutputQueue, TcpTransportListener};
+use net_lib::queues::{LastValueQueue, OutputQueue, TcpTransportListener, TcpTransportSender};
 use simplelog::*;
 use std::borrow::Cow;
 use std::net::SocketAddr;
@@ -45,13 +45,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     block_on({
         let mut ms = TcpTransportListener::new();
+        let mut ls = TcpTransportSender::new();
         let sub_pool = pool.clone();
         async move {
             let (port_sender, port_receiver) = TcpTransportListener::port_channel();
+            let (channel_sender, channel_receiver) = TcpTransportSender::channels_channel();
             let discovery_client = discovery_service::run_client(
                 SocketAddr::from_str("127.0.0.1:9999").unwrap(),
                 &[],
-                ms.channel_sender.clone(),
+                channel_sender,
                 port_sender,
             );
             sub_pool
@@ -61,6 +63,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         Ok(_) => (),
                         Err(e) => eprintln!("Error {:?}", e),
                     }
+                })
+                .unwrap();
+            sub_pool
+                .spawn(async move {
+                    println!("Listending to channel updates");
+                    ls.receive_channel_updates(channel_receiver).await;
                 })
                 .unwrap();
             println!("Listending to port updates");

@@ -1,12 +1,13 @@
 use crate::msg_serde::*;
 use crate::smart_monitor::*;
-use async_std::net::TcpListener;
+use async_std::net::{TcpListener, TcpStream};
 use async_std::stream::StreamExt;
 use futures::channel::mpsc;
 use futures::channel::oneshot;
 use futures::lock::Mutex;
 use futures::Future;
 use log::*;
+use multimap::MultiMap;
 use serde::{Deserialize, Serialize};
 use std::borrow::{BorrowMut, Cow};
 use std::clone::Clone;
@@ -203,9 +204,10 @@ where
 {
     pub fn push(&mut self, item: T) {
         let bytes = bincode::serialize(&item).unwrap();
-        self.sender.try_send(bytes).unwrap();
+        self.sender.try_send(bytes).unwrap(); // Retry logic here
     }
 }
+
 /*
     async fn tcp_stream_sender(
         channel_id: ChannelId,
@@ -272,17 +274,49 @@ where
     }
 }
 
-struct TcpConnection {}
+pub struct TcpTransportSender {
+    output_tcp_streams: MultiMap<ChannelId, TcpStream>,
+}
+
+impl TcpTransportSender {
+    pub fn new() -> Self {
+        Self {
+            output_tcp_streams: MultiMap::new(),
+        }
+    }
+
+    pub async fn receive_channel_updates(&mut self, mut receiver: mpsc::Receiver<Vec<Channel>>) {
+        loop {
+            if let Ok(channels) = receiver.try_next() {
+                if let Some(channels) = channels {
+                    debug!("channels received");
+                    for ip in &channels {
+                        for addr in &ip.addresses {
+                            if let Some(host) = &addr.hostname {
+                                if let Some(port) = addr.port {
+                                    let tcp_conn = TcpStream::connect(format!("{}:{}", host, port))
+                                        .await
+                                        .unwrap();
+                                    debug!("Connecting to {:?}", tcp_conn);
+                                    self.output_tcp_streams.insert(ip.name.clone(), tcp_conn);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn channels_channel() -> (mpsc::Sender<Vec<Channel>>, mpsc::Receiver<Vec<Channel>>) {
+        mpsc::channel(1)
+    }
+}
 
 /// Implements a tcp external connection for channels
 ///
 pub struct TcpTransportListener {
     input_queue_map: BTreeMap<ChannelId, Vec<Box<dyn ByteDeSerialiser>>>,
-    output_queue_map: BTreeMap<ChannelId, Vec<Box<dyn ByteDeSerialiser>>>,
-    tcp_map: BTreeMap<ChannelId, TcpConnection>,
-    channel_receiver: mpsc::Receiver<Vec<Channel>>,
-    // Senders
-    pub channel_sender: mpsc::Sender<Vec<Channel>>,
 }
 
 impl TcpTransportListener {
@@ -291,13 +325,8 @@ impl TcpTransportListener {
     /// * 'port' - A port number
     ///
     pub fn new() -> Self {
-        let (channel_sender, channel_receiver) = mpsc::channel(1);
         Self {
             input_queue_map: BTreeMap::new(),
-            output_queue_map: BTreeMap::new(),
-            tcp_map: BTreeMap::new(),
-            channel_receiver,
-            channel_sender,
         }
     }
 
@@ -308,14 +337,6 @@ impl TcpTransportListener {
     ///
     pub fn add_input(&mut self, id: ChannelId, sink: Box<dyn ByteDeSerialiser>) {
         self.input_queue_map.entry(id).or_insert(vec![]).push(sink);
-    }
-
-    pub fn add_output<T>(&mut self, id: ChannelId, output_q: &mut OutputQueue<T>)
-    where
-        T: Serialize + for<'de> Deserialize<'de> + Clone + Send + std::fmt::Debug,
-    {
-        let (sender, receiver) = mpsc::channel(10);
-        output_q.tcp_sink(id, sender);
     }
 
     pub fn port_channel() -> (oneshot::Sender<u16>, oneshot::Receiver<u16>) {
@@ -329,7 +350,6 @@ impl TcpTransportListener {
         loop {
             if let Ok(port) = port_receiver.try_recv() {
                 if let Some(port) = port {
-                    debug!("Got a port {}", port);
                     self.listen(port).await?;
                 }
             } else {
