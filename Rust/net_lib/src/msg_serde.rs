@@ -278,9 +278,9 @@ fn write_channel<'a>(ch: &Channel, output: &'a mut [u8]) -> Result<(&'a mut [u8]
 fn read_ds_msg(input: &[u8]) -> nom::IResult<&[u8], DiscoveryMessage<'static>> {
     let (input, _) = read_enum::<MsgFormat>(input)?;
     let (input, state) = read_enum::<DiscoveryState>(input)?;
-    //   let (input, uri) = map(read_str, |v| urlparse(v))(input)?;
+    let (input, uri) = map(read_str, |v| urlparse(v))(input)?;
     let (input, channel_cnt) = read_usize(input)?;
-    let mut channels = Vec::with_capacity(channel_cnt);
+    let mut channels = Vec::with_capacity(std::cmp::max(1, channel_cnt));
     let mut input = input;
     for _ in 0..channel_cnt {
         let (rest, channel) = read_channel(input)?;
@@ -291,7 +291,7 @@ fn read_ds_msg(input: &[u8]) -> nom::IResult<&[u8], DiscoveryMessage<'static>> {
         input,
         DiscoveryMessage {
             state,
-            uri: urlparse(""),
+            uri,
             channels: Cow::Owned(channels),
         },
     ))
@@ -316,9 +316,9 @@ fn write_ds_msg<'a>(
 }
 
 pub async fn read_msg<'a>(
-    mut stream: TcpStream,
+    stream: &mut TcpStream,
 ) -> Result<DiscoveryMessage<'a>, Box<dyn std::error::Error>> {
-    let sz = read_u32_async(&mut stream).await? as usize;
+    let sz = read_u32_async(stream).await? as usize;
     let mut buf = SmallVec::<[u8; 1024]>::with_capacity(sz);
     buf.resize(sz, 0u8);
     stream.read_exact(&mut buf).await?;
@@ -333,7 +333,7 @@ pub async fn read_msg<'a>(
 }
 
 pub async fn write_msg<'a>(
-    mut stream: TcpStream,
+    stream: &mut TcpStream,
     msg: DiscoveryMessage<'a>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut buf = SmallVec::<[u8; 1024]>::new();

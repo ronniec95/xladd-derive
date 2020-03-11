@@ -147,7 +147,7 @@ pub struct SmartMonitorClient {
     receiver: UnboundedReceiver<MonitorMsg>,
 }
 
-pub fn logger() -> &'static mut SmartMonitorClient {
+pub fn smlogger() -> &'static mut SmartMonitorClient {
     static mut SINGLETON: *mut SmartMonitorClient = 0 as *mut SmartMonitorClient;
     static ONCE: Once = Once::new();
     unsafe {
@@ -267,7 +267,7 @@ mod tests {
 
     #[test]
     fn no_server() {
-        let smc = logger();
+        let smc = smlogger();
         //let sm = smc.create_sender::<i32>(123).clone();
         block_on(async {
             smc.run_auto_reconnect(SocketAddr::from(([127, 0, 0, 1], 3574)))

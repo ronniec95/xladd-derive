@@ -2,10 +2,11 @@ use crate::msg_serde::*;
 use crate::smart_monitor::*;
 use async_std::net::TcpListener;
 use async_std::stream::StreamExt;
-use futures::channel::mpsc::{channel, Receiver, Sender};
-use futures::executor::ThreadPool;
+use futures::channel::mpsc;
+use futures::channel::oneshot;
 use futures::lock::Mutex;
 use futures::Future;
+use log::*;
 use serde::{Deserialize, Serialize};
 use std::borrow::{BorrowMut, Cow};
 use std::clone::Clone;
@@ -45,7 +46,7 @@ where
     T: Serialize + Send + 'static,
 {
     msg_format: MsgFormat,
-    sender: Sender<Vec<u8>>,
+    sender: mpsc::Sender<Vec<u8>>,
     sm_log: SMLogger<T>,
     _data: std::marker::PhantomData<T>,
 }
@@ -82,11 +83,11 @@ where
         self.burst_consumers.last().unwrap()
     }
 
-    fn tcp_sink(&mut self, channel_id: ChannelId, sender: Sender<Vec<u8>>) {
+    fn tcp_sink(&mut self, channel_id: ChannelId, sender: mpsc::Sender<Vec<u8>>) {
         self.tcp_consumer.push(TcpScalarQueue {
             msg_format: MsgFormat::Bincode,
             sender,
-            sm_log: logger().create_sender::<T>(channel_id, self.service.clone()),
+            sm_log: smlogger().create_sender::<T>(channel_id, self.service.clone()),
             _data: std::marker::PhantomData,
         });
     }
@@ -112,7 +113,7 @@ where
     fn new(channel_id: ChannelId, service: Cow<'static, str>) -> Self {
         Self {
             values: Arc::new(Mutex::new(Vec::new())),
-            sm_log: logger().create_sender::<T>(channel_id, service),
+            sm_log: smlogger().create_sender::<T>(channel_id, service),
         }
     }
 
@@ -164,7 +165,7 @@ where
     pub fn new(channel_id: ChannelId, service: Cow<'static, str>) -> Self {
         Self {
             value: Arc::new(Mutex::new(None)),
-            sm_log: logger().create_sender::<T>(channel_id, service),
+            sm_log: smlogger().create_sender::<T>(channel_id, service),
         }
     }
 
@@ -275,32 +276,27 @@ struct TcpConnection {}
 
 /// Implements a tcp external connection for channels
 ///
-pub struct TcpQueueManager {
+pub struct TcpTransportListener {
     input_queue_map: BTreeMap<ChannelId, Vec<Box<dyn ByteDeSerialiser>>>,
     output_queue_map: BTreeMap<ChannelId, Vec<Box<dyn ByteDeSerialiser>>>,
     tcp_map: BTreeMap<ChannelId, TcpConnection>,
-    port_receiver: Receiver<u16>,
-    channel_receiver: Receiver<Vec<Channel>>,
+    channel_receiver: mpsc::Receiver<Vec<Channel>>,
     // Senders
-    port_sender: Sender<u16>,
-    pub channel_sender: Sender<Vec<Channel>>,
+    pub channel_sender: mpsc::Sender<Vec<Channel>>,
 }
 
-impl TcpQueueManager {
+impl TcpTransportListener {
     /// Creates a listener on a port
     /// # Arguments
     /// * 'port' - A port number
     ///
     pub fn new() -> Self {
-        let (port_sender, port_receiver) = channel(0);
-        let (channel_sender, channel_receiver) = channel(0);
+        let (channel_sender, channel_receiver) = mpsc::channel(1);
         Self {
             input_queue_map: BTreeMap::new(),
             output_queue_map: BTreeMap::new(),
             tcp_map: BTreeMap::new(),
-            port_receiver,
             channel_receiver,
-            port_sender,
             channel_sender,
         }
     }
@@ -318,36 +314,32 @@ impl TcpQueueManager {
     where
         T: Serialize + for<'de> Deserialize<'de> + Clone + Send + std::fmt::Debug,
     {
-        let (sender, receiver) = channel(10);
+        let (sender, receiver) = mpsc::channel(10);
         output_q.tcp_sink(id, sender);
     }
 
-    pub async fn listen_port_updates(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let mut main_port = 0;
-        loop {
-            if let Ok(port) = self.port_receiver.try_next() {
-                if let Some(port) = port {
-                    main_port = port;
-                    break;
-                }
-            }
-        }
-        self.listen(main_port).await
+    pub fn port_channel() -> (oneshot::Sender<u16>, oneshot::Receiver<u16>) {
+        oneshot::channel()
     }
 
-    pub async fn listen_channel_updates(&mut self, pool: ThreadPool) {
-        while let Ok(channels) = self.channel_receiver.try_next() {
-            if let Some(channels) = channels {
-                for ch in channels {
-                    if let Some(connection) = self.tcp_map.get(&ch.name) {
-                        //pool.spawn(connection.connect(ch.addresses));
-                    }
+    pub async fn listen_port_updates(
+        &mut self,
+        mut port_receiver: oneshot::Receiver<u16>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        loop {
+            if let Ok(port) = port_receiver.try_recv() {
+                if let Some(port) = port {
+                    debug!("Got a port {}", port);
+                    self.listen(port).await?;
                 }
+            } else {
+                async_std::task::sleep(std::time::Duration::from_millis(100)).await;
             }
         }
     }
 
     async fn listen(&mut self, port: u16) -> Result<(), Box<dyn std::error::Error>> {
+        info!("Binding to port {}", port);
         let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], port))).await?;
         let mut incoming = listener.incoming();
         while let Some(stream) = incoming.next().await {

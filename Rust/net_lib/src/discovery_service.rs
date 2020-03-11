@@ -5,7 +5,8 @@ use async_std::net::{TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::sync::{Arc, Mutex};
 use async_std::task::sleep;
-use futures::channel::mpsc::Sender;
+use futures::channel::mpsc;
+use futures::channel::oneshot;
 use futures::executor::ThreadPool;
 use futures::task::SpawnExt;
 use log::*;
@@ -26,6 +27,7 @@ impl DiscoveryServer {
 
     async fn on_connect<'a>(
         &self,
+        stream: &mut TcpStream,
         msg: DiscoveryMessage<'a>,
         rng: &mut SmallRng,
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -37,7 +39,7 @@ impl DiscoveryServer {
                     msg.uri.scheme, msg.uri.netloc, n, msg.uri.path
                 ));
                 write_msg(
-                    self.stream.clone(),
+                    stream,
                     DiscoveryMessage {
                         state: DiscoveryState::ConnectResponse,
                         uri: new_address,
@@ -48,7 +50,7 @@ impl DiscoveryServer {
             }
             Some(_) => {
                 write_msg(
-                    self.stream.clone(),
+                    stream,
                     DiscoveryMessage {
                         state: DiscoveryState::ConnectResponse,
                         uri: msg.uri,
@@ -84,7 +86,7 @@ impl DiscoveryServer {
                 }
 
                 write_msg(
-                    self.stream.clone(),
+                    &mut self.stream.clone(),
                     DiscoveryMessage {
                         state: DiscoveryState::QueueData,
                         uri: msg.uri,
@@ -114,11 +116,11 @@ impl DiscoveryServer {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut rng = SmallRng::from_entropy();
         loop {
-            let stream = self.stream.clone();
-            let msg = read_msg(stream).await?;
+            let mut stream = self.stream.clone();
+            let msg = read_msg(&mut stream).await?;
             info!("Received message {}", msg);
             match msg.state {
-                DiscoveryState::Connect => self.on_connect(msg, &mut rng).await?,
+                DiscoveryState::Connect => self.on_connect(&mut stream, msg, &mut rng).await?,
                 DiscoveryState::ConnectResponse => self.on_connect_response(msg).await?,
                 DiscoveryState::QueueData => {
                     self.on_queue_data(msg, channels, &mut local_channels)
@@ -190,22 +192,22 @@ fn process_msg<'a>(msg: &'a DiscoveryMessage, channels: &'a [Channel]) -> Discov
     match msg.state {
         DiscoveryState::Error => DiscoveryMessage {
             state: DiscoveryState::Connect,
-            uri: local_address(),
+            uri: msg.uri.clone(),
             channels: Cow::Borrowed(channels),
         },
         DiscoveryState::Connect => DiscoveryMessage {
             state: DiscoveryState::ConnectResponse,
-            uri: local_address(),
+            uri: msg.uri.clone(),
             channels: Cow::Borrowed(channels),
         },
         DiscoveryState::ConnectResponse => DiscoveryMessage {
             state: DiscoveryState::QueueData,
-            uri: local_address(),
+            uri: msg.uri.clone(),
             channels: Cow::Borrowed(channels),
         },
         DiscoveryState::QueueData => DiscoveryMessage {
             state: DiscoveryState::QueueData,
-            uri: local_address(),
+            uri: msg.uri.clone(),
             channels: Cow::Borrowed(channels),
         },
     }
@@ -214,17 +216,56 @@ fn process_msg<'a>(msg: &'a DiscoveryMessage, channels: &'a [Channel]) -> Discov
 pub async fn run_client<'a, 'b: 'a>(
     server: SocketAddr,
     channels: &'a [Channel],
-    mut notifier: Sender<Vec<Channel>>,
+    mut channel_sender: mpsc::Sender<Vec<Channel>>,
+    port_sender: oneshot::Sender<u16>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let stream = TcpStream::connect(server).await?;
     loop {
-        let msg = read_msg(stream.clone()).await?;
-        let next_msg = process_msg(&msg, &channels);
-        if next_msg.state == DiscoveryState::QueueData {
-            notifier.try_send(next_msg.channels.to_vec()).unwrap();
-        } else {
-            debug!("Waiting for 10 seconds");
-            sleep(std::time::Duration::from_secs(10)).await;
+        match TcpStream::connect(server).await {
+            Ok(mut stream) => {
+                write_msg(
+                    &mut stream,
+                    DiscoveryMessage {
+                        state: DiscoveryState::Connect,
+                        uri: urlparse::urlparse("tcp://192.168.0.202"),
+                        channels: Cow::Borrowed(channels),
+                    },
+                )
+                .await?;
+                let msg = read_msg(&mut stream).await?;
+                let next_msg = process_msg(&msg, &channels);
+                info!("{}", msg);
+                info!("{}", next_msg);
+                if msg.state == DiscoveryState::ConnectResponse {
+                    if let Some(port) = msg.uri.port {
+                        port_sender
+                            .send(port)
+                            .expect("Could not send port info to recevier");
+                    }
+                    write_msg(&mut stream, next_msg).await?;
+                }
+                loop {
+                    let msg = read_msg(&mut stream).await?;
+                    let next_msg = process_msg(&msg, &channels);
+                    info!("{}", msg);
+                    info!("{}", next_msg);
+                    match next_msg.state {
+                        DiscoveryState::Connect => (),
+                        DiscoveryState::ConnectResponse => {
+                            write_msg(&mut stream, next_msg).await?;
+                        }
+                        DiscoveryState::QueueData => {
+                            channel_sender.try_send(next_msg.channels.to_vec())?;
+                        }
+                        DiscoveryState::Error => {
+                            error!("error when processing discovery messages");
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed connection for 10 seconds, {}", e);
+                sleep(std::time::Duration::from_secs(10)).await;
+            }
         }
     }
 }

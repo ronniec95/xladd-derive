@@ -4,7 +4,8 @@ use futures::task::SpawnExt;
 use log::*;
 use net_lib::discovery_service;
 use net_lib::msg_serde::Channel;
-use net_lib::queues::{LastValueQueue, OutputQueue, TcpQueueManager};
+use net_lib::queues::{LastValueQueue, OutputQueue, TcpTransportListener};
+use simplelog::*;
 use std::borrow::Cow;
 use std::net::SocketAddr;
 use std::pin::Pin;
@@ -16,7 +17,7 @@ struct MainService {
 }
 
 impl MainService {
-    fn new(tcp_queue_mgr: &TcpQueueManager) -> Self {
+    fn new(tcp_queue_mgr: &TcpTransportListener) -> Self {
         let init = Self {
             q0: LastValueQueue::new("inputchannel".to_string(), Cow::Borrowed("mainservice")), // Tcp input queue
             q1: OutputQueue::new("output_channel"), // Multiple outputs
@@ -31,19 +32,30 @@ impl MainService {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    TermLogger::init(
+        LevelFilter::Debug,
+        ConfigBuilder::new()
+            .set_time_level(LevelFilter::Error)
+            .set_time_format_str("%Y-%m-%d %H:%M:%S%.3f")
+            .build(),
+        TerminalMode::Mixed,
+    )
+    .unwrap();
     let pool = ThreadPool::new().unwrap();
-    pool.spawn({
-        let mut ms = TcpQueueManager::new();
+
+    block_on({
+        let mut ms = TcpTransportListener::new();
         let sub_pool = pool.clone();
         async move {
-            println!("Starting discovery client");
+            let (port_sender, port_receiver) = TcpTransportListener::port_channel();
             let discovery_client = discovery_service::run_client(
                 SocketAddr::from_str("127.0.0.1:9999").unwrap(),
                 &[],
                 ms.channel_sender.clone(),
+                port_sender,
             );
             sub_pool
-                .spawn(async {
+                .spawn(async move {
                     println!("Spawning discovery client");
                     match discovery_client.await {
                         Ok(_) => (),
@@ -51,9 +63,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 })
                 .unwrap();
-            println!("Listending to updates");
-            block_on(async { ms.listen_port_updates().await });
+            println!("Listending to port updates");
+            ms.listen_port_updates(port_receiver).await.unwrap();
         }
-    })?;
+    });
     Ok(())
 }
