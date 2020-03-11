@@ -1,6 +1,5 @@
-﻿using Microsoft.AspNetCore;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Hosting;
 
 namespace aarcYahooFinETL
 {
@@ -8,19 +7,16 @@ namespace aarcYahooFinETL
     {
         public static void Main(string[] args)
         {
-            CreateWebHostBuilder(args).Build().Run();
+            var host = CreateWebHostBuilder(args).Build();
+
+            host.Run();
         }
 
-        public static IWebHostBuilder CreateWebHostBuilder(string[] args) =>
-            WebHost.CreateDefaultBuilder(args)
-                .UseStartup<Startup>()
-               .ConfigureLogging((hostingContext, logging) =>
-               {
-                   // The ILoggingBuilder minimum level determines the
-                   // the lowest possible level for logging. The log4net
-                   // level then sets the level that we actually log at.
-                   logging.AddLog4Net();
-                   logging.SetMinimumLevel(LogLevel.Debug);
-               });
+        public static IHostBuilder CreateWebHostBuilder(string[] args) =>
+            Host.CreateDefaultBuilder(args)
+                .ConfigureWebHostDefaults(webBuilder =>
+                {
+                    webBuilder.UseStartup<Startup>();
+                });
     }
 }

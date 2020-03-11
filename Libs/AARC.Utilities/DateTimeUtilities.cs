@@ -24,7 +24,9 @@ namespace AARC.Utilities
         {
             //return (dateTime - new DateTime(1970, 1, 1).ToLocalTime()).TotalSeconds;
             var ts = (dateTime.ToLocalTime() - dt1970);
-            return ((UInt64)ts.TotalSeconds, (UInt32)(ts.Ticks/(TimeSpan.TicksPerMillisecond/1000)));
+            var remTicks = ts.Ticks - (ts.TotalSeconds * TimeSpan.TicksPerSecond);
+            var nanoseconds = remTicks / (TimeSpan.TicksPerMillisecond / 1000);
+            return ((UInt64)ts.TotalSeconds, (UInt32)nanoseconds);
         }
 
         public static ulong ToUnsignedLong(DateTime date)

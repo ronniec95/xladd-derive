@@ -1,18 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>netcoreapp2.2</TargetFramework>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
     <AspNetCoreHostingModel>InProcess</AspNetCoreHostingModel>
     <DockerComposeProjectPath>../../docker-compose.dcproj</DockerComposeProjectPath>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.App" />
-    <PackageReference Include="Microsoft.AspNetCore.Razor.Design" Version="2.2.0" PrivateAssets="All" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="2.2.4" />
-    <PackageReference Include="log4net" Version="2.0.8" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Log4Net.AspNetCore" Version="2.2.10" />
-    <PackageReference Include="morelinq" Version="3.1.1" />
+     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="3.1.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="3.1.2" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="3.1.0" />
+    <PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="3.1.0" />
+    <PackageReference Include="morelinq" Version="3.3.2" />
+    <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
   </ItemGroup>
 
   <ItemGroup>
@@ -3774,10 +3774,5 @@
     <ProjectReference Include="..\..\Libs\AARC.Repository.EF\AARC.Repository.EF.csproj" />
     <ProjectReference Include="..\..\Libs\AARC.Repository.ORM\AARC.Repository.ORM.csproj" />
     <ProjectReference Include="AARC.RDS.orm" />
-  </ItemGroup>
-  <ItemGroup>
-    <Reference Include="System.ComponentModel.Annotations">
-      <HintPath>..\..\..\..\..\..\..\..\usr\local\share\dotnet\sdk\NuGetFallbackFolder\microsoft.netcore.app\2.2.0\ref\netcoreapp2.2\System.ComponentModel.Annotations.dll</HintPath>
-    </Reference>
   </ItemGroup>
 </Project>

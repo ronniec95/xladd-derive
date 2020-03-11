@@ -251,7 +251,33 @@ namespace AARC.MeshTests
         }
 
         [TestMethod]
-        public void TestNTP()
+        public void TestNTPDiff1980and1990()
+        {
+            var (ts1980, ms1980) = DateTimeUtilities.DateTimeToUnixTotalSeconds(new DateTime(1980, 1, 1));
+
+            var (ts1990, ms1990) = DateTimeUtilities.DateTimeToUnixTotalSeconds(new DateTime(1990, 1, 1));
+
+            var diff = ts1990 - ts1980;
+            Assert.AreEqual<UInt32>(0, ms1980);
+            Assert.AreEqual<UInt32>(0, ms1990);
+            Assert.AreEqual<UInt64>((UInt64)315619200, diff);
+        }
+
+        [TestMethod]
+        public void TestNTPDiff1980and1990and1msec()
+        {
+            var (ts1980, ns1980) = DateTimeUtilities.DateTimeToUnixTotalSeconds(new DateTime(1980, 1, 1));
+
+            var (ts1990, ns1990) = DateTimeUtilities.DateTimeToUnixTotalSeconds(new DateTime(1990, 1, 1, 0,0, 0, 1));
+
+            var diff = ts1990 - ts1980;
+            Assert.AreEqual<UInt32>(0, ns1980);
+            Assert.AreEqual<UInt32>(0, ns1990);
+            Assert.AreEqual<UInt64>((UInt64)315619200, diff);
+        }
+
+        [TestMethod]
+        public void TestNTP2()
         {
             var bytes = new List<byte>();
             var (totalSeconds, milliseconds) = DateTimeUtilities.DateTimeToUnixTotalSeconds(new DateTime(1980, 1, 1));

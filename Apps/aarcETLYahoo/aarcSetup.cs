@@ -1,4 +1,8 @@
 ﻿using System.Collections.Generic;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+
 using AARC.Model;
 using AARC.Model.Comparers;
 using AARC.Model.Interfaces.RDS;
@@ -7,9 +11,7 @@ using AARC.Repository.EF;
 using AARC.Repository.ORM;
 using aarcYahooFinETL.DataSource;
 using aarcYahooFinETL.Utilities;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
+
 
 namespace aarcYahooFinETL
 {
@@ -17,6 +19,8 @@ namespace aarcYahooFinETL
     {
         public static void Services(IConfiguration configuration, IServiceCollection services)
         {
+            services.AddRazorPages();
+
             services.AddDbContext<AARCContext>
             (options =>
                 options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")
@@ -27,6 +31,8 @@ namespace aarcYahooFinETL
             services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
 
             AarcServices(services);
+
+            services.AddAuthorization();
         }
 
         public static void AarcServices(IServiceCollection services)
