@@ -60,9 +60,17 @@ namespace AARC.Mesh.SubService
                 PayLoad = message
             };
 
-            var bytes = m.Encode(0);
+            try
+            {
+                var bytes = m.Encode(0);
+                _logger.LogDebug($"Smart Monitor sending {m.State} ({m.DateTimeTotalSeconds},{m.DateTimeMS}) bytes [{bytes.Length}]");
 
-            OnNext(bytes);
+                OnNext(bytes);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Smart Monitor Info send error");
+            }
         }
 
         public void OnError(Exception ex, string channel = @"ERROR")
@@ -78,9 +86,17 @@ namespace AARC.Mesh.SubService
                 PayLoad = ex.StackTrace
             };
 
-            var bytes = m.Encode(0);
+            try
+            {
+                var bytes = m.Encode(0);
+                _logger.LogDebug($"Smart Monitor sending {m.State} ({m.DateTimeTotalSeconds},{m.DateTimeMS}) bytes [{bytes.Length}]");
 
-            OnNext(bytes);
+                OnNext(bytes);
+            }
+            catch(Exception sex)
+            {
+                _logger.LogError(sex, $"Smart Monitor error when sending {ex.Message}");
+            }
         }
 
         public void OnNext(byte[] value) => _byteWriter.WriteAsync(value, _localCancelSource.Token);
@@ -106,6 +122,7 @@ namespace AARC.Mesh.SubService
                 _logger.LogError(ex, "Monitor Service error; Resetting");
                 _transportService?.Dispose();
                 _transportService = null;
+                throw ex;
             }
         }
         
