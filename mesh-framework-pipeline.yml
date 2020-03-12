@@ -16,7 +16,7 @@ variables:
   buildConfiguration: 'Release'
 
 jobs:
-- job: "Nuget-Restore-Job"
+- job: NugetRestoreJob
   steps:
   - task: NuGetToolInstaller@1
   - task: NuGetCommand@2
@@ -24,7 +24,7 @@ jobs:
     inputs:
       restoreSolution: '**/aarc*.slh'
 
-- job: "Mesh-Framework-Build-Job"
+- job: MeshFrameworkBuildJob
   steps:
   - task: VSBuild@1
     displayName: 'Build Mesh windows ms services'
@@ -34,7 +34,7 @@ jobs:
       platform: '$(buildPlatform)'
       configuration: '$(buildConfiguration)'
 
-- job: "ETL-Build-Job"
+- job: ETLBuildJob
   steps:
   - task: VSBuild@1
     displayName: 'Build Mesh windows etl services'
@@ -44,7 +44,7 @@ jobs:
       platform: '$(buildPlatform)'
       configuration: '$(buildConfiguration)'
 
-- job: "Mesh-UnitTests-Job"
+- job: MeshUnitTestsJob
   steps:
   - task: DotNetCoreCLI@2
     displayName: 'Run Mesh Framework Tests'
