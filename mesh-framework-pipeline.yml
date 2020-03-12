@@ -26,6 +26,7 @@ jobs:
 
 - job: MeshFrameworkBuildJob
   steps:
+  - dependsOn: NugetRestoreJob
   - task: VSBuild@1
     displayName: 'Build Mesh windows ms services'
     inputs:
@@ -35,7 +36,8 @@ jobs:
       configuration: '$(buildConfiguration)'
 
 - job: ETLBuildJob
-  steps:
+  steps: 
+  - dependsOn: NugetRestoreJob
   - task: VSBuild@1
     displayName: 'Build Mesh windows etl services'
     inputs:
@@ -46,6 +48,7 @@ jobs:
 
 - job: MeshUnitTestsJob
   steps:
+  - dependsOn: MeshFrameworkBuildJob
   - task: DotNetCoreCLI@2
     displayName: 'Run Mesh Framework Tests'
     inputs:
