@@ -16,8 +16,6 @@ variables:
   buildConfiguration: 'Release'
 
 jobs:
-- job: MeshFrameworkBuildJob
-  steps:
 - job: NugetRestoreJob
   steps:
   - task: NuGetToolInstaller@1
