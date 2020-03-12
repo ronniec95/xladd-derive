@@ -25,8 +25,8 @@ jobs:
       restoreSolution: '**/aarc*.slh'
 
 - job: MeshFrameworkBuildJob
+  dependsOn: NugetRestoreJob
   steps:
-  - dependsOn: NugetRestoreJob
   - task: VSBuild@1
     displayName: 'Build Mesh windows ms services'
     inputs:
@@ -36,8 +36,8 @@ jobs:
       configuration: '$(buildConfiguration)'
 
 - job: ETLBuildJob
+  dependsOn: NugetRestoreJob
   steps: 
-  - dependsOn: NugetRestoreJob
   - task: VSBuild@1
     displayName: 'Build Mesh windows etl services'
     inputs:
@@ -47,8 +47,8 @@ jobs:
       configuration: '$(buildConfiguration)'
 
 - job: MeshUnitTestsJob
+  dependsOn: MeshFrameworkBuildJob
   steps:
-  - dependsOn: MeshFrameworkBuildJob
   - task: DotNetCoreCLI@2
     displayName: 'Run Mesh Framework Tests'
     inputs:
