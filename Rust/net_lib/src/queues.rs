@@ -1,11 +1,17 @@
 use crate::msg_serde::*;
 use crate::smart_monitor::*;
-use async_std::net::{TcpListener, TcpStream};
-use async_std::stream::StreamExt;
-use futures::channel::mpsc;
-use futures::channel::oneshot;
-use futures::lock::Mutex;
-use futures::Future;
+use async_std::{
+    net::{TcpListener, TcpStream},
+    stream::StreamExt,
+};
+use futures::{
+    channel::{mpsc, oneshot},
+    executor::ThreadPool,
+    io::AsyncWriteExt,
+    lock::Mutex,
+    task::SpawnExt,
+    Future,
+};
 use log::*;
 use multimap::MultiMap;
 use serde::{Deserialize, Serialize};
@@ -275,32 +281,65 @@ where
 }
 
 pub struct TcpTransportSender {
-    output_tcp_streams: MultiMap<ChannelId, TcpStream>,
+    pub senders: MultiMap<String, mpsc::Sender<(String, Vec<u8>)>>,
 }
 
 impl TcpTransportSender {
     pub fn new() -> Self {
         Self {
-            output_tcp_streams: MultiMap::new(),
+            senders: MultiMap::new(),
         }
     }
 
-    pub async fn receive_channel_updates(&mut self, mut receiver: mpsc::Receiver<Vec<Channel>>) {
+    async fn run_sender(
+        host: &str,
+        mut receiver: mpsc::Receiver<(ChannelId, Vec<u8>)>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut stream = TcpStream::connect(host).await?;
+        loop {
+            if let Ok(channel_info) = receiver.try_next() {
+                if let Some((channel_id, data)) = channel_info {
+                    stream.write(channel_id.as_bytes()).await?;
+                    stream.write_all(&data).await?;
+                }
+            } else {
+                async_std::task::sleep(std::time::Duration::from_micros(100)).await;
+            }
+        }
+    }
+
+    pub async fn receive_channel_updates(
+        &mut self,
+        pool: ThreadPool,
+        mut receiver: mpsc::Receiver<Vec<Channel>>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // Update the tcp connection list, by iterating over the list for matching ips/port
         loop {
             if let Ok(channels) = receiver.try_next() {
                 if let Some(channels) = channels {
                     debug!("channels received");
+                    // Put all the addresses in a set to ensure we only have unique connections
+                    let mut addresses = BTreeMap::new();
                     for ip in &channels {
                         for addr in &ip.addresses {
                             if let Some(host) = &addr.hostname {
                                 if let Some(port) = addr.port {
-                                    let tcp_conn = TcpStream::connect(format!("{}:{}", host, port))
-                                        .await
-                                        .unwrap();
-                                    debug!("Connecting to {:?}", tcp_conn);
-                                    self.output_tcp_streams.insert(ip.name.clone(), tcp_conn);
+                                    addresses
+                                        .entry(format!("{}:{}", host, port))
+                                        .or_insert(vec![ip.name.clone()]);
                                 }
                             }
+                        }
+                    }
+                    // Create a new map of channels to tcp sockets
+                    for (host, channels) in addresses {
+                        let (sender, receiver) = mpsc::channel(1);
+                        pool.spawn(async move {
+                            TcpTransportSender::run_sender(&host, receiver).await;
+                        })?;
+                        // Now have a map of channel names to senders. Note that this is multiple senders to a multiple receivers
+                        for ch in channels {
+                            self.senders.insert(ch, sender.clone());
                         }
                     }
                 }

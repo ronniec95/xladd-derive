@@ -61,14 +61,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Spawning discovery client");
                     match discovery_client.await {
                         Ok(_) => (),
-                        Err(e) => eprintln!("Error {:?}", e),
+                        Err(e) => error!("Failed while listeing to the discovery client {:?}", e),
                     }
                 })
                 .unwrap();
             sub_pool
-                .spawn(async move {
-                    println!("Listending to channel updates");
-                    ls.receive_channel_updates(channel_receiver).await;
+                .spawn({
+                    let receiver_pool = sub_pool.clone();
+                    async move {
+                        println!("Listending to channel updates");
+                        match ls
+                            .receive_channel_updates(receiver_pool, channel_receiver)
+                            .await
+                        {
+                            Ok(_) => (),
+                            Err(e) => error!("Failed while receiving channel updates {:?}", e),
+                        }
+                    }
                 })
                 .unwrap();
             println!("Listending to port updates");
