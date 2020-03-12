@@ -16,7 +16,7 @@ variables:
   buildConfiguration: 'Release'
 
 jobs:
-- job: NugetRestoreJob
+- job: MeshFrameworkBuild
   steps:
   - task: NuGetToolInstaller@1
   - task: NuGetCommand@2
@@ -37,7 +37,7 @@ jobs:
       projects: '**/UT/*/AARC.MeshTests.csproj'
       arguments: '--configuration $(buildConfiguration)'
 
-- job: ETLBuildJob
+- job: aarcETL
   steps:
   - task: NuGetToolInstaller@1
   - task: NuGetCommand@2
