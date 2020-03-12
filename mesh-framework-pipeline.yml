@@ -46,7 +46,7 @@ jobs:
 
 - job: "MS run tests job"
   steps:
-  - task: DotNetCoreCLI@3
+  - task: DotNetCoreCLI@2
     displayName: 'Run Mesh Framework Tests'
     inputs:
       command: test
