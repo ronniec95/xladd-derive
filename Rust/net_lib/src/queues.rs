@@ -3,12 +3,12 @@ use crate::smart_monitor::*;
 use async_std::{
     net::{TcpListener, TcpStream},
     stream::StreamExt,
+    sync::{Arc, Mutex},
 };
 use futures::{
     channel::{mpsc, oneshot},
     executor::ThreadPool,
     io::AsyncWriteExt,
-    lock::Mutex,
     task::SpawnExt,
     Future,
 };
@@ -20,7 +20,6 @@ use std::clone::Clone;
 use std::collections::{BTreeMap, BTreeSet};
 use std::net::SocketAddr;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::task::{Context, Poll};
 
 #[derive(Clone)]
@@ -281,13 +280,16 @@ where
 }
 
 pub struct TcpTransportSender {
-    pub senders: MultiMap<String, mpsc::Sender<(String, Vec<u8>)>>,
+    multiplex_sender: mpsc::Sender<(ChannelId, Vec<u8>)>,
+    multiplex_receiver: mpsc::Receiver<(ChannelId, Vec<u8>)>,
 }
 
 impl TcpTransportSender {
     pub fn new() -> Self {
+        let (multiplex_sender, multiplex_receiver) = mpsc::channel(1);
         Self {
-            senders: MultiMap::new(),
+            multiplex_sender,
+            multiplex_receiver,
         }
     }
 
@@ -296,6 +298,9 @@ impl TcpTransportSender {
         mut receiver: mpsc::Receiver<(ChannelId, Vec<u8>)>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut stream = TcpStream::connect(host).await?;
+        // First attempt to write messages to the tcp connection from the database
+
+        // Then wait for messages
         loop {
             if let Ok(channel_info) = receiver.try_next() {
                 if let Some((channel_id, data)) = channel_info {
@@ -308,12 +313,25 @@ impl TcpTransportSender {
         }
     }
 
+    async fn run_senders_2(host: &str, receiver: mpsc::Receiver<(ChannelId, Vec<u8>)>) {
+        let res = TcpTransportSender::run_sender(&host, receiver).await;
+        match res {
+            Ok(_) => (),
+            Err(e) => {
+                error!(
+                    "Disconnected from tcp connection {} with error  {}",
+                    host, e
+                );
+            }
+        }
+    }
     pub async fn receive_channel_updates(
-        &mut self,
         pool: ThreadPool,
+        tcp_senders: Arc<Mutex<MultiMap<String, mpsc::Sender<(String, Vec<u8>)>>>>,
         mut receiver: mpsc::Receiver<Vec<Channel>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Update the tcp connection list, by iterating over the list for matching ips/port
+
         loop {
             if let Ok(channels) = receiver.try_next() {
                 if let Some(channels) = channels {
@@ -333,14 +351,49 @@ impl TcpTransportSender {
                     }
                     // Create a new map of channels to tcp sockets
                     for (host, channels) in addresses {
-                        let (sender, receiver) = mpsc::channel(1);
-                        pool.spawn(async move {
-                            TcpTransportSender::run_sender(&host, receiver).await;
+                        let tcp_senders = tcp_senders.clone();
+                        pool.spawn({
+                            async move {
+                                let (sender, receiver) = mpsc::channel(1);
+                                {
+                                    let mut tcp_senders = tcp_senders.lock().await;
+                                    for ch in &channels {
+                                        tcp_senders.insert(ch.clone(), sender.clone());
+                                    }
+                                }
+                                TcpTransportSender::run_senders_2(&host, receiver).await;
+                                {
+                                    let mut tcp_senders = tcp_senders.lock().await;
+                                    for ch in &["x"] {
+                                        tcp_senders.insert(ch.to_string(), sender.clone());
+                                    }
+                                }
+                            }
                         })?;
                         // Now have a map of channel names to senders. Note that this is multiple senders to a multiple receivers
-                        for ch in channels {
-                            self.senders.insert(ch, sender.clone());
-                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // All messages are run through a single sender unfortunately
+    pub fn new_sender(&self) -> mpsc::Sender<(ChannelId, Vec<u8>)> {
+        self.multiplex_sender.clone()
+    }
+
+    pub async fn run_message_multiplexer(
+        &mut self,
+        tcp_senders: Arc<Mutex<MultiMap<String, mpsc::Sender<(String, Vec<u8>)>>>>,
+    ) -> mpsc::Sender<(ChannelId, Vec<u8>)> {
+        loop {
+            if let Ok(msg) = self.multiplex_receiver.try_next() {
+                if let Some((channel_id, data)) = msg {
+                    let mut tcp_senders = tcp_senders.lock().await;
+                    if let Some(tcp_sender) = tcp_senders.get_mut(&channel_id) {
+                        tcp_sender.try_send((channel_id, data)).unwrap();
+                    } else {
+                        // Write to database
                     }
                 }
             }

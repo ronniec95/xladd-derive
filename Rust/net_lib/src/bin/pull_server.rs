@@ -1,14 +1,13 @@
-use async_std::sync::{Arc, RwLock};
+use async_std::sync::{Arc, Mutex};
 use futures::executor::{block_on, ThreadPool};
 use futures::task::SpawnExt;
 use log::*;
+use multimap::MultiMap;
 use net_lib::discovery_service;
-use net_lib::msg_serde::Channel;
 use net_lib::queues::{LastValueQueue, OutputQueue, TcpTransportListener, TcpTransportSender};
 use simplelog::*;
 use std::borrow::Cow;
 use std::net::SocketAddr;
-use std::pin::Pin;
 use std::str::FromStr;
 
 struct MainService {
@@ -42,10 +41,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .unwrap();
     let pool = ThreadPool::new().unwrap();
+    let mut ls = TcpTransportSender::new();
 
     block_on({
         let mut ms = TcpTransportListener::new();
-        let mut ls = TcpTransportSender::new();
         let sub_pool = pool.clone();
         async move {
             let (port_sender, port_receiver) = TcpTransportListener::port_channel();
@@ -56,6 +55,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 channel_sender,
                 port_sender,
             );
+
+            sub_pool
+                .spawn({
+                    let tcp_senders = Arc::new(Mutex::new(MultiMap::new()));
+                    async move {
+                        debug!("Running message multiplexer");
+                        ls.run_message_multiplexer(tcp_senders).await;
+                    }
+                })
+                .unwrap();
+            sub_pool
+                .spawn({
+                    let tcp_senders = Arc::new(Mutex::new(MultiMap::new()));
+                    let channel_pool = sub_pool.clone();
+                    async move {
+                        debug!("Running receive_channel_updates");
+                        match TcpTransportSender::receive_channel_updates(
+                            channel_pool,
+                            tcp_senders,
+                            channel_receiver,
+                        )
+                        .await
+                        {
+                            Ok(_) => (),
+                            Err(e) => error!("Failed while receiving channel updates {:?}", e),
+                        }
+                    }
+                })
+                .unwrap();
+
             sub_pool
                 .spawn(async move {
                     println!("Spawning discovery client");
@@ -65,21 +94,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 })
                 .unwrap();
-            sub_pool
-                .spawn({
-                    let receiver_pool = sub_pool.clone();
-                    async move {
-                        println!("Listending to channel updates");
-                        match ls
-                            .receive_channel_updates(receiver_pool, channel_receiver)
-                            .await
-                        {
-                            Ok(_) => (),
-                            Err(e) => error!("Failed while receiving channel updates {:?}", e),
-                        }
-                    }
-                })
-                .unwrap();
+
             println!("Listending to port updates");
             ms.listen_port_updates(port_receiver).await.unwrap();
         }
