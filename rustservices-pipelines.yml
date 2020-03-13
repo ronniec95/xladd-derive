@@ -7,18 +7,24 @@ trigger:
 - master
 
 pool:
-  vmImage: 'ubuntu-latest'
+  vmImage: 'ubuntu-18.04'
 
 variables:
   net_lib_path: $(Build.SourcesDirectory)/Rust/net_lib
+  rust_release_path: $(Build.SourcesDirectory)/Rust/net_lib/target/release
+  imageName: test-rust-repo
 
 steps:
   - script: |
       curl https://sh.rustup.rs -sSf | sh -s -- -y
       echo "##vso[task.setvariable variable=PATH;]$PATH:$HOME/.cargo/bin"
-    displayName: Install rust
+    displayName: Install Build Mesh Core (Rust)
   - script: cargo build --release
     workingDirectory: '$(net_lib_path)'
-    displayName: Cargo build '$(net_lib_path)'
-  - publish: $(net_lib_path)/target
+  - task: CopyFiles@2
+    inputs:
+      Contents: $(net_lib_path)/Channel.toml
+      TargetFolder: $(rust_release_path)
+  - publish: $(rust_release_path)
     artifact: Rust
+    displayName: artifact '$(rust_release_path)'
