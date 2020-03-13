@@ -23,7 +23,7 @@ steps:
     workingDirectory: '$(net_lib_path)'
   - task: CopyFiles@2
     inputs:
-      Contents: $(net_lib_path)/Channel.toml
+      Contents: $(net_lib_path)/**/Channel.toml
       TargetFolder: $(rust_release_path)
   - publish: $(rust_release_path)
     artifact: Rust
