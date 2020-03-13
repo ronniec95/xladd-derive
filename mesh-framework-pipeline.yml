@@ -15,33 +15,39 @@ variables:
   buildPlatform: 'Any CPU'
   buildConfiguration: 'Release'
 
-steps:
-- task: NuGetToolInstaller@1
+jobs:
+- job: MeshFrameworkBuild
+  steps:
+  - task: NuGetToolInstaller@1
+  - task: NuGetCommand@2
+    displayName: 'Restore nuget packages for $(mssolution)'
+    inputs:
+      restoreSolution: '$(mssolution)'
+  - task: VSBuild@1
+    displayName: 'Build Mesh windows ms services'
+    inputs:
+      solution: '$(mssolution)'
+      msbuildArgs: '/p:DeployOnBuild=false /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:DesktopBuildPackageLocation="$(build.artifactStagingDirectory)\MSApp.zip" /p:DeployIisAppPath="Mesh Web Site"'
+      platform: '$(buildPlatform)'
+      configuration: '$(buildConfiguration)'
+  - task: DotNetCoreCLI@2
+    displayName: 'Run Mesh Framework Tests'
+    inputs:
+      command: test
+      projects: '**/UT/*/AARC.MeshTests.csproj'
+      arguments: '--configuration $(buildConfiguration)'
 
-- task: NuGetCommand@2
-  displayName: 'Restore nuget packages'
-  inputs:
-    restoreSolution: '**/aarc*.slh'
-    
-- task: VSBuild@1
-  displayName: 'Build Mesh windows ms services'
-  inputs:
-    solution: '$(mssolution)'
-    msbuildArgs: '/p:DeployOnBuild=false /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:DesktopBuildPackageLocation="$(build.artifactStagingDirectory)\MSApp.zip" /p:DeployIisAppPath="Mesh Web Site"'
-    platform: '$(buildPlatform)'
-    configuration: '$(buildConfiguration)'
-
-- task: VSBuild@2
-  displayName: 'Build Mesh windows etl services'
-  inputs:
-    solution: '$(etlsolution)'
-    msbuildArgs: '/p:DeployOnBuild=false /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:DesktopBuildPackageLocation="$(build.artifactStagingDirectory)\ETLApp.zip" /p:DeployIisAppPath="ETL Web Site"'
-    platform: '$(buildPlatform)'
-    configuration: '$(buildConfiguration)'
-
-- task: DotNetCoreCLI@3
-  displayName: 'Run Mesh Framework Tests'
-  inputs:
-    command: test
-    projects: '**/UT/*/AARC.MeshTests.csproj'
-    arguments: '--configuration $(buildConfiguration)'
+- job: aarcETL
+  steps:
+  - task: NuGetToolInstaller@1
+  - task: NuGetCommand@2
+    displayName: 'Restore nuget packages for $(etlsolution)'
+    inputs:
+      restoreSolution: '$(etlsolution)'
+  - task: VSBuild@1
+    displayName: 'Build Mesh windows etl services'
+    inputs:
+      solution: '$(etlsolution)'
+      msbuildArgs: '/p:DeployOnBuild=false /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:DesktopBuildPackageLocation="$(build.artifactStagingDirectory)\ETLApp.zip" /p:DeployIisAppPath="ETL Web Site"'
+      platform: '$(buildPlatform)'
+      configuration: '$(buildConfiguration)'

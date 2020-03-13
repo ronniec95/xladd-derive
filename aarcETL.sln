@@ -15,6 +15,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AARC.Repository.ORM", "Libs
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "aarcYahooFinETL", "Apps\aarcETLYahoo\aarcYahooFinETL.csproj", "{F68C2740-59E6-4819-93F4-2691FB386759}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AARC.Repository.Interfaces", "Libs\AARC.Repository.Interfaces\AARC.Repository.Interfaces.csproj", "{DEF6485F-BEAC-4736-A690-C4DE6404B1F8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -49,6 +51,10 @@ Global
 		{F68C2740-59E6-4819-93F4-2691FB386759}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F68C2740-59E6-4819-93F4-2691FB386759}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F68C2740-59E6-4819-93F4-2691FB386759}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DEF6485F-BEAC-4736-A690-C4DE6404B1F8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DEF6485F-BEAC-4736-A690-C4DE6404B1F8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DEF6485F-BEAC-4736-A690-C4DE6404B1F8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DEF6485F-BEAC-4736-A690-C4DE6404B1F8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(MonoDevelopProperties) = preSolution
 		Policies = $0
