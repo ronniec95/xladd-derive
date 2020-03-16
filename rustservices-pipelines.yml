@@ -5,6 +5,7 @@
 
 trigger:
 - master/Rust
+- master/rustservices-pipelines.yml
 
 pool:
   vmImage: 'ubuntu-18.04'
@@ -27,6 +28,7 @@ steps:
         $(rust_release_path)/smart_monitor_server
         **/Channel.toml
       TargetFolder: $(build.artifactstagingdirectory)
+      flattenFolders: true
   - publish: $(build.artifactstagingdirectory)
     artifact: Rust
     displayName: artifact $(build.artifactstagingdirectory)ß

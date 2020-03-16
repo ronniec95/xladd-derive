@@ -4,7 +4,12 @@
 # https://docs.microsoft.com/azure/devops/pipelines/languages/dotnet-core
 
 trigger:
-- master
+- master/*.sln
+- master/Apps/*
+- master/Libs/*
+- master/Mock/*
+- master/UT/*
+- mesh-framework-pipelines.yml
 
 pool:
   vmImage: 'windows-latest'
