@@ -18,3 +18,4 @@ mod smart_monitor_ws;
 pub use error::MeshError;
 mod discovery_ws;
 pub mod msg_serde;
+mod queue_sqlite;

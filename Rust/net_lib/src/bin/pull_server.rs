@@ -1,32 +1,39 @@
 use async_std::sync::{Arc, Mutex};
-use futures::executor::{block_on, ThreadPool};
-use futures::task::SpawnExt;
+use futures::{
+    channel::mpsc,
+    executor::{block_on, ThreadPool},
+    task::SpawnExt,
+};
 use log::*;
 use multimap::MultiMap;
-use net_lib::discovery_service;
-use net_lib::queues::{LastValueQueue, OutputQueue, TcpTransportListener, TcpTransportSender};
+use net_lib::{
+    discovery_service,
+    msg_serde::ChannelId,
+    queues::{LastValueQueue, OutputQueue, TcpTransportListener, TcpTransportSender},
+};
 use simplelog::*;
-use std::borrow::Cow;
 use std::net::SocketAddr;
 use std::str::FromStr;
 
 struct MainService {
     pub q0: LastValueQueue<i64>,
-    pub q1: OutputQueue<i64>,
+    pub q1: LastValueQueue<i64>,
+    pub q2: OutputQueue<i64>,
 }
 
 impl MainService {
-    fn new(tcp_queue_mgr: &TcpTransportListener) -> Self {
-        let init = Self {
-            q0: LastValueQueue::new("inputchannel".to_string(), Cow::Borrowed("mainservice")), // Tcp input queue
-            q1: OutputQueue::new("output_channel"), // Multiple outputs
-        };
-        init
+    fn new(sender: mpsc::Sender<(ChannelId, Vec<u8>)>) -> Self {
+        Self {
+            q0: LastValueQueue::new("inputchannel".to_string(), "mainservice"), // Tcp input queue
+            q1: LastValueQueue::new("inputchannel2".to_string(), "mainservice"), // Tcp input queue
+            q2: OutputQueue::new("output_channel"),                             // Multiple outputs
+        }
     }
+
     async fn run(&mut self) {
         let value = self.q0.clone().await;
         eprintln!("{}", value);
-        self.q1.send(45);
+        self.q2.send(45);
     }
 }
 
@@ -41,10 +48,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .unwrap();
     let pool = ThreadPool::new().unwrap();
-    let mut ls = TcpTransportSender::new();
+    let ls = TcpTransportSender::new();
+
+    let sender = ls.new_sender();
+    let mut ms = TcpTransportListener::new();
+
+    let main_service = MainService::new(sender.clone());
+    ms.add_input("inputchannel", Box::new(main_service.q0));
+    ms.add_input("inputchannel2", Box::new(main_service.q1));
+
+    let another_service = MainService::new(sender.clone());
+    ms.add_input("inputchannel", Box::new(another_service.q0));
+    ms.add_input("inputchannel2", Box::new(another_service.q1));
 
     block_on({
-        let mut ms = TcpTransportListener::new();
         let sub_pool = pool.clone();
         async move {
             let (port_sender, port_receiver) = TcpTransportListener::port_channel();
@@ -59,24 +76,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             sub_pool
                 .spawn({
                     let tcp_senders = Arc::new(Mutex::new(MultiMap::new()));
-                    async move {
-                        debug!("Running message multiplexer");
-                        ls.run_message_multiplexer(tcp_senders).await;
-                    }
-                })
-                .unwrap();
-            sub_pool
-                .spawn({
-                    let tcp_senders = Arc::new(Mutex::new(MultiMap::new()));
                     let channel_pool = sub_pool.clone();
                     async move {
                         debug!("Running receive_channel_updates");
-                        match TcpTransportSender::receive_channel_updates(
-                            channel_pool,
-                            tcp_senders,
-                            channel_receiver,
-                        )
-                        .await
+                        match ls
+                            .receive_channel_updates(channel_pool, tcp_senders, channel_receiver)
+                            .await
                         {
                             Ok(_) => (),
                             Err(e) => error!("Failed while receiving channel updates {:?}", e),
