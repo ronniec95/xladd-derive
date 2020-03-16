@@ -20,10 +20,12 @@ steps:
       echo "##vso[task.setvariable variable=PATH;]$PATH:$HOME/.cargo/bin"
     displayName: Install Build Mesh Core (Rust)
   - script: cargo build --release
-#    workingDirectory: '$(net_lib_path)'
+    workingDirectory: '$(net_lib_path)'
   - task: CopyFiles@2
     inputs:
-      Contents: $(rust_release_path)/discovery_server
+      Contents: |
+        $(rust_release_path)/smart_monitor_server
+        **/Channel.toml
       TargetFolder: $(build.artifactstagingdirectory)
   - publish: $(build.artifactstagingdirectory)
     artifact: Rust
