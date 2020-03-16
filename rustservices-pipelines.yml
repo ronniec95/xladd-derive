@@ -4,21 +4,31 @@
 # https://aka.ms/yaml
 
 trigger:
-- master
+- master/Rust
+- master/rustservices-pipelines.yml
 
 pool:
-  vmImage: 'ubuntu-latest'
+  vmImage: 'ubuntu-18.04'
 
 variables:
   net_lib_path: $(Build.SourcesDirectory)/Rust/net_lib
+  rust_release_path: $(Build.SourcesDirectory)/Rust/net_lib/target/release
+  imageName: test-rust-repo
 
 steps:
   - script: |
       curl https://sh.rustup.rs -sSf | sh -s -- -y
       echo "##vso[task.setvariable variable=PATH;]$PATH:$HOME/.cargo/bin"
-    displayName: Install rust
+    displayName: Install Build Mesh Core (Rust)
   - script: cargo build --release
     workingDirectory: '$(net_lib_path)'
-    displayName: Cargo build '$(net_lib_path)'
-  - publish: $(net_lib_path)/target
+  - task: CopyFiles@2
+    inputs:
+      Contents: |
+        $(rust_release_path)/smart_monitor_server
+        **/Channel.toml
+      TargetFolder: $(build.artifactstagingdirectory)
+      flattenFolders: true
+  - publish: $(build.artifactstagingdirectory)
     artifact: Rust
+    displayName: artifact $(build.artifactstagingdirectory)ß
