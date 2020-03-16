@@ -9,7 +9,7 @@ trigger:
 - master/Libs/*
 - master/Mock/*
 - master/UT/*
-- mesh-framework-pipelines.yml
+- master/mesh-framework-pipelines.yml
 
 pool:
   vmImage: 'windows-latest'
