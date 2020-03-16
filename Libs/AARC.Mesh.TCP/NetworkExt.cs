@@ -3,7 +3,6 @@ using System.Buffers;
 using System.Diagnostics;
 using System.Linq;
 using System.Net;
-using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -15,7 +14,6 @@ namespace AARC.Mesh.TCP
     {
         static async ValueTask SendMultiSegmentAsync(Socket socket, ReadOnlySequence<byte> buffer, SocketFlags socketFlags, CancellationToken cancellationToken = default)
         {
-#if NETCOREAPP3_0
 			var position = buffer.Start;
 			buffer.TryGet(ref position, out var prevSegment);
 			while (buffer.TryGet(ref position, out var segment))
@@ -24,33 +22,13 @@ namespace AARC.Mesh.TCP
 				prevSegment = segment;
 			}
 			await socket.SendAsync(prevSegment, socketFlags);
-#else
-            var position = buffer.Start;
-            buffer.TryGet(ref position, out var prevSegment);
-            while (buffer.TryGet(ref position, out var segment))
-            {
-                var isArray = MemoryMarshal.TryGetArray(prevSegment, out var arraySegment);
-                Debug.Assert(isArray);
-                await socket.SendAsync(arraySegment, socketFlags);
-                prevSegment = segment;
-            }
-            var isArrayEnd = MemoryMarshal.TryGetArray(prevSegment, out var arraySegmentEnd);
-            Debug.Assert(isArrayEnd);
-            await socket.SendAsync(arraySegmentEnd, socketFlags);
-#endif
+
         }
 
         static (int Length, bool IsEndOfMessage) PeekFrame(ReadOnlySequence<byte> sequence) { var reader = new SequenceReader<byte>(sequence); return reader.TryRead(out byte b1) && reader.TryRead(out byte b2) && reader.TryRead(out byte b3) ? ((b1 << 8 * 2) | (b2 << 8 * 1) | (b3 << 8 * 0), true) : (0, false); }
 
         public static ValueTask SendAsync(this Socket socket, ReadOnlySequence<byte> buffer, SocketFlags socketFlags, CancellationToken cancellationToken = default)
         {
-#if NETCOREAPP3_0
-            if (buffer.IsSingleSegment)
-            {
-                return socket.SendAsync(buffer.First, webSocketMessageType, endOfMessage: true, cancellationToken);
-            }
-            else { return SendMultiSegmentAsync(socket, buffer, socketFlags, cancellationToken); }
-#else
             if (buffer.IsSingleSegment)
             {
                 var isArray = MemoryMarshal.TryGetArray(buffer.First, out var segment);
@@ -58,7 +36,6 @@ namespace AARC.Mesh.TCP
                 return new ValueTask(socket.SendAsync(segment, socketFlags));       //TODO Cancellation?
             }
             else { return SendMultiSegmentAsync(socket, buffer, socketFlags, cancellationToken); }
-#endif
         }
 
         public static async ValueTask<SequencePosition> SendAsync(this Socket socket, ReadOnlySequence<byte> buffer, SequencePosition position, SocketFlags socketFlags, CancellationToken cancellationToken = default)

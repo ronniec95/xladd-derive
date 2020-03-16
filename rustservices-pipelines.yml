@@ -4,7 +4,7 @@
 # https://aka.ms/yaml
 
 trigger:
-- master
+- master/Rust
 
 pool:
   vmImage: 'ubuntu-18.04'
@@ -20,11 +20,11 @@ steps:
       echo "##vso[task.setvariable variable=PATH;]$PATH:$HOME/.cargo/bin"
     displayName: Install Build Mesh Core (Rust)
   - script: cargo build --release
-    workingDirectory: '$(net_lib_path)'
+#    workingDirectory: '$(net_lib_path)'
   - task: CopyFiles@2
     inputs:
-      Contents: Channel.toml
-      TargetFolder: Channel.toml
-  - publish: $(rust_release_path)
+      Contents: $(rust_release_path)/discovery_server
+      TargetFolder: $(build.artifactstagingdirectory)
+  - publish: $(build.artifactstagingdirectory)
     artifact: Rust
-    displayName: artifact '$(rust_release_path)'
+    displayName: artifact $(build.artifactstagingdirectory)ß
