@@ -16,9 +16,10 @@ variables:
 
 steps:
   - script: |
-      curl https://sh.rustup.rs -sSf | sh -s -- -y
-      echo "##vso[task.setvariable variable=PATH;]$PATH:$HOME/.cargo/bin"
-    displayName: Install Build Mesh Core (Rust)
+      curl -sSf -o rustup-init.exe https://win.rustup.rs
+      rustup-init.exe -y --profile minimal --default-host x86_64-pc-windows-msvc --default-toolchain stable
+      echo "##vso[task.setvariable variable=PATH;]%PATH%;%USERPROFILE%\.cargo\bin"
+    displayName: Windows install rust
   - script: cargo build --release
     workingDirectory: '$(net_lib_path)'
   - task: CopyFiles@2
