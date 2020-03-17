@@ -26,7 +26,7 @@ impl MainService {
         Self {
             q0: LastValueQueue::new("inputchannel".to_string(), "mainservice"), // Tcp input queue
             q1: LastValueQueue::new("inputchannel2".to_string(), "mainservice"), // Tcp input queue
-            q2: OutputQueue::new("output_channel"),                             // Multiple outputs
+            q2: OutputQueue::new("output_channel").sink("output_channel", &sender), // Multiple outputs
         }
     }
 
@@ -53,13 +53,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let sender = ls.new_sender();
     let mut ms = TcpTransportListener::new();
 
-    let main_service = MainService::new(sender.clone());
-    ms.add_input("inputchannel", Box::new(main_service.q0));
-    ms.add_input("inputchannel2", Box::new(main_service.q1));
+    let mut main_service = MainService::new(sender.clone());
+    ms.add_input("inputchannel", Box::new(main_service.q0.clone()));
+    ms.add_input("inputchannel2", Box::new(main_service.q1.clone()));
 
-    let another_service = MainService::new(sender.clone());
-    ms.add_input("inputchannel", Box::new(another_service.q0));
-    ms.add_input("inputchannel2", Box::new(another_service.q1));
+    let mut another_service = MainService::new(sender.clone());
+    ms.add_input("inputchannel", Box::new(another_service.q0.clone()));
+    ms.add_input("inputchannel2", Box::new(another_service.q1.clone()));
+
+    pool.spawn(async move { another_service.run().await })?;
+    pool.spawn(async move { main_service.run().await })?;
 
     block_on({
         let sub_pool = pool.clone();

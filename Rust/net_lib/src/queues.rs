@@ -53,8 +53,8 @@ pub struct TcpScalarQueue<T>
 where
     T: Serialize + Send + 'static,
 {
-    msg_format: MsgFormat,
-    sender: mpsc::Sender<Vec<u8>>,
+    channel_id: &'static str,
+    sender: mpsc::Sender<(ChannelId, Vec<u8>)>,
     sm_log: SMLogger<T>,
     _data: std::marker::PhantomData<T>,
 }
@@ -91,13 +91,18 @@ where
         self.burst_consumers.last().unwrap()
     }
 
-    pub fn tcp_sink(&mut self, channel_id: ChannelId, sender: mpsc::Sender<Vec<u8>>) {
+    pub fn sink(
+        mut self,
+        channel_id: &'static str,
+        sender: &mpsc::Sender<(ChannelId, Vec<u8>)>,
+    ) -> Self {
         self.tcp_consumer.push(TcpScalarQueue {
-            msg_format: MsgFormat::Bincode,
-            sender,
-            sm_log: smlogger().create_sender::<T>(channel_id, self.service.clone()),
+            channel_id,
+            sender: sender.clone(),
+            sm_log: smlogger().create_sender::<T>(channel_id.to_string(), self.service.clone()),
             _data: std::marker::PhantomData,
         });
+        self
     }
 
     pub fn send(&mut self, item: T) {
@@ -210,8 +215,11 @@ where
     T: Serialize + Send + 'static,
 {
     pub fn push(&mut self, item: T) {
+        self.sm_log.entry(&item);
         let bytes = bincode::serialize(&item).unwrap();
-        self.sender.try_send(bytes).unwrap(); // Retry logic here
+        self.sender
+            .try_send((self.channel_id.to_string(), bytes))
+            .unwrap(); // Retry logic here
     }
 }
 
