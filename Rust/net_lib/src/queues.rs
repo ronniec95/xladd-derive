@@ -17,7 +17,7 @@ use log::*;
 use multimap::MultiMap;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
-use std::borrow::{BorrowMut, Cow};
+use std::borrow::BorrowMut;
 use std::clone::Clone;
 use std::collections::{BTreeMap, BTreeSet};
 use std::net::SocketAddr;
@@ -63,7 +63,7 @@ pub struct OutputQueue<T: Clone + Serialize + Send + 'static> {
     last_value_consumers: Vec<LastValueQueue<T>>,
     burst_consumers: Vec<BurstQueue<T>>,
     tcp_consumer: Vec<TcpScalarQueue<T>>,
-    service: Cow<'static, str>,
+    service: &'static str,
 }
 
 impl<T> OutputQueue<T>
@@ -75,19 +75,19 @@ where
             last_value_consumers: Vec::new(),
             burst_consumers: Vec::new(),
             tcp_consumer: Vec::new(),
-            service: Cow::Borrowed(service),
+            service: service,
         }
     }
 
-    pub fn lv_pull_queue(&'static mut self, channel_id: ChannelId) -> &LastValueQueue<T> {
+    pub fn lv_pull_queue(&'static mut self, channel_id: &'static str) -> &LastValueQueue<T> {
         self.last_value_consumers
             .push(LastValueQueue::new(channel_id, &self.service));
         self.last_value_consumers.last().unwrap()
     }
 
-    pub fn burst_pull_queue(&mut self, channel_id: ChannelId) -> &BurstQueue<T> {
+    pub fn burst_pull_queue(&mut self, channel_id: &'static str) -> &BurstQueue<T> {
         self.burst_consumers
-            .push(BurstQueue::new(channel_id, self.service.clone()));
+            .push(BurstQueue::new(channel_id, &*self.service));
         self.burst_consumers.last().unwrap()
     }
 
@@ -99,7 +99,7 @@ where
         self.tcp_consumer.push(TcpScalarQueue {
             channel_id,
             sender: sender.clone(),
-            sm_log: smlogger().create_sender::<T>(channel_id.to_string(), self.service.clone()),
+            sm_log: smlogger().create_sender::<T>(channel_id, &*self.service),
             _data: std::marker::PhantomData,
         });
         self
@@ -123,7 +123,7 @@ impl<T> BurstQueue<T>
 where
     T: Serialize + for<'de> Deserialize<'de>,
 {
-    fn new(channel_id: ChannelId, service: Cow<'static, str>) -> Self {
+    fn new(channel_id: &'static str, service: &'static str) -> Self {
         Self {
             values: Arc::new(Mutex::new(Vec::new())),
             sm_log: smlogger().create_sender::<T>(channel_id, service),
@@ -175,10 +175,10 @@ impl<T> LastValueQueue<T>
 where
     T: Serialize + for<'de> Deserialize<'de> + std::fmt::Debug,
 {
-    pub fn new(channel_id: ChannelId, service: &'static str) -> Self {
+    pub fn new(channel_id: &'static str, service: &'static str) -> Self {
         Self {
             value: Arc::new(Mutex::new(None)),
-            sm_log: smlogger().create_sender::<T>(channel_id, Cow::Borrowed(service)),
+            sm_log: smlogger().create_sender::<T>(channel_id, service),
         }
     }
 
@@ -220,6 +220,7 @@ where
         self.sender
             .try_send((self.channel_id.to_string(), bytes))
             .unwrap(); // Retry logic here
+        self.sm_log.exit();
     }
 }
 
@@ -479,7 +480,7 @@ mod tests {
     #[test]
     fn fifo_queue() {
         let mut pool = LocalPool::new();
-        let queue = BurstQueue::<i32>::new(ChannelId::from("hello"), Cow::Borrowed("myservice"));
+        let queue = BurstQueue::<i32>::new("hello", "myservice");
         let spawner = pool.spawner();
         let mut l_queue = queue.clone();
         spawner
@@ -510,7 +511,7 @@ mod tests {
     #[test]
     fn last_value_queue() {
         let mut pool = LocalPool::new();
-        let queue = LastValueQueue::<i32>::new(ChannelId::from("channel1"), "myservice");
+        let queue = LastValueQueue::<i32>::new("channel1", "myservice");
         let spawner = pool.spawner();
         let mut l_queue = queue.clone();
         spawner
@@ -545,7 +546,7 @@ mod tests {
     impl ProducerService {
         fn new() -> Self {
             Self {
-                q1: BurstQueue::<i32>::new(ChannelId::from("channel1"), Cow::Borrowed("myservice")),
+                q1: BurstQueue::<i32>::new("channel1", "myservice"),
             }
         }
 
@@ -620,7 +621,7 @@ mod tests {
     impl ComputeNode {
         fn new(oq: &mut OutputQueue<i32>) -> Self {
             Self {
-                q1: oq.burst_pull_queue(ChannelId::from("channel1")).clone(),
+                q1: oq.burst_pull_queue("channel1").clone(),
             }
         }
 
@@ -642,7 +643,7 @@ mod tests {
     impl ComputeNode2 {
         fn new(oq: &mut OutputQueue<i32>) -> Self {
             Self {
-                q1: oq.burst_pull_queue(ChannelId::from("channel1")).clone(),
+                q1: oq.burst_pull_queue("channel1").clone(),
             }
         }
 

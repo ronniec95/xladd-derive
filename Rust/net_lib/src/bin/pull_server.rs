@@ -24,9 +24,9 @@ struct MainService {
 impl MainService {
     fn new(sender: mpsc::Sender<(ChannelId, Vec<u8>)>) -> Self {
         Self {
-            q0: LastValueQueue::new("inputchannel".to_string(), "mainservice"), // Tcp input queue
-            q1: LastValueQueue::new("inputchannel2".to_string(), "mainservice"), // Tcp input queue
-            q2: OutputQueue::new("output_channel").sink("output_channel", &sender), // Multiple outputs
+            q0: LastValueQueue::new("inputchannel", "mainservice"), // Tcp input queue
+            q1: LastValueQueue::new("inputchannel2", "mainservice"), // Tcp input queue
+            q2: OutputQueue::new("mainservice").sink("output_channel", &sender), // Multiple outputs
         }
     }
 
