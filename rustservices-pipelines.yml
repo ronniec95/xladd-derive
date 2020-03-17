@@ -4,11 +4,10 @@
 # https://aka.ms/yaml
 
 trigger:
-- master/Rust
-- master/rustservices-pipelines.yml
+- master
 
 pool:
-  vmImage: 'ubuntu-18.04'
+  vmImage: 'windows-latest'
 
 variables:
   net_lib_path: $(Build.SourcesDirectory)/Rust/net_lib
