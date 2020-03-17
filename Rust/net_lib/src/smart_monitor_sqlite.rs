@@ -10,7 +10,7 @@ pub fn create_channel_table(name: &str) -> Result<Connection, Box<dyn std::error
     let conn = Connection::open(&format!("{}.db3", name))?;
     conn.execute(
         "CREATE TABLE IF NOT EXISTS TS_DATA (Timestamp TEXT NOT NULL UNIQUE,
-            Enter INTEGER NOT NULL, Format INTEGER NOT NULL, Msg BLOB NULL DEFAULT (x''), PRIMARY KEY (Timestamp,Enter))",
+            Enter INTEGER NOT NULL, Format INTEGER NOT NULL,Service TEXT NULL, Msg BLOB NULL DEFAULT (x''), PRIMARY KEY (Timestamp,Enter))",
         params![],
     )?;
     // Latency
@@ -42,10 +42,10 @@ pub fn insert(conn: &Connection, msg: &MonitorMsg) -> Result<usize, Box<dyn std:
             };
             conn.execute(
                 &format!(
-                    "INSERT INTO TS_DATA (Timestamp,Enter,Format,Msg) VALUES (?1,?2,?3,ZEROBLOB({}))",
+                    "INSERT INTO TS_DATA (Timestamp,Enter,Format,Service,Msg) VALUES (?1,?2,?3,?4,ZEROBLOB({}))",
                     msg.data.len()
                 ),
-                params![msg.adj_time_stamp, 1, msg_format],
+                params![msg.adj_time_stamp, 1, msg.service, msg_format],
             )?;
             let rowid = conn.last_insert_rowid();
             debug!("Writing blob with row_id {}", rowid);
@@ -75,11 +75,12 @@ pub fn insert(conn: &Connection, msg: &MonitorMsg) -> Result<usize, Box<dyn std:
 // Select all messages in the queue
 pub fn select_all_msg(
     conn: &Connection,
+    channel: &str,
     start: &NaiveDateTime,
     end: &NaiveDateTime,
 ) -> Result<SmallVec<[SmartMonitorMsg; 64]>, Box<dyn std::error::Error>> {
     let mut stmt = conn.prepare(
-        "SELECT ROWID,TIMESTAMP,ENTER,FORMAT FROM TS_DATA WHERE TIMESTAMP >= ?1 AND TIMESTAMP <= ?2",
+        "SELECT ROWID,TIMESTAMP,ENTER,FORMAT,SERVICE FROM TS_DATA WHERE TIMESTAMP >= ?1 AND TIMESTAMP <= ?2",
     )?;
     let mut rows = stmt.query(params![start, end])?;
     let mut results = SmallVec::<[SmartMonitorMsg; 64]>::new();
@@ -88,12 +89,15 @@ pub fn select_all_msg(
         let ts = row.get::<usize, NaiveDateTime>(1)?;
         let payload = FromPrimitive::from_u8(row.get::<usize, u8>(2)?).unwrap();
         let encoding = FromPrimitive::from_i64(row.get::<usize, i64>(3)?).unwrap();
+        let service = row.get::<usize, String>(4)?;
         trace!("Retrieving row {} {} ", row_id, ts);
         results.push(SmartMonitorMsg {
             row_id,
+            channel: channel.to_string(),
             ts,
             encoding,
             payload,
+            service,
             data: SmallVec::<[u8; 1024]>::new(),
         })
     }
@@ -115,8 +119,10 @@ pub fn select_msg(
     Ok(SmartMonitorMsg {
         row_id,
         ts: NaiveDateTime::from_timestamp(0, 0),
+        channel: String::new(),
         encoding: MsgFormat::Bincode,
         payload: Payload::Entry,
+        service: String::new(),
         data,
     })
 }
@@ -151,6 +157,7 @@ mod tests {
         .unwrap();
         select_all_msg(
             &conn,
+            "nasdaqtestin",
             &NaiveDateTime::from_timestamp(0, 0),
             &NaiveDateTime::from_timestamp(1000, 0),
         )

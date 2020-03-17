@@ -11,7 +11,7 @@ use tide::{self, Request};
 fn get_all_channel_data(
     req: &Request<()>,
     webconnection: &[(String, Arc<Mutex<Connection>>)],
-) -> std::vec::Vec<(String, smallvec::SmallVec<[SmartMonitorMsg; 64]>)> {
+) -> Vec<smallvec::SmallVec<[SmartMonitorMsg; 64]>> {
     let start = NaiveDateTime::from_timestamp(req.param::<i64>("start").unwrap_or_default(), 0);
     let end = NaiveDateTime::from_timestamp(req.param::<i64>("end").unwrap_or_default(), 0);
     info!("Request for all channels {} {}", start, end);
@@ -19,18 +19,18 @@ fn get_all_channel_data(
         .iter()
         .map(|conn| {
             if let Ok(connection) = conn.1.lock() {
-                match select_all_msg(&*connection, &start, &end) {
-                    Ok(v) => (conn.0.to_owned(), v),
+                match select_all_msg(&*connection, &conn.0, &start, &end) {
+                    Ok(v) => v,
                     Err(e) => {
                         error!("Failed to retrieve data from data {}", e);
-                        (conn.0.to_owned(), SmallVec::<[SmartMonitorMsg; 64]>::new())
+                        SmallVec::<[SmartMonitorMsg; 64]>::new()
                     }
                 }
             } else {
-                (String::new(), SmallVec::<[SmartMonitorMsg; 64]>::new())
+                SmallVec::<[SmartMonitorMsg; 64]>::new()
             }
         })
-        .collect::<Vec<(String, SmallVec<[SmartMonitorMsg; 64]>)>>()
+        .collect::<Vec<SmallVec<[SmartMonitorMsg; 64]>>>()
 }
 
 fn get_channel_msg(req: &Request<()>) -> Result<SmartMonitorMsg, Box<dyn std::error::Error>> {
@@ -66,13 +66,19 @@ pub async fn web_service(channels: &[Cow<'_, str>]) -> Result<(), Box<dyn std::e
         let connections = connections.clone();
         async move {
             let data = get_all_channel_data(&req, &connections);
-            tide::Response::new(200).body_json(&data).unwrap()
+            tide::Response::new(200)
+                .set_header("Access-Control-Allow-Origin", "*")
+                .body_json(&data)
+                .unwrap()
         }
     });
     app.at("/msg/:channel/:row_id")
         .get(move |req: Request<()>| async move {
             match get_channel_msg(&req) {
-                Ok(v) => tide::Response::new(200).body_json(&v).unwrap(),
+                Ok(v) => tide::Response::new(200)
+                    .set_header("Access-Control-Allow-Origin", "*")
+                    .body_json(&v)
+                    .unwrap(),
                 Err(e) => {
                     error!("Error processing channels {}", e);
                     tide::Response::new(501).body_string(e.to_string())

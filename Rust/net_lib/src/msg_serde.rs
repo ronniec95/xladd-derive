@@ -123,8 +123,10 @@ pub struct SmartMonitorMsg {
     pub row_id: i64,
     #[serde(with = "ts_milliseconds")]
     pub ts: NaiveDateTime,
+    pub channel: String,
     pub encoding: MsgFormat,
     pub payload: Payload,
+    pub service: String,
     pub data: SmallVec<[u8; 1024]>,
 }
 
