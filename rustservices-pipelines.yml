@@ -25,6 +25,7 @@ steps:
   - task: CopyFiles@2
     inputs:
       Contents: |
+        $(rust_release_path)/hello_world.exe
         $(rust_release_path)/discovery_server.exe
         $(rust_release_path)/smart_monitor_server.exe
         **/Channel.toml
