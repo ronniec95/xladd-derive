@@ -54,10 +54,15 @@ namespace AARC.Repository.EF
 
         public DateTime? GetMaxDate(string ticker)
         {
-            return _context.UnderlyingPrices
+            var elements = _context.UnderlyingPrices
                 .AsNoTracking()
-                   .Where(u => u.Ticker == ticker)
-                   .Max(u => u.Date);
+                   .Where(u => u.Ticker == ticker);
+
+            if (elements.Any())
+                return elements?.Max(e => e.Date);
+
+            return null;
+
         }
 
         public UpsertStat Upsert(IEnumerable<UnderlyingPrice> Entities)

@@ -5,7 +5,6 @@ using aarcYahooFinETL.Utilities;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.AspNetCore.Http.Extensions;
 using Newtonsoft.Json;
 
 // For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
@@ -18,7 +17,6 @@ namespace aarcYahooFinETL.Controllers
     using AARC.RDS;
     using Microsoft.AspNetCore.Http;
     using Microsoft.AspNetCore.Routing;
-    using MoreLinq.Extensions;
 
     [Route("api/[controller]")]
     public class ClosePricesController : Controller
@@ -49,7 +47,7 @@ namespace aarcYahooFinETL.Controllers
         [HttpGet("{id}")]
         public string Get(string id)
         {
-            ProcessUpdate(id);
+            ProcessUpdate(id, GetRequestId);
             return "success";
         }
 
@@ -114,7 +112,9 @@ namespace aarcYahooFinETL.Controllers
                 else
                     dataRequest = _client.Request(ticker);
 
-                var message = dataRequest.Result; entities = JsonConvert.DeserializeObject<List<T>>(message);
+                var message = dataRequest.Result;
+
+                entities = JsonConvert.DeserializeObject<List<T>>(message, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore });
             }
             catch(Exception ex)
             {
@@ -125,18 +125,23 @@ namespace aarcYahooFinETL.Controllers
 
         protected void ProcessUpdates(IEnumerable<string> tickers)
         {
+            var requestId = GetRequestId;
+
             Queue.QueueBackgroundWorkItem(async token =>
             await Task.Run(() =>
             {
-                Parallel.ForEach(tickers.Distinct(), new ParallelOptions { MaxDegreeOfParallelism = 80 }, (ticker) =>
+                Parallel.ForEach(tickers.Distinct(), new ParallelOptions { MaxDegreeOfParallelism = 80 },
+                (ticker) =>
                 {
-                    ProcessUpdate(ticker?.Trim());
+                    _logger.LogInformation($"Process {ticker}");
+                    ProcessUpdate(ticker?.Trim(), requestId);
+                    _logger.LogInformation($"Complete {ticker}");
                 });
-                _logger.LogInformation("ProcessUpdates COMPLETED");
+                _logger.LogInformation($"LOAD Complete ");
             }));
         }
 
-        protected void ProcessUpdate(string ticker)
+        protected void ProcessUpdate(string ticker, string requestId)
         {
             if (string.IsNullOrEmpty(ticker))
                 return;
@@ -147,7 +152,7 @@ namespace aarcYahooFinETL.Controllers
                 var notifyRepository = scopedServices.GetRequiredService<IRepository<AARC.Model.ServiceStats>>();
                 IEnumerable<AARC.Model.UnderlyingPrice> changes = null;
                 UpsertStat stats = null;
-                var serviceStats = new AARC.Model.ServiceStats { Service = GetRequestPath, Instance = GetRequestId + ticker, Symbol = ticker, Status = @"START" };
+                var serviceStats = new AARC.Model.ServiceStats { Service = GetRequestPath, Instance = requestId + ticker, Symbol = ticker, Status = @"START" };
    //             using (var transaction = _context.Database.BeginTransaction())
                 {
                     try

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 
 namespace aarcYahooFinETL.Utilities
 {
+    /*
     internal interface IScopedProcessingService
     {
         void DoWork();
@@ -21,5 +22,5 @@ namespace aarcYahooFinETL.Utilities
         {
             _logger.LogInformation("Scoped Processing Service is working.");
         }
-    }
+    }*/
 }
