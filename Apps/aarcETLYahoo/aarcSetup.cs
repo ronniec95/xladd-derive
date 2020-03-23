@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,21 +22,21 @@ namespace aarcYahooFinETL
         {
             services.AddRazorPages();
 
-            services.AddDbContext<AARCContext>
-            (options =>
-                options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")
-            ));
+            services.AddDbContext<AARCContext> ((serviceProvider, options ) =>
+                options.UseSqlServer(configuration.GetConnectionString("DefaultConnection"), sqlAction => sqlAction.CommandTimeout((int)TimeSpan.FromMinutes(5).TotalSeconds) )
+            );
 
             // Services
+            services.AddScoped<BackgroundWorkItem.Worker>();
             services.AddHostedService<QueuedHostedService>();
             services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
 
-            AarcServices(services);
+            AarcServices(services, "http://localhost:3000");
 
             services.AddAuthorization();
         }
 
-        public static void AarcServices(IServiceCollection services)
+        public static void AarcServices(IServiceCollection services, string yahooapi)
         {
             // Object Comparers to work with Upsert
             services.AddScoped<IEqualityComparer<AARC.Model.UnderlyingPrice>, TickerDateComparer>();
@@ -48,17 +49,17 @@ namespace aarcYahooFinETL
             services.AddScoped<ClosingPriceOrmRepository, ClosingPriceOrmRepository>();
 
             // DataSources
-            services.AddScoped<IClosingPricesClient>(s => new AarcClosingPricesClient("http://localhost:4000/stock/history/"));
+            services.AddScoped<IClosingPricesClient>(s => new AarcClosingPricesClient($"{yahooapi}/stock/history/"));
 
             // Indices
             services.AddScoped<IRepository<Stock>, IndicesDataRepository>();
 
             // Indices DataSources
-            services.AddScoped<IIndicesDataSource>(s => new AarcIndicesDataSourceClient("http://localhost:4000/stock/index/"));
+            services.AddScoped<IIndicesDataSource>(s => new AarcIndicesDataSourceClient($"{yahooapi}/stock/index/"));
 
-            services.AddScoped<IStockQuoteDataSourceClient>(s => new AarcStockQuoteDataSourceClient("http://localhost:4000/stock/quote/"));
+            services.AddScoped<IStockQuoteDataSourceClient>(s => new AarcStockQuoteDataSourceClient($"{yahooapi}/stock/quote/"));
             // DataSources
-            services.AddScoped<IStockStatsDataSourceClient>(s => new AarcStockStatsDataClient("http://localhost:4000/stock/info/"));
+            services.AddScoped<IStockStatsDataSourceClient>(s => new AarcStockStatsDataClient($"{yahooapi}/stock/info/"));
 
         }
 

@@ -1,6 +1,8 @@
 ﻿using System;
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Newtonsoft.Json;
 
 namespace AARC.Model
 {
@@ -85,6 +87,7 @@ namespace AARC.Model
 
         public string Ticker { get; set; }
         public DateTime CreatedDate { get; set; }
+        [JsonProperty("index")]
         public DateTime Date { get; set; }
         public double? Open { get; set; }
         public double Close { get; set; }

@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace aarcYahooFinETL.Utilities
 {
+    /*
     internal class ConsumeScopedServiceHostedService : IHostedService
     {
         private readonly ILogger _logger;
@@ -53,5 +54,5 @@ namespace aarcYahooFinETL.Utilities
             return Task.CompletedTask;
         }
 
-    }
+    }*/
 }

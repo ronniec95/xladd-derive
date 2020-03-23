@@ -2,7 +2,7 @@ var opts = {
     method: 'GET',
     headers: {}
 };
-fetch('http://127.0.0.1:8081/all/0/1599999999', opts).then(function (response) {
+fetch('http://ronniepc:8081/all/0/1599999999', opts).then(function (response) {
     return response.json();
 }).then(function (body) {
     var json_objects = [];
