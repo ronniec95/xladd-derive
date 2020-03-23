@@ -1,14 +1,14 @@
-use ndarray::{azip, Array1, Zip};
+use ndarray::{azip, Array1};
+
+const B1: f64 = 0.319381530;
+const B2: f64 = -0.356563782;
+const B3: f64 = 1.781477937;
+const B4: f64 = -1.821255978;
+const B5: f64 = 1.330274429;
+const P: f64 = 0.2316419;
+const C: f64 = 0.39894228;
 
 pub(crate) fn nd2(x: &Array1<f64>) -> Array1<f64> {
-    const B1: f64 = 0.319381530;
-    const B2: f64 = -0.356563782;
-    const B3: f64 = 1.781477937;
-    const B4: f64 = -1.821255978;
-    const B5: f64 = 1.330274429;
-    const P: f64 = 0.2316419;
-    const C: f64 = 0.39894228;
-
     let exp = x.map(|&v| (-v * v / 2.0).exp());
     let cv = x.map(|&v| if v >= 0.0 { 1.0 - C } else { C });
     let t = 1.0f64 / (1.0 + P * x);
@@ -18,6 +18,17 @@ pub(crate) fn nd2(x: &Array1<f64>) -> Array1<f64> {
     res
 }
 
+pub(crate) fn nd2_single(x: f64) -> f64 {
+    let exp = (-x * x / 2.0).exp();
+    let cv = if x >= 0.0 { 1.0 - C } else { C };
+    let t = 1.0f64 / (1.0 + P * x);
+    cv * (exp * t * (t * (t * (t * (t * B5 + B4) + B3) + B2) + B1))
+}
+
+pub(crate) fn pdf_stdgauss(x: &Array1<f64>) -> Array1<f64> {
+    const C2: f64 = 0.39894228;
+    (-x * x / 2.0).mapv(f64::exp) * C2
+}
 /*
 using System;
 using AARC.Utilities;
