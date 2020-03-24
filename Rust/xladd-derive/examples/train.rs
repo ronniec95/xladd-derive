@@ -42,10 +42,9 @@ use rust_xl::variant::Variant;
 use rust_xl::xlcall::LPXLOPER12;
 use xlmacro::*;
 
-#[xl_func(bop, ret)]
-/// * `arg` - foo bar it is
-fn normalize(arg: f64, foo: &[f64], bar: &str) -> Vec<f64> {
-    vec![]
+#[xl_func()]
+fn normalize(arg: f64, foo: &[f64], bar: &str) -> Result<Vec<f64>, Box<dyn std::error::Error>> {
+    Ok(vec![])
 }
 
 fn main() {
