@@ -19,75 +19,132 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
     let func = &item.sig.ident;
     let stmts = &item.block;
 
-    // Create the excel method
-    let xl_ident = proc_macro2::Ident::new(
-        &format!("xl_{}", item.sig.ident),
-        proc_macro2::Span::call_site(),
-    );
+    let xl_function = quote!(&format!("xl_{}", item.sig.ident));
+    let error_handler_function = &format!("_error_hndlr_{}", item.sig.ident);
 
-    let error_handler_ident = proc_macro2::Ident::new(
-        &format!("_{}", item.sig.ident),
-        proc_macro2::Span::call_site(),
-    );
+    // From the signature, identify the types we handle
+    // f32,f64,i32,i64,bool,&str,&[&str],&[f64]
+    // and map them to the corresponding owned types
 
-    let wrapper_inputs = &item
-        .sig
-        .inputs
-        .iter()
-        .map(|arg| {
-            let mut new_arg = arg.clone();
-            match &mut new_arg {
-                FnArg::Typed(x) => {
-                    x.ty = Box::new(syn::Type::Verbatim(quote!(LPXLOPER12)));
-                    quote! {#new_arg}
+    let typed_args = &item.sig.inputs.iter().map(|arg| match arg {
+        FnArg::Typed(typed_arg) => {
+            // Arg name
+            let arg_name = {
+                let pat = &typed_arg.pat;
+                match &**pat {
+                    syn::Pat::Ident(ident) => quote!(#ident),
+                    _ => panic!("Type not covered"),
                 }
-                FnArg::Receiver(x) => quote! {#arg},
-            }
-        })
-        .collect::<Vec<_>>();
+            };
+            // Arg type
+            let arg_type = {
+                let ty = &typed_arg.ty;
+                match &**ty {
+                    syn::Type::Path(p) => {
+                        let segment = &p.path.segments[0];
+                        let ident = &segment.ident;
+                        quote!(&[#ident])
+                    }
+                    syn::Type::Reference(p) => {
+                        let elem = &p.elem;
+                        // Slice
+                        match &**elem {
+                            syn::Type::Slice(s) => {
+                                let elem = &s.elem;
+                                match &**elem {
+                                    syn::Type::Path(p) => {
+                                        let segment = &p.path.segments[0];
+                                        let ident = &segment.ident;
+                                        quote!(&[#ident])
+                                    }
+                                    _ => panic!("Type not covered"),
+                                }
+                            }
+                            syn::Type::Path(s) => {
+                                let segment = &s.path.segments[0];
+                                let ident = &segment.ident.to_string();
+                                quote!(&[#ident])
+                            }
+                            _ => panic!("Type not covered"),
+                        }
 
-    let variant_conversion = &item
-        .sig
-        .inputs
-        .iter()
-        .map(|arg| match &arg {
-            FnArg::Typed(pat) => {
-                let pat = &pat.pat;
-                let arg = match &**pat {
-                    syn::Pat::Ident(ident) => ident.ident.clone(),
-                    _ => proc_macro2::Ident::new("unknown", proc_macro2::Span::call_site()),
-                };
-                quote! { let #arg = Variant::from(#arg); }
-            }
-            FnArg::Receiver(x) => quote! {#arg},
-        })
-        .collect::<Vec<_>>();
+                        // or Path
+                    }
+                    _ => panic!("Type not covered"),
+                }
+            };
+            // Owned type
+            let owned_type = {
+                let ty = &typed_arg.ty;
+                match &**ty {
+                    syn::Type::Path(p) => {
+                        let segment = &p.path.segments[0];
+                        let ident = &segment.ident.to_string();
+                        let ident = if ident == "str" { "String" } else { ident };
+                        quote!(&[#ident])
+                    }
+                    syn::Type::Reference(p) => {
+                        let elem = &p.elem;
+                        // Slice
+                        match &**elem {
+                            syn::Type::Slice(s) => {
+                                let elem = &s.elem;
+                                match &**elem {
+                                    syn::Type::Path(p) => {
+                                        let segment = &p.path.segments[0];
+                                        let ident = &segment.ident;
+                                        let ident = if ident == "str" {
+                                            String::from("Vec<String>")
+                                        } else {
+                                            format!("Vec<{}>", ident)
+                                        };
+                                        quote!(&[#ident])
+                                    }
+                                    _ => panic!("Type not covered"),
+                                }
+                            }
+                            syn::Type::Path(s) => {
+                                let segment = &s.path.segments[0];
+                                let ident = &segment.ident.to_string();
+                                let ident = if ident == "str" { "String" } else { ident };
+                                quote!(&[#ident])
+                            }
+                            _ => panic!("Type not covered"),
+                        }
 
-    let arg_list = &item
-        .sig
-        .inputs
-        .iter()
-        .map(|arg| match &arg {
-            FnArg::Typed(pat) => {
-                let pat = &pat.pat;
-                let arg = match &**pat {
-                    syn::Pat::Ident(ident) => ident.ident.clone(),
-                    _ => proc_macro2::Ident::new("unknown", proc_macro2::Span::call_site()),
-                };
-                quote! { #arg }
-            }
-            FnArg::Receiver(x) => quote! {#arg},
-        })
+                        // or Path
+                    }
+                    _ => panic!("Type not covered"),
+                }
+            };
+            // Slice converted for &str
+
+            // Slice converted for &[&str],&[f64]
+            (arg_name, arg_type, owned_type)
+        }
+        FnArg::Receiver(_) => panic!("Free functions only"),
+    });
+
+    let lpx_oper = typed_args
+        .clone()
+        .map(|(name, _, _)| quote!(#name: LPXOPER12))
+        .collect::<Vec<_>>();
+    let to_variant = typed_args
+        .clone()
+        .map(|(name, _, _)| quote!(let #name = Variant::from(#name);))
         .collect::<Vec<_>>();
     let wrapper = quote! {
-        pub extern "stdcall" fn #xl_ident(#(#wrapper_inputs),*)  -> LPXLOPER12 {
-            #(#variant_conversion)*
-            match #error_handler_ident(#(#arg_list),*) {
-                Ok(v) -> LPXLOPER12::from(v),
-                Err(e) => LPXLOPER12::from(Variant::from(e.into())),
-            }
+        // Error handler
+        fn #error_handler_function() -> Result<Variant, Box<dyn std::error::Error>> {
+            Ok(Variant::missing())
+        }
+        // Excel function
+        pub extern "stdcall" fn #xl_function(#(#lpx_oper),*)  -> LPXLOPER12 {
+            #(#to_variant)*
+
         }
 
+        // User function
         #item
     };
     // let tokens = quote! {
