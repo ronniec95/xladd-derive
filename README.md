@@ -31,16 +31,17 @@ Simply add `#[xl_func()]` to a Rust function like
 Right now there are a couple of restrictions which I hope to remove down the line
 
 The return type of your function can be a `Result<type,Box<dyn std::error::Error>>` of any basic type:
-    * f32
-    * f64
-    * i32
-    * i64
-    * bool
-    * String
+ 
+    - f32
+    - f64
+    - i32
+    - i64
+    - bool
+    - String
 
-    or a tuple of 
+or a tuple of 
 
-    * (Vec<[basic type]>,usize)
+    - (Vec<[basic type]>,usize)
 
 where the second parameter is the number of columns. This allows Excel to handle arrays of 2d data. The macro will calculate the rows from the size of the array.
 
@@ -67,8 +68,8 @@ If you want to control this aspect through an attribute, let me know.
 
 Excel calls this function in your .dll when it starts. The macro generates the register_* functions for you so follow this template. If someone knows how to automatically determine these from a proc-macro, please get in touch, or raise a PR
 
-    `pub extern "stdcall" fn xlAutoOpen() -> i32 {
+    pub extern "stdcall" fn xlAutoOpen() -> i32 {
         let reg = Reg::new();
         register_normalize(&reg);
         1
-    }`
+    }
