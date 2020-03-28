@@ -12,7 +12,14 @@ But it was still a pain and I wanted to learn about proc-macros so created this 
 
 ## Usage
 
-Simply add `#[xl_func()]` to a Rust function like
+Add
+
+    [dependencies]
+    xladd-derive="0.1"
+
+to your Cargo.toml
+
+Write a Rust function and add the following annotation `#[xl_func()]` like
 
     `/// This normalizes a set of values
     /// * arg - Takes a floating point number
@@ -32,16 +39,16 @@ Right now there are a couple of restrictions which I hope to remove down the lin
 
 The return type of your function can be a `Result<type,Box<dyn std::error::Error>>` of any basic type:
  
-    - f32
-    - f64
-    - i32
-    - i64
-    - bool
-    - String
+- f32
+- f64
+- i32
+- i64
+- bool
+- String`
 
 or a tuple of 
 
-    - (Vec<[basic type]>,usize)
+- (Vec<[basic type]>,usize)
 
 where the second parameter is the number of columns. This allows Excel to handle arrays of 2d data. The macro will calculate the rows from the size of the array.
 
@@ -73,3 +80,8 @@ Excel calls this function in your .dll when it starts. The macro generates the r
         register_normalize(&reg);
         1
     }
+
+# xladd dependency
+
+As I cannot seem to be able to get in touch with MarcusRainbow, the original author of the xladd crate, I've created a fork of that, so in `Cargo.toml` you need to add a github dependency `xladd = { git ="https://github.com/ronniec95/xladd"}`
+
