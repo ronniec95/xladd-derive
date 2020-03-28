@@ -10,7 +10,7 @@ edition = "2018"
 syn={version="1", features=["full"] }
 quote="1"
 proc-macro2="1"
-xladd = {path="../xladd"}
+xladd = { git ="https://github.com/ronniec95/xladd"}
 
 [lib]
 proc-macro=true
