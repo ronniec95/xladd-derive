@@ -1,6 +1,8 @@
 # xladd-derive
 Macros to help write Excel User defined functions easily in Rust
 
+** WIP - Don't use yet **
+
 ## Why?
 
 I find quickly knocking up a sample GUI in Excel by drag/dropping extremely good for prototyping. Writing a test function and being able to pass all sorts of data to it interactively is a useful feature
@@ -81,7 +83,10 @@ Excel calls this function in your .dll when it starts. The macro generates the r
         1
     }
 
-# xladd dependency
+## xladd dependency
 
 As I cannot seem to be able to get in touch with MarcusRainbow, the original author of the xladd crate, I've created a fork of that, so in `Cargo.toml` you need to add a github dependency `xladd = { git ="https://github.com/ronniec95/xladd"}`
 
+## Unsafe code
+
+As the xladd package calls into the Windows C api it's inherently unsafe.
