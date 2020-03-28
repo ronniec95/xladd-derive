@@ -1,8 +1,12 @@
 [package]
-name = "xlmacro"
+name = "xl-derive"
 version = "0.1.0"
 authors = ["Ronnie Chowdhury <Ronnie.c995@gmail.com>"]
 edition = "2018"
+license = "MIT"
+description="A simple macro that helps write Excel UDF functions in Rust"
+readme="Readme.MD"
+repository="https://github.com/ronniec95/xladd-derive"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
