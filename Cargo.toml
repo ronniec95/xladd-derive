@@ -1,5 +1,5 @@
 [package]
-name = "xl-derive"
+name = "xladd-derive"
 version = "0.1.0"
 authors = ["Ronnie Chowdhury <Ronnie.c995@gmail.com>"]
 edition = "2018"

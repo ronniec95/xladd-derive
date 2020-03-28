@@ -1,6 +1,6 @@
-use rust_xl::variant::Variant;
-use rust_xl::xlcall::LPXLOPER12;
-use xladd_derive::*;
+use xladd::variant::Variant;
+use xladd::xlcall::LPXLOPER12;
+use xladd_derive::xl_func;
 
 /// This normalizes a set of values
 /// * arg - Takes a floating point number
@@ -21,3 +21,5 @@ pub extern "stdcall" fn xlAutoOpen() -> i32 {
     register_normalize(&reg);
     1
 }
+
+fn main() {}

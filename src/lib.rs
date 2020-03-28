@@ -229,7 +229,7 @@ pub fn xl_func(_attr: TokenStream, input: TokenStream) -> TokenStream {
     let xl_function_str = xl_function.to_string();
     let wrapper = quote! {
         use std::convert::TryInto;
-        use rust_xl::registrator::Reg;
+        use xladd::registrator::Reg;
         // Error handler
         fn #error_handler_function(#(#variant_args),*) -> Result<Variant, Box<dyn std::error::Error>> {
             #(#convert_to_owned_rust_types)*;
