@@ -85,8 +85,14 @@ Excel calls this function in your .dll when it starts. The macro generates the r
 
 ## xladd dependency
 
-As I cannot seem to be able to get in touch with MarcusRainbow, the original author of the xladd crate, I've created a fork of that, so in `Cargo.toml` you need to add a github dependency `xladd = { git ="https://github.com/ronniec95/xladd"}`
+As I cannot seem to be able to get in touch with MarcusRainbow, the original author of the xladd crate, I've created a fork of that, so in `Cargo.toml` you need to add a github dependency `xladd = { git ="https://github.com/ronniec95/xladd"}`. Let me know if that is a problem and I can see if there's a better way
 
 ## Unsafe code
 
 As the xladd package calls into the Windows C api it's inherently unsafe.
+
+## Not yet handled
+
+Asynchronous methods. I've not had the need for this especially as network and IO type work is much better done within Excel itself.
+
+I also would like to add RTD support so you can subscribe to live data.

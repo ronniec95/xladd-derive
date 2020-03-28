@@ -13,6 +13,7 @@ fn normalize(
     foo: &[f64],
     bar: &str,
 ) -> Result<(Vec<f64>, usize), Box<dyn std::error::Error>> {
+    
     Ok((vec![], 2))
 }
 
