@@ -1,11 +1,9 @@
 use proc_macro::*;
 use quote::quote;
-use quote::ToTokens;
-use rust_xl::xlcall::*;
-use syn::{FnArg, ItemFn, TypePath, TypeSlice};
+use syn::{FnArg, ItemFn};
 
 #[proc_macro_attribute]
-pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
+pub fn xl_func(_attr: TokenStream, input: TokenStream) -> TokenStream {
     // println!("{:?}", attr);
     // println!("{:?}", input);
     // println!("{:?}", input);
@@ -17,7 +15,6 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
     // converted it between a few different forms.
     let output = &item.sig.output;
     let func = &item.sig.ident;
-    let stmts = &item.block;
 
     let xl_function = proc_macro2::Ident::new(
         &format!("xl_{}", item.sig.ident),
@@ -25,6 +22,11 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
     );
     let error_handler_function = proc_macro2::Ident::new(
         &format!("_error_hndlr_{}", item.sig.ident),
+        proc_macro2::Span::call_site(),
+    );
+
+    let register_function = proc_macro2::Ident::new(
+        &format!("register_{}", item.sig.ident),
         proc_macro2::Span::call_site(),
     );
     // From the signature, identify the types we handle
@@ -101,9 +103,97 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
         FnArg::Receiver(_) => panic!("Free functions only"),
     });
 
+    // Parse the doc comments
+
+    let comments = &item.attrs.iter().filter_map(|attr: &syn::Attribute| {
+        let segment = &attr.path.segments[0];
+        if segment.ident == "doc" {
+            Some(attr.tokens.to_string())
+        } else {
+            None
+        }
+    });
+    let args = typed_args
+        .clone()
+        .filter_map(|(name, _)| {
+            let name = name.to_string();
+            comments.clone().find_map(|v| {
+                if v.starts_with(&format!("= \" * {} -", name)) {
+                    let v = &v[name.len() + 9..v.len()-1];
+                    Some(quote!{#v})
+                } else {
+                    None
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+    let ret = comments
+        .clone()
+        .find_map(|v| {
+            if v.starts_with("= \" * ret -") {
+                let v = &v[9..v.len()-1];
+                Some(v.to_owned())
+            } else {
+                None
+            }
+        });
+    let docs = comments.clone().find_map(|v| {
+        if !v.starts_with("= \" *") {
+            let v = &v[4..v.len()-1];
+            Some(v.to_owned())
+        } else {
+            None
+        }
+    });
+
+    let docs_ret = vec![if ret.is_some() {ret.as_ref().unwrap()} else {""},if docs.is_some() { docs.as_ref().unwrap() } else {""}].join(" and ");
     // Return type convert back to variant
-    dbg!(output);
-    
+    let output = {
+        match output {
+            syn::ReturnType::Default => quote! {},
+            syn::ReturnType::Type(_, path) => match &**path {
+                syn::Type::Path(path) => {
+                    let segment = &path.path.segments[0];
+                    if segment.ident == "Result" {
+                        let args = &segment.arguments;
+                        match args {
+                            syn::PathArguments::AngleBracketed(generic_args) => {
+                                let arg0 = &generic_args.args[0];
+                                match &*arg0 {
+                                    syn::GenericArgument::Type(path) => match path {
+                                        syn::Type::Tuple(tuple) => {
+                                            let path = &tuple.elems[0];
+                                            match &*path {
+                                                syn::Type::Path(path) => {
+                                                    let segment = &path.path.segments[0];
+                                                    if segment.ident == "Vec" {
+                                                        quote! {Ok(Variant::from(&(res.0.as_slice(),res.1)))}
+                                                    } else {
+                                                        quote! {Ok(Variant::from(res))}
+                                                    }        
+                                                },
+                                                _ => panic!("Tuple returned must of <Vec<f64>,Dimension(usize)>")
+
+                                            }
+                                        }
+                                        _ => panic!("XL functions must return a basic type of f64,i64,u32,i32,bool or a tuple of (Vec<f64>,Dimension(usize))")
+                                    },
+                                    _ => panic!("Unhandled type for result0"),
+                                }
+                            }
+                            syn::PathArguments::Parenthesized(_) => {
+                                quote! {Ok(Variant::from(true))}
+                            }
+                            syn::PathArguments::None => panic!("Unhandled type for result0"),
+                        }
+                    } else {
+                        panic!("XL functions must return a Result<TYPE,Error>. Error can be coerced into a Box<std::error::Error>")
+                    }
+                }
+                _ => panic!("Unhandled type"),
+            },
+        }
+    };
     // Now collate
     let lpx_oper_args = typed_args
         .clone()
@@ -121,17 +211,30 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
         .clone()
         .map(|(name, _)| quote!(#name))
         .collect::<Vec<_>>();
+    let caller_args_str = typed_args
+        .clone()
+        .map(|(name, _)| name.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    let mut q_args = typed_args
+        .clone()
+        .map(|(_, _)| "Q")
+        .collect::<Vec<_>>()
+        .join("");
+    q_args.push('$');
     let convert_to_owned_rust_types = typed_args
         .clone()
         .map(|(_, owned_type)| owned_type)
         .collect::<Vec<_>>();
+    let xl_function_str = xl_function.to_string();
     let wrapper = quote! {
         use std::convert::TryInto;
+        use rust_xl::registrator::Reg;
         // Error handler
         fn #error_handler_function(#(#variant_args),*) -> Result<Variant, Box<dyn std::error::Error>> {
             #(#convert_to_owned_rust_types)*;
             let res = #func(#(#caller_args),*)?;
-            Ok(Variant::from(res))
+            #output
         }
         // Excel function
         pub extern "stdcall" fn #xl_function(#(#lpx_oper_args),*)  -> LPXLOPER12 {
@@ -142,13 +245,11 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
             }
         }
 
+        pub (crate) fn #register_function(reg: &Reg) {
+            reg.add(#xl_function_str,#q_args,#caller_args_str,"Category",#docs_ret,&[#(#args),*]);
+        }
         // User function
         #item
     };
-    // let tokens = quote! {
-    //     pub extern "stdcall" fn #xl_ident(#inputs) #output #stmts
-    // };
-    println!("{}", wrapper.to_string());
-
     wrapper.into()
 }
