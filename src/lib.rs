@@ -131,7 +131,7 @@ pub fn xl_func(_attr: TokenStream, input: TokenStream) -> TokenStream {
         .clone()
         .find_map(|v| {
             if v.starts_with("= \" * ret -") {
-                let v = &v[9..v.len()-1];
+                let v = &v[12..v.len()-1];
                 Some(v.to_owned())
             } else {
                 None
@@ -146,7 +146,7 @@ pub fn xl_func(_attr: TokenStream, input: TokenStream) -> TokenStream {
         }
     });
 
-    let docs_ret = vec![if ret.is_some() {ret.as_ref().unwrap()} else {""},if docs.is_some() { docs.as_ref().unwrap() } else {""}].join(" and ");
+    let docs_ret = vec![if ret.is_some() {ret.as_ref().unwrap()} else {""}, if docs.is_some() { docs.as_ref().unwrap() } else {""}].join(" and ");
     // Return type convert back to variant
     let output = {
         match output {
@@ -254,6 +254,5 @@ pub fn xl_func(_attr: TokenStream, input: TokenStream) -> TokenStream {
         // User function
         #item
     };
-    println!("{}",wrapper.to_string());
     wrapper.into()
 }
