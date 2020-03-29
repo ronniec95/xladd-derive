@@ -108,3 +108,11 @@ If the add-in is not working, check that your excel is the samme bit size (32 or
 Asynchronous methods. I've not had the need for this especially as network and IO type work is much better done within Excel itself.
 
 I also would like to add RTD support so you can subscribe to live data.
+
+## Debugging
+
+Within VSCode you can create a configuration for debugging and change the `program` to 
+
+     "program": "C:/Program Files/Microsoft Office/root/Office16/EXCEL.EXE",
+    
+This will launch excel but you can set breakpoints in your code.
