@@ -14,7 +14,7 @@ repository="https://github.com/ronniec95/xladd-derive"
 syn={version="1", features=["full", "extra-traits"] }
 quote="1"
 proc-macro2="1"
-xladd = { version="*", path ="../xladd"}
+xladd = { version="*", git ="https://github.com/ronniec95/xladd"}
 
 [lib]
 proc-macro=true
