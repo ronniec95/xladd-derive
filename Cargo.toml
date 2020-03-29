@@ -15,7 +15,11 @@ keywords = ["excel","userdefined","udf"]
 syn={version="1", features=["full", "extra-traits"] }
 quote="1"
 proc-macro2="1"
-xladd = { version="0.2.0", git ="https://github.com/ronniec95/xladd"}
+xladd = "0.2.0"
+
 
 [lib]
 proc-macro=true
+
+[patch.crates-io]
+xladd = { git ="https://github.com/ronniec95/xladd" }
