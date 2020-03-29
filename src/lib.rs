@@ -13,7 +13,7 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
         let attr = attr.to_string();
         let category = attr.split('=').collect::<Vec<_>>();
         if !category.is_empty() {
-            category[1].to_string()
+            category[1][1..category.len()-1].to_string()
         } else {
             String::new()
         }
