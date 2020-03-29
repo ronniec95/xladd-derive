@@ -40,7 +40,7 @@ Write a Rust function and add the following annotation `#[xl_func()]` like
     /// This function adds any number of values together
     /// * v - array of f64
     /// * ret - returns the sum
-    #[xl_func()]
+    #[xl_func(category="MyCategory")] // Custom attribute to assign function to a particular category
     fn add_array_v2(v: &[f64]) -> Result<(Vec<f64>, usize), Box<dyn std::error::Error>> {
         // Comments will be filled into the Excel function dialog box
         // This returns a 2d array to excel using a (vec,usize) tuple. Note that if v.len() / columns != 0 you will have missing values
