@@ -62,10 +62,10 @@ Arguments are taken as LPXLOPER12 args which are then coerced to the Rust types.
 
 The doc comments are interpreted in the following manner
 
-/// This is a normal multiline comment that 
-/// will be used as a description of the function
-/// * arg1 - This argument must be formatted with a `* <name> -` and will be used in the argument description
-/// * ret - This is a special return type argument which will appended to the description of the function
+    /// This is a normal multiline comment that 
+    /// will be used as a description of the function
+    /// * arg1 - This argument must be formatted with a `* <name> -` and will be used in the argument description
+    /// * ret - This is a special return type argument which will appended to the description of the function
 
 ## Multithreading
 
