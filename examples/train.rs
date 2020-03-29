@@ -1,3 +1,4 @@
+use xladd::registrator::Reg;
 use xladd::variant::Variant;
 use xladd::xlcall::LPXLOPER12;
 use xladd_derive::xl_func;
@@ -13,13 +14,18 @@ fn normalize(
     foo: &[f64],
     bar: &str,
 ) -> Result<(Vec<f64>, usize), Box<dyn std::error::Error>> {
-    
     Ok((vec![], 2))
+}
+
+#[xl_func()]
+fn add(arg1: f64, arg2: f64) -> Result<f64, Box<dyn std::error::Error>> {
+    Ok(arg1 + arg2)
 }
 
 pub extern "stdcall" fn xlAutoOpen() -> i32 {
     let reg = Reg::new();
     register_normalize(&reg);
+    register_add(&reg);
     1
 }
 

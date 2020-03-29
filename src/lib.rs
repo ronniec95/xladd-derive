@@ -56,7 +56,7 @@ pub fn xl_func(_attr: TokenStream, input: TokenStream) -> TokenStream {
                         } else {
                             quote!(#ident)
                         };
-                        quote!( let #arg_name = TryInto::<#ident>::try_into(&#arg_name)?; )
+                        quote!( let #arg_name = std::convert::TryInto::<#ident>::try_into(&#arg_name)?; )
                     }
                     syn::Type::Reference(p) => {
                         let elem = &p.elem;
@@ -69,9 +69,9 @@ pub fn xl_func(_attr: TokenStream, input: TokenStream) -> TokenStream {
                                         let segment = &p.path.segments[0];
                                         let ident = &segment.ident;
                                         if ident == "str" {
-                                            quote!(let #arg_name = TryInto::<Vec<String>>::try_into(&#arg_name)?.iter().map(AsRef::as_ref).collect();)
+                                            quote!(let #arg_name = std::convert::TryInto::<Vec<String>>::try_into(&#arg_name)?.iter().map(AsRef::as_ref).collect();)
                                         } else {
-                                            quote!(let #arg_name = TryInto::<Vec<#ident>>::try_into(&#arg_name)?;
+                                            quote!(let #arg_name = std::convert::TryInto::<Vec<#ident>>::try_into(&#arg_name)?;
                                                    let #arg_name = #arg_name.as_slice();
                                             )
                                         }
@@ -83,10 +83,10 @@ pub fn xl_func(_attr: TokenStream, input: TokenStream) -> TokenStream {
                                 let segment = &s.path.segments[0];
                                 let ident = &segment.ident;
                                 if ident == "str" { 
-                                    quote!(let #arg_name = TryInto::<String>::try_into(&#arg_name)?;
+                                    quote!(let #arg_name = std::convert::TryInto::<String>::try_into(&#arg_name)?;
                                         let #arg_name = #arg_name.as_str();)
                                 } else { 
-                                    quote!(let #arg_name = TryInto::<#ident>::try_into(&#arg_name)?;)
+                                    quote!(let #arg_name = std::convert::TryInto::<#ident>::try_into(&#arg_name)?;)
                                 }
                             }
                             _ => panic!("Type not covered"),
@@ -176,6 +176,9 @@ pub fn xl_func(_attr: TokenStream, input: TokenStream) -> TokenStream {
 
                                             }
                                         }
+                                        syn::Type::Path(_) => {
+                                            quote! {Ok(Variant::from(res))}
+                                        },
                                         _ => panic!("XL functions must return a basic type of f64,i64,u32,i32,bool or a tuple of (Vec<f64>,Dimension(usize))")
                                     },
                                     _ => panic!("Unhandled type for result0"),
@@ -221,6 +224,7 @@ pub fn xl_func(_attr: TokenStream, input: TokenStream) -> TokenStream {
         .map(|(_, _)| "Q")
         .collect::<Vec<_>>()
         .join("");
+    q_args.push('Q');
     q_args.push('$');
     let convert_to_owned_rust_types = typed_args
         .clone()
@@ -228,8 +232,6 @@ pub fn xl_func(_attr: TokenStream, input: TokenStream) -> TokenStream {
         .collect::<Vec<_>>();
     let xl_function_str = xl_function.to_string();
     let wrapper = quote! {
-        use std::convert::TryInto;
-        use xladd::registrator::Reg;
         // Error handler
         fn #error_handler_function(#(#variant_args),*) -> Result<Variant, Box<dyn std::error::Error>> {
             #(#convert_to_owned_rust_types)*;
@@ -237,6 +239,7 @@ pub fn xl_func(_attr: TokenStream, input: TokenStream) -> TokenStream {
             #output
         }
         // Excel function
+        #[no_mangle]
         pub extern "stdcall" fn #xl_function(#(#lpx_oper_args),*)  -> LPXLOPER12 {
             #(#to_variant)*
             match #error_handler_function(#(#caller_args),*) {
@@ -245,11 +248,12 @@ pub fn xl_func(_attr: TokenStream, input: TokenStream) -> TokenStream {
             }
         }
 
-        pub (crate) fn #register_function(reg: &Reg) {
+        pub (crate) fn #register_function(reg: &xladd::registrator::Reg) {
             reg.add(#xl_function_str,#q_args,#caller_args_str,"Category",#docs_ret,&[#(#args),*]);
         }
         // User function
         #item
     };
+    println!("{}",wrapper.to_string());
     wrapper.into()
 }
