@@ -3,13 +3,23 @@ use quote::quote;
 use syn::{FnArg, ItemFn};
 
 #[proc_macro_attribute]
-pub fn xl_func(_attr: TokenStream, input: TokenStream) -> TokenStream {
+pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
     // println!("{:?}", attr);
     // println!("{:?}", input);
     // println!("{:?}", input);
 
     let item = syn::parse::<ItemFn>(input).expect("Failed to parse.");
-
+    let category = if !attr.is_empty() {
+        let attr = attr.to_string();
+        let category = attr.split('=').collect::<Vec<_>>();
+        if !category.is_empty() {
+            category[1].to_string()
+        } else {
+            String::new()
+        }
+    } else {
+        String::new()
+    };
     // Use `quote` to convert the syntax tree back into tokens so we can return them. Note
     // that the tokens we're returning at this point are still just the input, we've simply
     // converted it between a few different forms.
@@ -68,12 +78,26 @@ pub fn xl_func(_attr: TokenStream, input: TokenStream) -> TokenStream {
                                     syn::Type::Path(p) => {
                                         let segment = &p.path.segments[0];
                                         let ident = &segment.ident;
-                                        if ident == "str" {
-                                            quote!(let #arg_name = std::convert::TryInto::<Vec<String>>::try_into(&#arg_name)?.iter().map(AsRef::as_ref).collect();)
-                                        } else {
-                                            quote!(let #arg_name = std::convert::TryInto::<Vec<#ident>>::try_into(&#arg_name)?;
-                                                   let #arg_name = #arg_name.as_slice();
-                                            )
+                                        quote!(let #arg_name = std::convert::TryInto::<Vec<#ident>>::try_into(&#arg_name)?;
+                                                let #arg_name = #arg_name.as_slice();
+                                        )
+                                    }
+                                    syn::Type::Reference(p) => {
+                                        let elem = &p.elem;
+                                        match &**elem {
+                                            syn::Type::Path(p) => {
+                                                let segment = &p.path.segments[0];
+                                                let ident = &segment.ident;
+                                                if ident == "str" {
+                                                    quote!(let #arg_name = std::convert::TryInto::<Vec<String>>::try_into(&#arg_name)?;
+                                                            let #arg_name = #arg_name.iter().map(AsRef::as_ref).collect::<Vec<_>>();
+                                                            let #arg_name = #arg_name.as_slice();
+                                                    )
+                                                } else {
+                                                    panic!("Only slices of &[&str] supported")
+                                                }
+                                            }
+                                            _ => panic!("Type not covered"),
                                         }
                                     }
                                     _ => panic!("Type not covered"),
@@ -119,34 +143,44 @@ pub fn xl_func(_attr: TokenStream, input: TokenStream) -> TokenStream {
             let name = name.to_string();
             comments.clone().find_map(|v| {
                 if v.starts_with(&format!("= \" * {} -", name)) {
-                    let v = &v[name.len() + 9..v.len()-1];
-                    Some(quote!{#v})
+                    let v = &v[name.len() + 9..v.len() - 1];
+                    Some(quote! {#v})
                 } else {
                     None
                 }
             })
         })
         .collect::<Vec<_>>();
-    let ret = comments
-        .clone()
-        .find_map(|v| {
-            if v.starts_with("= \" * ret -") {
-                let v = &v[12..v.len()-1];
-                Some(v.to_owned())
-            } else {
-                None
-            }
-        });
+    let ret = comments.clone().find_map(|v| {
+        if v.starts_with("= \" * ret -") {
+            let v = &v[12..v.len() - 1];
+            Some(v.to_owned())
+        } else {
+            None
+        }
+    });
     let docs = comments.clone().find_map(|v| {
         if !v.starts_with("= \" *") {
-            let v = &v[4..v.len()-1];
+            let v = &v[4..v.len() - 1];
             Some(v.to_owned())
         } else {
             None
         }
     });
 
-    let docs_ret = vec![if ret.is_some() {ret.as_ref().unwrap()} else {""}, if docs.is_some() { docs.as_ref().unwrap() } else {""}].join(" and ");
+    let docs_ret = vec![
+        if ret.is_some() {
+            ret.as_ref().unwrap()
+        } else {
+            ""
+        },
+        if docs.is_some() {
+            docs.as_ref().unwrap()
+        } else {
+            ""
+        },
+    ]
+    .join(" and ");
     // Return type convert back to variant
     let output = {
         match output {
@@ -162,12 +196,39 @@ pub fn xl_func(_attr: TokenStream, input: TokenStream) -> TokenStream {
                                 match &*arg0 {
                                     syn::GenericArgument::Type(path) => match path {
                                         syn::Type::Tuple(tuple) => {
-                                            let path = &tuple.elems[0];
-                                            match &*path {
+                                            let elems = &tuple.elems[0];
+                                            match &*elems {
                                                 syn::Type::Path(path) => {
                                                     let segment = &path.path.segments[0];
                                                     if segment.ident == "Vec" {
-                                                        quote! {Ok(Variant::from(&(res.0.as_slice(),res.1)))}
+                                                        let args = &segment.arguments;
+                                                        match &*args {
+                                                            syn::PathArguments::AngleBracketed(generic_args) => {
+                                                                let arg0 = &generic_args.args[0];
+                                                                match &*arg0 {
+                                                                    syn::GenericArgument::Type(path) => {
+                                                                        match path {
+                                                                            syn::Type::Path(p) => {
+                                                                                if p.path.segments[0].ident == "String" {
+                                                                                    quote! {Ok(Variant::from(&(res.0.iter().map(AsRef::as_ref).collect::<Vec<_>>().as_slice(),res.1)))}
+                                                                                } else {
+                                                                                    quote! {Ok(Variant::from(&(res.0.as_slice(),res.1)))}
+                                                                                }
+                                                                            },
+                                                                            _ => panic!("Expected a type of f64,u32,bool,String")
+                                                                        }
+ 
+                                                                    },
+                                                                    _ =>  panic!("Expected a simple type after a vec"),
+
+                                                                }
+                                                            },
+                                                                syn::PathArguments::Parenthesized(_) => {
+                                                                    quote! {Ok(Variant::from(true))}
+                                                                },
+                                                                syn::PathArguments::None => panic!("Unhandled type for result0"),
+                                                        }
+//                                                        quote! {Ok(Variant::from(&(res.0.as_slice(),res.1)))}
                                                     } else {
                                                         quote! {Ok(Variant::from(res))}
                                                     }        
@@ -181,13 +242,14 @@ pub fn xl_func(_attr: TokenStream, input: TokenStream) -> TokenStream {
                                         },
                                         _ => panic!("XL functions must return a basic type of f64,i64,u32,i32,bool or a tuple of (Vec<f64>,Dimension(usize))")
                                     },
-                                    _ => panic!("Unhandled type for result0"),
+                                    _ => panic!("XL functions must return a basic type of f64,i64,u32,i32,bool or a tuple of (Vec<f64>,Dimension(usize))")
                                 }
                             }
                             syn::PathArguments::Parenthesized(_) => {
                                 quote! {Ok(Variant::from(true))}
                             }
-                            syn::PathArguments::None => panic!("Unhandled type for result0"),
+                            syn::PathArguments::None => panic!("XL functions must return a basic type of f64,i64,u32,i32,bool or a tuple of (Vec<f64>,Dimension(usize))")
+
                         }
                     } else {
                         panic!("XL functions must return a Result<TYPE,Error>. Error can be coerced into a Box<std::error::Error>")
@@ -249,10 +311,12 @@ pub fn xl_func(_attr: TokenStream, input: TokenStream) -> TokenStream {
         }
 
         pub (crate) fn #register_function(reg: &xladd::registrator::Reg) {
-            reg.add(#xl_function_str,#q_args,#caller_args_str,"Category",#docs_ret,&[#(#args),*]);
+            reg.add(#xl_function_str,#q_args,#caller_args_str,#category,#docs_ret,&[#(#args),*]);
         }
         // User function
         #item
     };
+
+    //    println!("{}",wrapper.to_string());
     wrapper.into()
 }

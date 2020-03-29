@@ -24,6 +24,19 @@ fn add_array_v2(v: &[f64]) -> Result<(Vec<f64>, usize), Box<dyn std::error::Erro
     Ok((v.to_vec(), 2))
 }
 
+/// This function adds any number of values together
+/// * v - array of f64
+/// * ret - returns the sum
+#[xl_func()]
+fn add_str(a: &str, b: &str) -> Result<String, Box<dyn std::error::Error>> {
+    Ok([a, b].join("-"))
+}
+
+#[xl_func(category = "OptionPricing")]
+fn add_str_2(a: &[&str]) -> Result<(Vec<String>, usize), Box<dyn std::error::Error>> {
+    Ok((vec![a.join("-")], 1))
+}
+
 // Don't forget to register your functions
 #[no_mangle]
 pub extern "stdcall" fn xlAutoOpen() -> i32 {
@@ -31,6 +44,8 @@ pub extern "stdcall" fn xlAutoOpen() -> i32 {
     register_add(&r);
     register_add_array(&r);
     register_add_array_v2(&r);
+    register_add_str(&r);
+    register_add_str_2(&r);
     1
 }
 
