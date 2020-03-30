@@ -42,13 +42,6 @@ where
     sm_log: SMLogger<T>,
 }
 
-#[derive(Clone)]
-struct SetPullQueue<T> {
-    values: BTreeSet<T>,
-    updated: BTreeSet<T>,
-    deleted: BTreeSet<T>,
-}
-
 pub struct TcpScalarQueue<T>
 where
     T: Serialize + Send + 'static,
@@ -59,21 +52,30 @@ where
     _data: std::marker::PhantomData<T>,
 }
 
-pub struct OutputQueue<T: Clone + Serialize + Send + 'static> {
+pub struct OutputQueue<T: Clone + Serialize + Send + 'static + Ord> {
     last_value_consumers: Vec<LastValueQueue<T>>,
     burst_consumers: Vec<BurstQueue<T>>,
+    set_consumers: Vec<SetQueue<T>>,
     tcp_consumer: Vec<TcpScalarQueue<T>>,
     service: &'static str,
 }
 
 impl<T> OutputQueue<T>
 where
-    T: Clone + Serialize + Send + for<'de> Deserialize<'de> + std::fmt::Debug + 'static,
+    T: Clone
+        + Serialize
+        + Ord
+        + Send
+        + Copy
+        + for<'de> Deserialize<'de>
+        + std::fmt::Debug
+        + 'static,
 {
     pub fn new(service: &'static str) -> Self {
         Self {
             last_value_consumers: Vec::new(),
             burst_consumers: Vec::new(),
+            set_consumers: Vec::new(),
             tcp_consumer: Vec::new(),
             service: service,
         }
@@ -89,6 +91,12 @@ where
         self.burst_consumers
             .push(BurstQueue::new(channel_id, &*self.service));
         self.burst_consumers.last().unwrap()
+    }
+
+    pub fn set_pull_queue(&mut self, channel_id: &'static str) -> &SetQueue<T> {
+        self.set_consumers
+            .push(SetQueue::new(channel_id, &*self.service));
+        self.set_consumers.last().unwrap()
     }
 
     pub fn sink(
@@ -111,6 +119,9 @@ where
         }
         for output in self.burst_consumers.iter_mut() {
             dbg!(&item);
+            output.push(item.clone());
+        }
+        for output in self.set_consumers.iter_mut() {
             output.push(item.clone());
         }
         for output in self.tcp_consumer.iter_mut() {
@@ -464,6 +475,139 @@ impl TcpTransportListener {
     }
 }
 
+pub struct SetQueue<T>
+where
+    T: Serialize + PartialOrd + Ord,
+{
+    last_value: Arc<Mutex<Option<T>>>,
+    values: BTreeSet<T>,
+    sm_log: SMLogger<T>,
+}
+
+impl<T> SetQueue<T>
+where
+    T: Serialize + for<'de> Deserialize<'de> + PartialOrd + Ord + Copy,
+{
+    fn new(channel_id: &'static str, service: &'static str) -> Self {
+        Self {
+            last_value: Arc::new(Mutex::new(None)),
+            values: BTreeSet::new(),
+            sm_log: smlogger().create_sender::<T>(channel_id, service),
+        }
+    }
+
+    pub fn push(&mut self, item: T) {
+        self.sm_log.entry(&item);
+        if !self.values.contains(&item) {
+            self.values.insert(item);
+            let mut data = self.last_value.try_lock().unwrap();
+            *data = Some(item)
+        }
+    }
+
+    fn push_bytes(&mut self, data: &[u8]) {
+        let v = bincode::deserialize::<T>(data).expect("Could not deserialise from bytes");
+        self.push(v);
+    }
+}
+
+impl<T> Future for SetQueue<T>
+where
+    T: Serialize + std::marker::Unpin + Copy + for<'de> Deserialize<'de> + std::fmt::Debug + Ord,
+{
+    type Output = T;
+    fn poll(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
+        if let Some(value) = {
+            self.last_value
+                .try_lock()
+                .map_or_else(|| None, |v| v.or(None))
+        } {
+            self.borrow_mut().sm_log.exit();
+            Poll::Ready(value)
+        } else {
+            ctx.waker().wake_by_ref();
+            Poll::Pending
+        }
+    }
+}
+
+impl<T> ByteDeSerialiser for SetQueue<T>
+where
+    T: Serialize + for<'de> Deserialize<'de> + std::fmt::Debug + Copy + Send + Sync + Ord,
+{
+    fn push_data(&mut self, v: &[u8]) {
+        self.push_bytes(&v);
+    }
+}
+
+struct DictionaryQueue<T, U>
+where
+    T: Serialize + PartialOrd + Ord,
+{
+    last_value: Arc<Mutex<Option<(T, U)>>>,
+    values: BTreeMap<T, u64>,
+    sm_log: SMLogger<T>,
+}
+
+impl<T, U> DictionaryQueue<T, U>
+where
+    T: Serialize + for<'de> Deserialize<'de> + Copy + PartialOrd + Ord + Clone,
+    U: Serialize + for<'de> Deserialize<'de>,
+{
+    fn new(channel_id: &'static str, service: &'static str) -> Self {
+        Self {
+            last_value: Arc::new(Mutex::new(None)),
+            values: BTreeMap::new(),
+            sm_log: smlogger().create_sender::<T>(channel_id, service),
+        }
+    }
+
+    pub fn push(&mut self, item: T, value: U) {
+        self.sm_log.entry(&item);
+        if !self.values.contains_key(&item) {
+            self.values.insert(item.clone(), 0);
+            let mut data = self.last_value.try_lock().unwrap();
+            *data = Some((item, value))
+        }
+    }
+
+    fn push_bytes(&mut self, data: &[u8]) {
+        let v = bincode::deserialize::<(T, U)>(data).expect("Could not deserialise from bytes");
+        self.push(v.0, v.1);
+    }
+}
+
+impl<T, U> Future for DictionaryQueue<T, U>
+where
+    T: Serialize + std::marker::Unpin + Copy + for<'de> Deserialize<'de> + std::fmt::Debug + Ord,
+    U: Serialize + for<'de> Deserialize<'de> + Copy,
+{
+    type Output = (T, U);
+    fn poll(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
+        if let Some(value) = self
+            .last_value
+            .try_lock()
+            .map_or_else(|| None, |v| v.or(None))
+        {
+            self.sm_log.exit();
+            Poll::Ready(value)
+        } else {
+            ctx.waker().wake_by_ref();
+            Poll::Pending
+        }
+    }
+}
+
+impl<T, U> ByteDeSerialiser for DictionaryQueue<T, U>
+where
+    T: Serialize + for<'de> Deserialize<'de> + std::fmt::Debug + Copy + Send + Sync + Ord + Clone,
+    U: Serialize + for<'de> Deserialize<'de> + Send,
+{
+    fn push_data(&mut self, v: &[u8]) {
+        self.push_bytes(&v);
+    }
+}
+
 // ChannelID/SockAddr update
 // Discovery service
 // Recovery
@@ -675,3 +819,7 @@ mod tests {
     #[test]
     fn disovery_integration() {}
 }
+// DeltaHashMap
+// Testing
+// Packaging
+// Docs
