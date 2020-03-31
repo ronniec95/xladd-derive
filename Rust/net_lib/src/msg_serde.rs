@@ -1,5 +1,5 @@
 use async_std::net::TcpStream;
-use chrono::naive::serde::ts_milliseconds;
+use chrono::naive::serde::ts_nanoseconds;
 use chrono::NaiveDateTime;
 use cookie_factory::{bytes::*, combinator::slice, gen, GenError};
 use futures::io::{AsyncReadExt, AsyncWriteExt};
@@ -121,7 +121,7 @@ pub struct NtpMsg {
 #[derive(Serialize)]
 pub struct SmartMonitorMsg {
     pub row_id: i64,
-    #[serde(with = "ts_milliseconds")]
+    #[serde(with = "ts_nanoseconds")]
     pub ts: NaiveDateTime,
     pub channel: String,
     pub encoding: MsgFormat,
