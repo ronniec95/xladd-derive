@@ -356,14 +356,19 @@ fn write_timestamp<'a>(
     dt: &NaiveDateTime,
     output: &'a mut [u8],
 ) -> Result<(&'a mut [u8], u64), GenError> {
-    let (output, _) = write_usize(dt.timestamp_millis() as usize / 1000, output)?;
-    let (output, sz) = write_u32(dt.timestamp_subsec_nanos(), output)?;
+    let micros = dt.timestamp_nanos() - dt.timestamp() * 1_000_000_000;
+    let (output, _) = write_usize(dt.timestamp() as usize, output)?;
+    let (output, sz) = write_u32(micros as u32, output)?;
+    dbg!(&dt.timestamp());
+    dbg!(micros);
     Ok((output, sz))
 }
 
 fn read_timestamp(input: &[u8]) -> nom::IResult<&[u8], NaiveDateTime> {
     let (input, date) = read_usize(input)?;
     let (input, time) = read_u32(input)?;
+    dbg!(&date);
+    dbg!(&time);
     Ok((input, NaiveDateTime::from_timestamp(date as i64, time)))
 }
 
@@ -431,12 +436,13 @@ fn write_sm_msg<'a>(
     msg: &MonitorMsg,
     output: &'a mut [u8],
 ) -> Result<(&'a mut [u8], u64), GenError> {
+    dbg!(&msg.adj_time_stamp);
     let (output, _) = write_timestamp(&msg.adj_time_stamp, output)?;
     let (output, _) = write_enum::<Payload>(&msg.payload, output)?;
     let (output, _) = write_enum::<MsgFormat>(&msg.msg_format, output)?;
     let (output, _) = write_u32(0, output)?;
     let (output, _) = write_u32(0, output)?;
-    let (output, _) = write_str("", output)?;
+    let (output, _) = write_str(&msg.service, output)?;
     let (output, _) = write_str(&msg.channel_name, output)?;
     let mut rest = output;
     if !msg.data.is_empty() {
@@ -581,7 +587,7 @@ mod tests {
     fn protocol_monitor() {
         let msg = MonitorMsg {
             channel_name: "channel1".to_string(),
-            adj_time_stamp: NaiveDateTime::from_timestamp(124563, 345),
+            adj_time_stamp: NaiveDateTime::from_timestamp(124563, 345789),
             msg_format: MsgFormat::Json,
             payload: Payload::Entry,
             service: Cow::Borrowed("myservice"),
@@ -592,7 +598,7 @@ mod tests {
         write_sm_msg(&msg, &mut buf).expect("Failed to serialise");
         let (remaining, msg_out) = read_sm_msg(&buf).expect("failed to deserialise");
         assert_eq!(msg, msg_out);
-        assert_eq!(remaining.len(), 967);
+        assert_eq!(remaining.len(), 958);
         (&msg_out);
     }
 

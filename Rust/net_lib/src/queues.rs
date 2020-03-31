@@ -1,6 +1,4 @@
-use crate::{
-    discovery_service, tcp_listener::TcpTransportListener, tcp_sender::TcpTransportSender,
-};
+use crate::{discovery_service, tcp_listener::*, tcp_sender::TcpTransportSender};
 use async_std::sync::{Arc, Mutex};
 use futures::{
     channel::mpsc,
@@ -33,8 +31,8 @@ impl QueueManager {
         self.sender.new_sender()
     }
 
-    pub fn listener(&self) -> TcpTransportListener {
-        TcpTransportListener::new()
+    pub fn listener(&self) -> TcpConnManager {
+        TcpConnManager::new()
     }
 
     pub fn run_service<Fut>(&self, fut: Fut)
@@ -47,11 +45,11 @@ impl QueueManager {
         }
     }
 
-    pub fn start(self, mut listener: TcpTransportListener) {
+    pub fn start(self, listener: TcpConnManager) {
         block_on({
             let sub_pool = self.pool.clone();
             async move {
-                let (port_sender, port_receiver) = TcpTransportListener::port_channel();
+                let (port_sender, port_receiver) = port_channel();
                 let (channel_sender, channel_receiver) = TcpTransportSender::channels_channel();
                 let discovery_client = discovery_service::run_client(
                     SocketAddr::from_str("127.0.0.1:9999").unwrap(),
@@ -95,7 +93,7 @@ impl QueueManager {
                     .unwrap();
 
                 println!("Listending to port updates");
-                listener.listen_port_updates(port_receiver).await.unwrap();
+                listen_port_updates(listener, port_receiver).await.unwrap();
             }
         });
     }

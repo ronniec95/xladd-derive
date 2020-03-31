@@ -1,13 +1,118 @@
-use crate::queues::PushByteData;
 use crate::smart_monitor::{smlogger, SMLogger};
-use async_std::sync::{Arc, Mutex};
-use futures::{channel::mpsc, Future};
-use serde::{Deserialize, Serialize};
-use std::borrow::BorrowMut;
+use crate::tcp_listener::TcpConnManager;
+use crossbeam::channel::{unbounded, Receiver, Sender};
+use serde::Deserialize;
 use std::collections::BTreeMap;
-use std::pin::Pin;
-use std::task::{Context, Poll};
 
+struct DictOutputQueue<T, U> {
+    producer: Sender<(T, U)>,
+    consumer: Receiver<(T, U)>,
+}
+
+impl<T, U> DictOutputQueue<T, U>
+where
+    T: Ord + Clone,
+    U: Clone + PartialEq,
+{
+    fn new() -> Self {
+        let (producer, consumer) = unbounded();
+        Self { producer, consumer }
+    }
+
+    fn send(&self, item: T, value: U) {
+        self.producer.send((item, value)).unwrap();
+    }
+
+    fn new_consumer(&self) -> DictInputQueue<T, U> {
+        DictInputQueue::<T, U>::new(self.consumer.clone())
+    }
+}
+
+struct DictInputQueue<T, U> {
+    consumer: Receiver<(T, U)>,
+    values: BTreeMap<T, U>,
+    last_value: Option<(T, U)>,
+}
+
+impl<T, U> DictInputQueue<T, U>
+where
+    T: Ord + Clone,
+    U: Clone + PartialEq,
+{
+    fn new(consumer: Receiver<(T, U)>) -> Self {
+        Self {
+            consumer,
+            values: BTreeMap::new(),
+            last_value: None,
+        }
+    }
+
+    fn next(&mut self) -> &(T, U) {
+        while let Ok(v) = self.consumer.recv() {
+            if let Some(old_value) = self.values.insert(v.0.clone(), v.1.clone()) {
+                if old_value != v.1 {
+                    self.last_value = Some(v);
+                    break;
+                }
+            } else {
+                self.last_value = Some(v);
+                break;
+            }
+        }
+        self.last_value.as_ref().unwrap()
+    }
+
+    fn get(&mut self, key: &T) -> Option<&U> {
+        // Consume any available messages first
+        while let Ok(v) = self.consumer.recv() {
+            self.values.insert(v.0.clone(), v.1.clone());
+            if self.consumer.is_empty() {
+                break;
+            }
+        }
+        self.values.get(key)
+    }
+}
+
+/// A TCP scalar output queue pushes a single item of T to it's one or more receivers
+/// The dicovery service will notify this service of what it's potential queue routes are
+/// If you have a tcp queue, it cannot be used as an internal queue at the same time currently,
+/// as it's determined at compile time
+struct TcpDictOutputQueue<T, U> {
+    consumer: Receiver<Vec<u8>>,
+    consumer_typed: Receiver<(T, U)>,
+    producer_typed: Sender<(T, U)>,
+    _phantom: std::marker::PhantomData<T>,
+}
+
+impl<T, U> TcpDictOutputQueue<T, U>
+where
+    T: for<'de> Deserialize<'de> + Ord + Clone,
+    U: for<'de> Deserialize<'de> + Clone + PartialEq,
+{
+    fn new(mgr: &mut TcpConnManager, channel: &'static str) -> Self {
+        let (producer, consumer) = unbounded();
+        mgr.add_producer(channel, producer);
+        let (producer_typed, consumer_typed) = unbounded();
+        Self {
+            consumer,
+            consumer_typed,
+            producer_typed,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+
+    fn send(&self) {
+        if let Ok(v) = self.consumer.recv() {
+            let v = bincode::deserialize::<(T, U)>(&v).expect("Could not deserialise from bytes");
+            self.producer_typed.send(v).unwrap();
+        }
+    }
+    fn new_consumer(&self) -> DictInputQueue<T, U> {
+        DictInputQueue::<T, U>::new(self.consumer_typed.clone())
+    }
+}
+/*
 // Output Queue
 pub struct DictOutputQueue<T, U>
 where
@@ -155,5 +260,85 @@ where
     fn push_data(&mut self, v: &[u8]) {
         let v = bincode::deserialize::<(T, U)>(v).expect("Could not deserialise from bytes");
         self.push(v.0, v.1);
+    }
+}
+
+struct DictOutputQueue<T, U> {
+    producer: Sender<(T, U)>,
+    consumer: Receiver<(T, U)>,
+}
+
+impl<T, U> DictOutputQueue<T, U>
+where
+    T: Ord + Clone,
+    U: Clone + PartialEq,
+{
+    fn new() -> Self {
+        let (producer, consumer) = unbounded();
+        Self { producer, consumer }
+    }
+
+    fn send(&self, item: T, value: U) {
+        self.producer.send((item, value)).unwrap();
+    }
+
+    fn new_consumer(&self) -> DictInputQueue<T, U> {
+        DictInputQueue::<T, U>::new(self.consumer.clone())
+    }
+}
+*/
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crossbeam::thread::scope;
+
+    struct DictProducer {
+        out1: DictOutputQueue<i32, i32>,
+    }
+
+    impl DictProducer {
+        fn new() -> Self {
+            Self {
+                out1: DictOutputQueue::new(),
+            }
+        }
+
+        fn run(&self) {
+            for i in &[0, 1, 1, 1, 1, 2, 2, 2, 3, 4] {
+                self.out1.send(*i, *i * 2);
+            }
+        }
+    }
+
+    struct DictConsumer {
+        in1: DictInputQueue<i32, i32>,
+    }
+
+    impl DictConsumer {
+        fn new(in1: DictInputQueue<i32, i32>) -> Self {
+            Self { in1 }
+        }
+        fn run(&mut self) {
+            loop {
+                DictConsumer::run_impl(&mut self.in1);
+            }
+        }
+
+        fn run_impl(in1: &mut DictInputQueue<i32, i32>) {
+            println!("In1 {:?}", in1.next());
+        }
+    }
+    #[test]
+    fn cross_beam_test_dict() {
+        let producer = DictProducer::new();
+        let mut consumer = DictConsumer::new(producer.out1.new_consumer());
+        scope(|scope| {
+            scope.spawn(|_| {
+                producer.run();
+            });
+            consumer.run();
+        })
+        .unwrap();
     }
 }

@@ -4,11 +4,34 @@ use async_std::{
     net::TcpStream,
     sync::{Arc, Mutex},
 };
+use crossbeam::channel::{unbounded, Receiver, Sender};
 use futures::{channel::mpsc, executor::ThreadPool, io::AsyncWriteExt, task::SpawnExt};
 use log::*;
 use multimap::MultiMap;
 use rusqlite::Connection;
 use std::collections::BTreeMap;
+
+pub struct TcpSinkManager {
+    producer: Sender<(&'static str, Vec<u8>)>,
+    consumer: Receiver<(&'static str, Vec<u8>)>,
+}
+
+impl TcpSinkManager {
+    pub fn new() -> Self {
+        let (producer, consumer) = unbounded();
+        Self { producer, consumer }
+    }
+
+    pub fn run(&self) {
+        while let Ok((channel, payload)) = self.consumer.recv() {
+            println!("Receiving messags {} {:?}", channel, payload);
+        }
+    }
+
+    pub fn new_producer(&self) -> Sender<(&'static str, Vec<u8>)> {
+        self.producer.clone()
+    }
+}
 
 pub struct TcpTransportSender {
     multiplex_sender: mpsc::Sender<(&'static str, Vec<u8>)>,

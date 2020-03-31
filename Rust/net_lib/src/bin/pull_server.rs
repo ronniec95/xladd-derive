@@ -1,8 +1,8 @@
-use futures::channel::mpsc;
+use crossbeam::scope;
 use log::*;
 use net_lib::{
     queues,
-    scalar_queue::{LastValueScalarInputQueue, TcpScalarOutputQueue},
+    scalar_queue::{ScalarInputQueue, ScalarOutputQueue, TcpOutputQueue},
 };
 use simplelog::*;
 
@@ -11,28 +11,49 @@ const CH1: &str = "ch1";
 const CH2: &str = "ch2";
 const MSQ: &str = "main_service_results";
 
-struct MainService {
-    pub q0: LastValueScalarInputQueue<i64>,
-    pub q1: LastValueScalarInputQueue<i64>,
-    pub q2: TcpScalarOutputQueue<i64>,
+struct Producer {
+    out1: ScalarOutputQueue<i64>,
+    out2: ScalarOutputQueue<i64>,
 }
 
-impl MainService {
-    fn new(sender: &mpsc::Sender<(&'static str, Vec<u8>)>) -> Self {
+impl Producer {
+    fn new() -> Self {
         Self {
-            q0: LastValueScalarInputQueue::new(CH1, SERVICE),
-            q1: LastValueScalarInputQueue::new(CH2, SERVICE),
-            q2: TcpScalarOutputQueue::new(MSQ, SERVICE, &sender), // Multiple outputs
+            out1: ScalarOutputQueue::new(),
+            out2: ScalarOutputQueue::new(),
         }
     }
 
-    async fn run(&mut self) {
-        let value = self.q0.clone().await;
-        eprintln!("{}", value);
-        self.q2.send(45);
+    fn run(&self) {
+        for i in 0..10 {
+            self.out1.send(i);
+            if i % 2 == 0 {
+                self.out2.send(i * 5);
+            }
+        }
     }
 }
 
+struct Consumer {
+    in1: ScalarInputQueue<i64>,
+    in2: ScalarInputQueue<i64>,
+}
+
+impl Consumer {
+    fn new(in1: ScalarInputQueue<i64>, in2: ScalarInputQueue<i64>) -> Self {
+        Self { in1, in2 }
+    }
+    fn run(&mut self) {
+        loop {
+            Consumer::run_impl(&mut self.in1, &mut self.in2);
+        }
+    }
+
+    fn run_impl(in1: &mut ScalarInputQueue<i64>, in2: &mut ScalarInputQueue<i64>) {
+        println!("In1 {}", in1.next());
+        println!("In2 {}", in2.next());
+    }
+}
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     TermLogger::init(
         LevelFilter::Debug,
@@ -44,13 +65,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .unwrap();
 
-    let queue_mgr = queues::QueueManager::new();
+    let producer = Producer::new();
+    let mut consumer = Consumer::new(producer.out1.new_consumer(), producer.out2.new_consumer());
+    scope(|scope| {
+        scope.spawn(|_| {
+            producer.run();
+        });
+        consumer.run();
+    })
+    .unwrap();
 
-    let sender = queue_mgr.sender();
-    let mut listener = queue_mgr.listener();
-
-    let mut main_service = MainService::new(&sender);
-    listener.add_input(
+    /*
+    listener.add_producer(
         main_service.q0.channel_id,
         Box::new(main_service.q0.clone()),
     );
@@ -72,5 +98,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     queue_mgr.run_service(async move { another_service.run().await });
     queue_mgr.run_service(async move { main_service.run().await });
     queue_mgr.start(listener);
+    */
     Ok(())
 }
