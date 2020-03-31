@@ -1,32 +1,28 @@
-use async_std::sync::{Arc, Mutex};
-use futures::{
-    channel::mpsc,
-    executor::{block_on, ThreadPool},
-    task::SpawnExt,
-};
+use futures::channel::mpsc;
 use log::*;
-use multimap::MultiMap;
 use net_lib::{
-    discovery_service,
-    msg_serde::ChannelId,
-    queues::{LastValueQueue, OutputQueue, TcpTransportListener, TcpTransportSender},
+    queues,
+    scalar_queue::{LastValueScalarInputQueue, TcpScalarOutputQueue},
 };
 use simplelog::*;
-use std::net::SocketAddr;
-use std::str::FromStr;
+
+const SERVICE: &str = "main_service";
+const CH1: &str = "ch1";
+const CH2: &str = "ch2";
+const MSQ: &str = "main_service_results";
 
 struct MainService {
-    pub q0: LastValueQueue<i64>,
-    pub q1: LastValueQueue<i64>,
-    pub q2: OutputQueue<i64>,
+    pub q0: LastValueScalarInputQueue<i64>,
+    pub q1: LastValueScalarInputQueue<i64>,
+    pub q2: TcpScalarOutputQueue<i64>,
 }
 
 impl MainService {
-    fn new(sender: mpsc::Sender<(ChannelId, Vec<u8>)>) -> Self {
+    fn new(sender: &mpsc::Sender<(&'static str, Vec<u8>)>) -> Self {
         Self {
-            q0: LastValueQueue::new("inputchannel", "mainservice"), // Tcp input queue
-            q1: LastValueQueue::new("inputchannel2", "mainservice"), // Tcp input queue
-            q2: OutputQueue::new("mainservice").sink("output_channel", &sender), // Multiple outputs
+            q0: LastValueScalarInputQueue::new(CH1, SERVICE),
+            q1: LastValueScalarInputQueue::new(CH2, SERVICE),
+            q2: TcpScalarOutputQueue::new(MSQ, SERVICE, &sender), // Multiple outputs
         }
     }
 
@@ -47,65 +43,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         TerminalMode::Mixed,
     )
     .unwrap();
-    let pool = ThreadPool::new().unwrap();
-    let ls = TcpTransportSender::new();
 
-    let sender = ls.new_sender();
-    let mut ms = TcpTransportListener::new();
+    let queue_mgr = queues::QueueManager::new();
 
-    let mut main_service = MainService::new(sender.clone());
-    ms.add_input("inputchannel", Box::new(main_service.q0.clone()));
-    ms.add_input("inputchannel2", Box::new(main_service.q1.clone()));
+    let sender = queue_mgr.sender();
+    let mut listener = queue_mgr.listener();
 
-    let mut another_service = MainService::new(sender.clone());
-    ms.add_input("inputchannel", Box::new(another_service.q0.clone()));
-    ms.add_input("inputchannel2", Box::new(another_service.q1.clone()));
+    let mut main_service = MainService::new(&sender);
+    listener.add_input(
+        main_service.q0.channel_id,
+        Box::new(main_service.q0.clone()),
+    );
+    listener.add_input(
+        main_service.q1.channel_id,
+        Box::new(main_service.q1.clone()),
+    );
 
-    pool.spawn(async move { another_service.run().await })?;
-    pool.spawn(async move { main_service.run().await })?;
+    let mut another_service = MainService::new(&sender);
+    listener.add_input(
+        main_service.q0.channel_id,
+        Box::new(another_service.q0.clone()),
+    );
+    listener.add_input(
+        main_service.q1.channel_id,
+        Box::new(another_service.q1.clone()),
+    );
 
-    block_on({
-        let sub_pool = pool.clone();
-        async move {
-            let (port_sender, port_receiver) = TcpTransportListener::port_channel();
-            let (channel_sender, channel_receiver) = TcpTransportSender::channels_channel();
-            let discovery_client = discovery_service::run_client(
-                SocketAddr::from_str("127.0.0.1:9999").unwrap(),
-                &[],
-                channel_sender,
-                port_sender,
-            );
-
-            sub_pool
-                .spawn({
-                    let tcp_senders = Arc::new(Mutex::new(MultiMap::new()));
-                    let channel_pool = sub_pool.clone();
-                    async move {
-                        debug!("Running receive_channel_updates");
-                        match ls
-                            .receive_channel_updates(channel_pool, tcp_senders, channel_receiver)
-                            .await
-                        {
-                            Ok(_) => (),
-                            Err(e) => error!("Failed while receiving channel updates {:?}", e),
-                        }
-                    }
-                })
-                .unwrap();
-
-            sub_pool
-                .spawn(async move {
-                    println!("Spawning discovery client");
-                    match discovery_client.await {
-                        Ok(_) => (),
-                        Err(e) => error!("Failed while listeing to the discovery client {:?}", e),
-                    }
-                })
-                .unwrap();
-
-            println!("Listending to port updates");
-            ms.listen_port_updates(port_receiver).await.unwrap();
-        }
-    });
+    queue_mgr.run_service(async move { another_service.run().await });
+    queue_mgr.run_service(async move { main_service.run().await });
+    queue_mgr.start(listener);
     Ok(())
 }

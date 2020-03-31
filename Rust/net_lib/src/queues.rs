@@ -1,613 +1,106 @@
-use crate::msg_serde::*;
-use crate::queue_sqlite;
-use crate::smart_monitor::*;
-use async_std::{
-    net::{TcpListener, TcpStream},
-    stream::StreamExt,
-    sync::{Arc, Mutex},
+use crate::{
+    discovery_service, tcp_listener::TcpTransportListener, tcp_sender::TcpTransportSender,
 };
+use async_std::sync::{Arc, Mutex};
 use futures::{
-    channel::{mpsc, oneshot},
-    executor::ThreadPool,
-    io::AsyncWriteExt,
+    channel::mpsc,
+    executor::{block_on, ThreadPool},
     task::SpawnExt,
-    Future,
 };
 use log::*;
 use multimap::MultiMap;
-use rusqlite::Connection;
-use serde::{Deserialize, Serialize};
-use std::borrow::BorrowMut;
-use std::clone::Clone;
-use std::collections::{BTreeMap, BTreeSet};
 use std::net::SocketAddr;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-
-#[derive(Clone)]
-pub struct BurstQueue<T>
-where
-    T: Serialize,
-{
-    values: Arc<Mutex<Vec<T>>>,
-    sm_log: SMLogger<T>,
-}
-
-#[derive(Clone)]
-pub struct LastValueQueue<T>
-where
-    T: Serialize,
-{
-    value: Arc<Mutex<Option<T>>>,
-    sm_log: SMLogger<T>,
-}
-
-pub struct TcpScalarQueue<T>
-where
-    T: Serialize + Send + 'static,
-{
-    channel_id: &'static str,
-    sender: mpsc::Sender<(ChannelId, Vec<u8>)>,
-    sm_log: SMLogger<T>,
-    _data: std::marker::PhantomData<T>,
-}
-
-pub struct OutputQueue<T: Clone + Serialize + Send + 'static + Ord> {
-    last_value_consumers: Vec<LastValueQueue<T>>,
-    burst_consumers: Vec<BurstQueue<T>>,
-    set_consumers: Vec<SetQueue<T>>,
-    tcp_consumer: Vec<TcpScalarQueue<T>>,
-    service: &'static str,
-}
-
-impl<T> OutputQueue<T>
-where
-    T: Clone
-        + Serialize
-        + Ord
-        + Send
-        + Copy
-        + for<'de> Deserialize<'de>
-        + std::fmt::Debug
-        + 'static,
-{
-    pub fn new(service: &'static str) -> Self {
-        Self {
-            last_value_consumers: Vec::new(),
-            burst_consumers: Vec::new(),
-            set_consumers: Vec::new(),
-            tcp_consumer: Vec::new(),
-            service: service,
-        }
-    }
-
-    pub fn lv_pull_queue(&'static mut self, channel_id: &'static str) -> &LastValueQueue<T> {
-        self.last_value_consumers
-            .push(LastValueQueue::new(channel_id, &self.service));
-        self.last_value_consumers.last().unwrap()
-    }
-
-    pub fn burst_pull_queue(&mut self, channel_id: &'static str) -> &BurstQueue<T> {
-        self.burst_consumers
-            .push(BurstQueue::new(channel_id, &*self.service));
-        self.burst_consumers.last().unwrap()
-    }
-
-    pub fn set_pull_queue(&mut self, channel_id: &'static str) -> &SetQueue<T> {
-        self.set_consumers
-            .push(SetQueue::new(channel_id, &*self.service));
-        self.set_consumers.last().unwrap()
-    }
-
-    pub fn sink(
-        mut self,
-        channel_id: &'static str,
-        sender: &mpsc::Sender<(ChannelId, Vec<u8>)>,
-    ) -> Self {
-        self.tcp_consumer.push(TcpScalarQueue {
-            channel_id,
-            sender: sender.clone(),
-            sm_log: smlogger().create_sender::<T>(channel_id, &*self.service),
-            _data: std::marker::PhantomData,
-        });
-        self
-    }
-
-    pub fn send(&mut self, item: T) {
-        for output in self.last_value_consumers.iter_mut() {
-            output.push(item.clone());
-        }
-        for output in self.burst_consumers.iter_mut() {
-            dbg!(&item);
-            output.push(item.clone());
-        }
-        for output in self.set_consumers.iter_mut() {
-            output.push(item.clone());
-        }
-        for output in self.tcp_consumer.iter_mut() {
-            output.push(item.clone());
-        }
-    }
-}
-
-impl<T> BurstQueue<T>
-where
-    T: Serialize + for<'de> Deserialize<'de>,
-{
-    fn new(channel_id: &'static str, service: &'static str) -> Self {
-        Self {
-            values: Arc::new(Mutex::new(Vec::new())),
-            sm_log: smlogger().create_sender::<T>(channel_id, service),
-        }
-    }
-
-    fn push(&mut self, item: T) {
-        self.sm_log.entry(&item);
-        let mut data = self.values.try_lock().unwrap();
-        data.push(item);
-    }
-
-    fn push_bytes(&mut self, data: &[u8]) {
-        let v = bincode::deserialize::<T>(data).expect("Could not deserialise from bytes");
-        self.push(v);
-    }
-}
-
-impl<T> Future for BurstQueue<T>
-where
-    T: Serialize + Unpin + Copy + Clone,
-{
-    type Output = Vec<T>;
-    fn poll(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        let res = if let Some(mut data) = self.values.try_lock() {
-            if !data.is_empty() {
-                Some(data.drain(..).collect())
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        match res {
-            Some(res) => {
-                self.borrow_mut().sm_log.exit();
-                Poll::Ready(res)
-            }
-            None => {
-                ctx.waker().wake_by_ref();
-                Poll::Pending
-            }
-        }
-    }
-}
-
-impl<T> LastValueQueue<T>
-where
-    T: Serialize + for<'de> Deserialize<'de> + std::fmt::Debug,
-{
-    pub fn new(channel_id: &'static str, service: &'static str) -> Self {
-        Self {
-            value: Arc::new(Mutex::new(None)),
-            sm_log: smlogger().create_sender::<T>(channel_id, service),
-        }
-    }
-
-    fn push_bytes(&mut self, data: &[u8]) {
-        let v = bincode::deserialize::<T>(data).expect("Could not deserialise from bytes");
-        self.push(v);
-    }
-
-    fn push(&mut self, item: T) {
-        self.sm_log.entry(&item);
-        let mut data = self.value.try_lock().unwrap();
-        *data = Some(item);
-    }
-}
-
-impl<T> Future for LastValueQueue<T>
-where
-    T: Serialize + std::marker::Unpin + Copy + for<'de> Deserialize<'de> + std::fmt::Debug,
-{
-    type Output = T;
-    fn poll(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        if let Some(value) = { self.value.try_lock().map_or_else(|| None, |v| v.or(None)) } {
-            self.borrow_mut().sm_log.exit();
-            Poll::Ready(value)
-        } else {
-            ctx.waker().wake_by_ref();
-            Poll::Pending
-        }
-    }
-}
-
-impl<T> TcpScalarQueue<T>
-where
-    T: Serialize + Send + 'static,
-{
-    pub fn push(&mut self, item: T) {
-        self.sm_log.entry(&item);
-        let bytes = bincode::serialize(&item).unwrap();
-        self.sender
-            .try_send((self.channel_id.to_string(), bytes))
-            .unwrap(); // Retry logic here
-        self.sm_log.exit();
-    }
-}
-
-pub trait ByteDeSerialiser: Send + Sync {
+use std::str::FromStr;
+// Every input queue needs to implement this
+pub trait PushByteData: Send {
     fn push_data(&mut self, v: &[u8]);
 }
 
-impl<T> ByteDeSerialiser for BurstQueue<T>
-where
-    T: Serialize + for<'de> Deserialize<'de> + std::fmt::Debug + Send + Sync,
-{
-    fn push_data(&mut self, v: &[u8]) {
-        self.push_bytes(&v);
-    }
+pub struct QueueManager {
+    sender: TcpTransportSender,
+    pool: ThreadPool,
 }
 
-impl<T> ByteDeSerialiser for LastValueQueue<T>
-where
-    T: Serialize + for<'de> Deserialize<'de> + std::fmt::Debug + Send + Sync,
-{
-    fn push_data(&mut self, v: &[u8]) {
-        self.push_bytes(&v);
-    }
-}
-
-pub struct TcpTransportSender {
-    multiplex_sender: mpsc::Sender<(ChannelId, Vec<u8>)>,
-    multiplex_receiver: mpsc::Receiver<(ChannelId, Vec<u8>)>,
-}
-
-impl TcpTransportSender {
+impl QueueManager {
     pub fn new() -> Self {
-        let (multiplex_sender, multiplex_receiver) = mpsc::channel(1);
         Self {
-            multiplex_sender,
-            multiplex_receiver,
+            sender: TcpTransportSender::new(),
+            pool: ThreadPool::new().unwrap(),
         }
     }
 
-    async fn run_sender(
-        host: &str,
-        mut receiver: mpsc::Receiver<(ChannelId, Vec<u8>)>,
-        channels: &[String],
-        conn: Arc<Mutex<Connection>>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut stream = TcpStream::connect(host).await?;
-        // First attempt to write messages to the tcp connection from the database
-        let conn = conn.lock().await;
-        for ch in channels {
-            let msgs = queue_sqlite::select_all_msg(&conn, ch)?;
-            for msg in msgs {
-                stream.write(ch.as_bytes()).await?;
-                stream.write_all(&msg).await?;
-            }
-        }
-        // Then wait for messages
-        loop {
-            if let Ok(channel_info) = receiver.try_next() {
-                if let Some((channel_id, data)) = channel_info {
-                    stream.write(channel_id.as_bytes()).await?;
-                    stream.write_all(&data).await?;
-                }
-            } else {
-                async_std::task::sleep(std::time::Duration::from_micros(100)).await;
-            }
-        }
+    pub fn sender(&self) -> mpsc::Sender<(&'static str, Vec<u8>)> {
+        self.sender.new_sender()
     }
 
-    async fn run_senders_2(
-        host: &str,
-        receiver: mpsc::Receiver<(ChannelId, Vec<u8>)>,
-        channels: &[String],
-        conn: Arc<Mutex<Connection>>,
-    ) {
-        let res = TcpTransportSender::run_sender(&host, receiver, &channels, conn).await;
-        match res {
+    pub fn listener(&self) -> TcpTransportListener {
+        TcpTransportListener::new()
+    }
+
+    pub fn run_service<Fut>(&self, fut: Fut)
+    where
+        Fut: futures::Future<Output = ()> + Send + 'static,
+    {
+        match self.pool.spawn(fut) {
             Ok(_) => (),
-            Err(e) => {
-                error!(
-                    "Disconnected from tcp connection {} with error  {}",
-                    host, e
-                );
-            }
+            Err(e) => error!("Future failed {}", e),
         }
     }
-    pub async fn receive_channel_updates<'a>(
-        mut self,
-        pool: ThreadPool,
-        tcp_senders: Arc<Mutex<MultiMap<String, mpsc::Sender<(String, Vec<u8>)>>>>,
-        mut receiver: mpsc::Receiver<Vec<Channel>>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        // Update the tcp connection list, by iterating over the list for matching ips/port
-        let mut appname = std::env::current_exe()?;
-        appname.set_extension("db3");
-        let conn = Arc::new(Mutex::new(queue_sqlite::create_service_table(
-            appname.to_str().unwrap_or("service.db3"),
-        )?));
-        pool.spawn({
-            let tcp_senders = tcp_senders.clone();
-            let conn = conn.clone();
+
+    pub fn start(self, mut listener: TcpTransportListener) {
+        block_on({
+            let sub_pool = self.pool.clone();
             async move {
-                loop {
-                    if let Ok(msg) = self.multiplex_receiver.try_next() {
-                        if let Some((channel_id, data)) = msg {
-                            let mut tcp_senders = tcp_senders.lock().await;
-                            if let Some(tcp_sender) = tcp_senders.get_mut(&channel_id) {
-                                tcp_sender.try_send((channel_id, data)).unwrap();
-                            } else {
-                                // Write to database
-                                let mut appname = std::env::current_exe()
-                                    .unwrap_or(std::path::Path::new("service").to_path_buf());
-                                appname.set_extension("db3");
-                                let conn = conn.lock().await;
-                                queue_sqlite::insert(&conn, &channel_id, &data).unwrap();
+                let (port_sender, port_receiver) = TcpTransportListener::port_channel();
+                let (channel_sender, channel_receiver) = TcpTransportSender::channels_channel();
+                let discovery_client = discovery_service::run_client(
+                    SocketAddr::from_str("127.0.0.1:9999").unwrap(),
+                    &[],
+                    channel_sender,
+                    port_sender,
+                );
+
+                sub_pool
+                    .spawn({
+                        let tcp_senders = Arc::new(Mutex::new(MultiMap::new()));
+                        let channel_pool = sub_pool.clone();
+                        async move {
+                            debug!("Running receive_channel_updates");
+                            match &self
+                                .sender
+                                .receive_channel_updates(
+                                    channel_pool,
+                                    tcp_senders,
+                                    channel_receiver,
+                                )
+                                .await
+                            {
+                                Ok(_) => (),
+                                Err(e) => error!("Failed while receiving channel updates {:?}", e),
                             }
                         }
-                    }
-                }
-            }
-        })?;
-        loop {
-            if let Ok(channels) = receiver.try_next() {
-                if let Some(channels) = channels {
-                    debug!("channels received");
-                    // Put all the addresses in a set to ensure we only have unique connections
-                    let mut addresses = BTreeMap::new();
-                    for ip in &channels {
-                        for addr in &ip.addresses {
-                            if let Some(host) = &addr.hostname {
-                                if let Some(port) = addr.port {
-                                    addresses
-                                        .entry(format!("{}:{}", host, port))
-                                        .or_insert(vec![ip.name.clone()]);
-                                }
+                    })
+                    .unwrap();
+
+                sub_pool
+                    .spawn(async move {
+                        println!("Spawning discovery client");
+                        match discovery_client.await {
+                            Ok(_) => (),
+                            Err(e) => {
+                                error!("Failed while listeing to the discovery client {:?}", e)
                             }
                         }
-                    }
-                    // Create a new map of channels to tcp sockets
-                    for (host, channels) in addresses {
-                        let tcp_senders = tcp_senders.clone();
-                        pool.spawn({
-                            let conn = conn.clone();
-                            async move {
-                                let (sender, receiver) = mpsc::channel(1);
-                                {
-                                    let mut tcp_senders = tcp_senders.lock().await;
-                                    for ch in &channels {
-                                        tcp_senders.insert(ch.clone(), sender.clone());
-                                    }
-                                }
-                                TcpTransportSender::run_senders_2(&host, receiver, &channels, conn)
-                                    .await;
-                                {
-                                    let mut tcp_senders = tcp_senders.lock().await;
-                                    for ch in &channels {
-                                        tcp_senders.remove(ch);
-                                    }
-                                }
-                            }
-                        })?;
-                        // Now have a map of channel names to senders. Note that this is multiple senders to a multiple receivers
-                    }
-                }
+                    })
+                    .unwrap();
+
+                println!("Listending to port updates");
+                listener.listen_port_updates(port_receiver).await.unwrap();
             }
-        }
-    }
-
-    // All messages are run through a single sender unfortunately
-    pub fn new_sender(&self) -> mpsc::Sender<(ChannelId, Vec<u8>)> {
-        self.multiplex_sender.clone()
-    }
-
-    pub fn mplex_receiver(&mut self) -> &mut mpsc::Receiver<(ChannelId, Vec<u8>)> {
-        &mut self.multiplex_receiver
-    }
-
-    pub fn channels_channel() -> (mpsc::Sender<Vec<Channel>>, mpsc::Receiver<Vec<Channel>>) {
-        mpsc::channel(1)
+        });
     }
 }
-
-/// Implements a tcp external connection for channels
-///
-pub struct TcpTransportListener {
-    input_queue_map: BTreeMap<&'static str, Vec<Box<dyn ByteDeSerialiser>>>,
-}
-
-impl TcpTransportListener {
-    /// Creates a listener on a port
-    /// # Arguments
-    /// * 'port' - A port number
-    ///
-    pub fn new() -> Self {
-        Self {
-            input_queue_map: BTreeMap::new(),
-        }
-    }
-
-    /// Register a queue that's going to listen on a tcp port
-    /// # Arguments
-    /// * 'id' - channel id
-    /// * 'sink' - queue that implments byteDeserialiser
-    ///
-    pub fn add_input(&mut self, id: &'static str, sink: Box<dyn ByteDeSerialiser>) {
-        self.input_queue_map.entry(id).or_insert(vec![]).push(sink);
-    }
-
-    pub fn port_channel() -> (oneshot::Sender<u16>, oneshot::Receiver<u16>) {
-        oneshot::channel()
-    }
-
-    pub async fn listen_port_updates(
-        &mut self,
-        mut port_receiver: oneshot::Receiver<u16>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        loop {
-            if let Ok(port) = port_receiver.try_recv() {
-                if let Some(port) = port {
-                    self.listen(port).await?;
-                }
-            } else {
-                async_std::task::sleep(std::time::Duration::from_millis(100)).await;
-            }
-        }
-    }
-
-    async fn listen(&mut self, port: u16) -> Result<(), Box<dyn std::error::Error>> {
-        info!("Binding to port {}", port);
-        let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], port))).await?;
-        let mut incoming = listener.incoming();
-        while let Some(stream) = incoming.next().await {
-            let stream = stream?;
-            let msg = read_queue_message(stream).await?;
-            if let Some(sinks) = self.input_queue_map.get_mut(&*msg.channel_name) {
-                for sink in sinks {
-                    sink.push_data(&msg.data)
-                }
-            }
-        }
-        Ok(())
-    }
-}
-
-pub struct SetQueue<T>
-where
-    T: Serialize + PartialOrd + Ord,
-{
-    last_value: Arc<Mutex<Option<T>>>,
-    values: BTreeSet<T>,
-    sm_log: SMLogger<T>,
-}
-
-impl<T> SetQueue<T>
-where
-    T: Serialize + for<'de> Deserialize<'de> + PartialOrd + Ord + Copy,
-{
-    fn new(channel_id: &'static str, service: &'static str) -> Self {
-        Self {
-            last_value: Arc::new(Mutex::new(None)),
-            values: BTreeSet::new(),
-            sm_log: smlogger().create_sender::<T>(channel_id, service),
-        }
-    }
-
-    pub fn push(&mut self, item: T) {
-        self.sm_log.entry(&item);
-        if !self.values.contains(&item) {
-            self.values.insert(item);
-            let mut data = self.last_value.try_lock().unwrap();
-            *data = Some(item)
-        }
-    }
-
-    fn push_bytes(&mut self, data: &[u8]) {
-        let v = bincode::deserialize::<T>(data).expect("Could not deserialise from bytes");
-        self.push(v);
-    }
-}
-
-impl<T> Future for SetQueue<T>
-where
-    T: Serialize + std::marker::Unpin + Copy + for<'de> Deserialize<'de> + std::fmt::Debug + Ord,
-{
-    type Output = T;
-    fn poll(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        if let Some(value) = {
-            self.last_value
-                .try_lock()
-                .map_or_else(|| None, |v| v.or(None))
-        } {
-            self.borrow_mut().sm_log.exit();
-            Poll::Ready(value)
-        } else {
-            ctx.waker().wake_by_ref();
-            Poll::Pending
-        }
-    }
-}
-
-impl<T> ByteDeSerialiser for SetQueue<T>
-where
-    T: Serialize + for<'de> Deserialize<'de> + std::fmt::Debug + Copy + Send + Sync + Ord,
-{
-    fn push_data(&mut self, v: &[u8]) {
-        self.push_bytes(&v);
-    }
-}
-
-struct DictionaryQueue<T, U>
-where
-    T: Serialize + PartialOrd + Ord,
-{
-    last_value: Arc<Mutex<Option<(T, U)>>>,
-    values: BTreeMap<T, u64>,
-    sm_log: SMLogger<T>,
-}
-
-impl<T, U> DictionaryQueue<T, U>
-where
-    T: Serialize + for<'de> Deserialize<'de> + Copy + PartialOrd + Ord + Clone,
-    U: Serialize + for<'de> Deserialize<'de>,
-{
-    fn new(channel_id: &'static str, service: &'static str) -> Self {
-        Self {
-            last_value: Arc::new(Mutex::new(None)),
-            values: BTreeMap::new(),
-            sm_log: smlogger().create_sender::<T>(channel_id, service),
-        }
-    }
-
-    pub fn push(&mut self, item: T, value: U) {
-        self.sm_log.entry(&item);
-        if !self.values.contains_key(&item) {
-            self.values.insert(item.clone(), 0);
-            let mut data = self.last_value.try_lock().unwrap();
-            *data = Some((item, value))
-        }
-    }
-
-    fn push_bytes(&mut self, data: &[u8]) {
-        let v = bincode::deserialize::<(T, U)>(data).expect("Could not deserialise from bytes");
-        self.push(v.0, v.1);
-    }
-}
-
-impl<T, U> Future for DictionaryQueue<T, U>
-where
-    T: Serialize + std::marker::Unpin + Copy + for<'de> Deserialize<'de> + std::fmt::Debug + Ord,
-    U: Serialize + for<'de> Deserialize<'de> + Copy,
-{
-    type Output = (T, U);
-    fn poll(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        if let Some(value) = self
-            .last_value
-            .try_lock()
-            .map_or_else(|| None, |v| v.or(None))
-        {
-            self.sm_log.exit();
-            Poll::Ready(value)
-        } else {
-            ctx.waker().wake_by_ref();
-            Poll::Pending
-        }
-    }
-}
-
-impl<T, U> ByteDeSerialiser for DictionaryQueue<T, U>
-where
-    T: Serialize + for<'de> Deserialize<'de> + std::fmt::Debug + Copy + Send + Sync + Ord + Clone,
-    U: Serialize + for<'de> Deserialize<'de> + Send,
-{
-    fn push_data(&mut self, v: &[u8]) {
-        self.push_bytes(&v);
-    }
-}
-
+/*
 // ChannelID/SockAddr update
 // Discovery service
 // Recovery
@@ -823,3 +316,4 @@ mod tests {
 // Testing
 // Packaging
 // Docs
+*/
