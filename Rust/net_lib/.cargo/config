@@ -1,3 +1,0 @@
-[build]
-pipelining=true
-rustflags=["-Copt-level=3", "-Ctarget-cpu=core2"]
