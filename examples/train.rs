@@ -32,7 +32,7 @@ fn add_str(a: &str, b: &str) -> Result<String, Box<dyn std::error::Error>> {
     Ok([a, b].join("-"))
 }
 
-#[xl_func(category = "OptionPricing")]
+#[xl_func(category = "OptionPricing", prefix = "my", rename = "foo")]
 fn add_str_2(a: &[&str]) -> Result<(Vec<String>, usize), Box<dyn std::error::Error>> {
     Ok((vec![a.join("-")], 1))
 }

@@ -1,4 +1,5 @@
 use proc_macro::*;
+use std::collections::BTreeMap;
 use quote::quote;
 use syn::{FnArg, ItemFn};
 
@@ -9,17 +10,21 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
     // println!("{:?}", input);
 
     let item = syn::parse::<ItemFn>(input).expect("Failed to parse.");
-    let category = if !attr.is_empty() {
-        let attr = attr.to_string();
-        let category = attr.split('=').collect::<Vec<_>>();
-        if !category.is_empty() {
-            category[1][1..category.len()-1].to_string()
-        } else {
-            String::new()
+    let mut params = BTreeMap::new();
+    let tree = attr.into_iter().collect::<Vec<TokenTree>>();
+    for chunk in tree.as_slice().windows(3) {
+        match chunk {
+            [TokenTree::Ident(i),TokenTree::Punct(_),TokenTree::Literal(l)] => {
+                let l = l.to_string();
+                params.insert(i.to_string(),l[1..l.len()-1].to_string());
+            },
+            _ => (),
         }
-    } else {
-        String::new()
-    };
+    }
+    let name = item.sig.ident.to_string();
+    let category = if let Some(v) = params.get("category") { v } else { "" };
+    let prefix = if let Some(v) = params.get("prefix") { v } else { "xl" };
+    let rename = if let Some(v) = params.get("rename") { v } else { name.as_str() };
     // Use `quote` to convert the syntax tree back into tokens so we can return them. Note
     // that the tokens we're returning at this point are still just the input, we've simply
     // converted it between a few different forms.
@@ -27,16 +32,16 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
     let func = &item.sig.ident;
 
     let xl_function = proc_macro2::Ident::new(
-        &format!("xl_{}", item.sig.ident),
+        &format!("{}_{}", prefix, rename),
         proc_macro2::Span::call_site(),
     );
     let error_handler_function = proc_macro2::Ident::new(
-        &format!("_error_hndlr_{}", item.sig.ident),
+        &format!("_error_hndlr_{}", func),
         proc_macro2::Span::call_site(),
     );
 
     let register_function = proc_macro2::Ident::new(
-        &format!("register_{}", item.sig.ident),
+        &format!("register_{}", func),
         proc_macro2::Span::call_site(),
     );
     // From the signature, identify the types we handle
@@ -317,6 +322,5 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
         #item
     };
 
-    //    println!("{}",wrapper.to_string());
     wrapper.into()
 }

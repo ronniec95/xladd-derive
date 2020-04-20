@@ -1,6 +1,10 @@
 # xladd-derive
 Macros to help write Excel User defined functions easily in Rust
 
+# Version 0.2 release notes
+* Added a new feature: *prefix* which can be used to name your functions. Previously all the excel exported functions were called "xl_myfunction", now with `prefix = "project_"` your exports are renamed to `project_myfunction`. If it's not specified it defaults to "xl_".
+* Added *rename* which renames the Excel exposed function to whatever specified. The prefix still stands.
+
 ## Why?
 
 I find quickly knocking up a sample GUI in Excel by drag/dropping extremely good for prototyping. Writing a test function and being able to pass all sorts of data to it interactively is a useful feature
