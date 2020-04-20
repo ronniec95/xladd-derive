@@ -19,7 +19,7 @@ But it was still a pain and I wanted to learn about proc-macros so created this 
 Add
 
     [dependencies]
-    xladd-derive="0.1"
+    xladd-derive="0.2"
     xladd = {git="https://github.com/ronniec95/xladd}
 
 to your Cargo.toml
