@@ -4,7 +4,9 @@ Macros to help write Excel User defined functions easily in Rust
 # Version 0.3 release notes
 
 ## New features
-* Added a feature flag "use_ndarray", This allows you to use Array2<f64> or Array2<String> types as input or output parameters. This fixes the problem of 2d arrays which was a hacky solution at best before
+* Main new feature is the ability to have 2d arrays going in and out through using NDArray.
+* Added a feature flag "use_ndarray". But I cannot see how to pass it through to xladd automatically if the old version of the crate didn't have it as a feature? PR welcome
+  This allows you to use Array2<f64> or Array2<String> types as input or output parameters. This fixes the problem of 2d arrays which was a hacky solution at best before
   Using &[f64] is still supported as before and still makes sense for single column or row data
   Using (Vec<f64>,usize) as a return type is still supported but I think it's ugly as it doesn't really show the intention of the developer
 
@@ -33,8 +35,8 @@ Add
     crate-type = ["cdylib"]
 
     [dependencies]
-    xladd-derive= {"0.3.2", features=["use_ndarray"] }
-    xladd = {git="https://github.com/ronniec95/xladd } # Needed to patch the old abandoned crate
+    xladd-derive= {"0.3.2" }
+    xladd = {git="https://github.com/ronniec95/xladd , features=["use_ndarray"] } # Needed to patch the old abandoned crate
 
 to your Cargo.toml
 

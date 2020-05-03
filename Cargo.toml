@@ -1,6 +1,6 @@
 [package]
 name = "xladd-derive"
-version = "0.3.1"
+version = "0.3.2"
 authors = ["Ronnie Chowdhury <Ronnie.c995@gmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -9,20 +9,16 @@ readme="Readme.MD"
 repository="https://github.com/ronniec95/xladd-derive"
 keywords = ["excel","userdefined","udf"]
 
-[features]
-default=[]
-use_ndarray=["xladd/use_ndarray","ndarray"]
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 syn={version="1", features=["full", "extra-traits"] }
 quote="1"
 proc-macro2="1"
-xladd = { version="0.3.0" }
 ndarray = {version="^0.13", optional=true}
 
 [lib]
 proc-macro=true
 
 [patch.crates-io]
-xladd = { git ="https://github.com/ronniec95/xladd" , features=["use_ndarray"] }
+xladd = { git ="https://github.com/ronniec95/xladd" , features=["use_ndarray"]  }
+
