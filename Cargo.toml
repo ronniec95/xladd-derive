@@ -19,7 +19,7 @@ syn={version="1", features=["full", "extra-traits"] }
 quote="1"
 proc-macro2="1"
 ndarray={version="^0.13", optional=true}
-xladd = "0.1"
+xladd = "0.3"
 
 [lib]
 proc-macro=true
