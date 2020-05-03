@@ -19,10 +19,7 @@ syn={version="1", features=["full", "extra-traits"] }
 quote="1"
 proc-macro2="1"
 ndarray={version="^0.13", optional=true}
-xladd = "0.3"
+xladd = { version="0.3.0", git ="https://github.com/ronniec95/xladd" }
 
 [lib]
 proc-macro=true
-
-[patch.crates-io]
-xladd = { git ="https://github.com/ronniec95/xladd" }
