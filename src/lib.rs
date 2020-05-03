@@ -66,12 +66,12 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
                     syn::Type::Path(p) => {
                         let segment = &p.path.segments[0];
                         let ident = &segment.ident;
-                        let ident = if ident == "str" {
+                        let p_type = if ident == "str" {
                             quote!(String)
                         } else {
-                            quote!(#ident)
+                            quote!(#p)
                         };
-                        quote!( let #arg_name = std::convert::TryInto::<#ident>::try_into(&#arg_name)?; )
+                        quote!( let #arg_name = std::convert::TryInto::<#p_type>::try_into(&#arg_name)?; )
                     }
                     syn::Type::Reference(p) => {
                         let elem = &p.elem;

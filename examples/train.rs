@@ -37,15 +37,27 @@ fn add_str_2(a: &[&str]) -> Result<(Vec<String>, usize), Box<dyn std::error::Err
     Ok((vec![a.join("-")], 1))
 }
 
+#[cfg(feature = "use_ndarray")]
+use ndarray::Array2;
+
+#[cfg(feature = "use_ndarray")]
+#[xl_func(category = "OptionPricing", prefix = "my", rename = "bar")]
+fn add_str_3(a: Array2<String>) -> Result<Array2<f64>, Box<dyn std::error::Error>> {
+    Ok(Array2::from_elem([2, 2], 0.0f64))
+}
+
+#[cfg(feature = "use_ndarray")]
+#[xl_func(category = "OptionPricing", prefix = "my", rename = "baz")]
+fn add_f64_2(a: Array2<f64>) -> Result<Array2<f64>, Box<dyn std::error::Error>> {
+    Ok(Array2::from_elem([2, 2], 0.0f64))
+}
+
 // Don't forget to register your functions
 #[no_mangle]
 pub extern "stdcall" fn xlAutoOpen() -> i32 {
     let r = Reg::new();
-    register_add(&r);
-    register_add_array(&r);
-    register_add_array_v2(&r);
-    register_add_str(&r);
-    register_add_str_2(&r);
+    #[cfg(feature = "use_ndarray")]
+    register_add_f64_2(&r);
     1
 }
 

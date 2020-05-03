@@ -1,6 +1,6 @@
 [package]
 name = "xladd-derive"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Ronnie Chowdhury <Ronnie.c995@gmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -10,13 +10,16 @@ repository="https://github.com/ronniec95/xladd-derive"
 keywords = ["excel","userdefined","udf"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = []
+use_ndarray = ["xladd/use_ndarray", "ndarray"]
 
 [dependencies]
 syn={version="1", features=["full", "extra-traits"] }
 quote="1"
 proc-macro2="1"
-xladd = "0.1.0"
-
+ndarray={version="^0.13", optional=true}
+xladd = "0.1"
 
 [lib]
 proc-macro=true
