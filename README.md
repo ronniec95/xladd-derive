@@ -4,7 +4,7 @@ Macros to help write Excel User defined functions easily in Rust
 # Version 0.3 release notes
 
 ## New features
-* Added a feature flag "use_ndarray", which sadly has to be a hard dependency as the patch.crates-io feature doesn't seem to allow package dependencies. This allows you to use Array2<f64> or Array2<String> types as input or output parameters. This fixes the problem of 2d arrays which was a hacky solution at best before
+* Added a feature flag "use_ndarray", This allows you to use Array2<f64> or Array2<String> types as input or output parameters. This fixes the problem of 2d arrays which was a hacky solution at best before
   Using &[f64] is still supported as before and still makes sense for single column or row data
   Using (Vec<f64>,usize) as a return type is still supported but I think it's ugly as it doesn't really show the intention of the developer
 
@@ -29,9 +29,12 @@ But it was still a pain and I wanted to learn about proc-macros so created this 
 
 Add
 
+    [lib]
+    crate-type = ["cdylib"]
+
     [dependencies]
-    xladd-derive="0.2"
-    xladd = {git="https://github.com/ronniec95/xladd}
+    xladd-derive= {"0.3.2", features=["use_ndarray"] }
+    xladd = {git="https://github.com/ronniec95/xladd } # Needed to patch the old abandoned crate
 
 to your Cargo.toml
 
@@ -61,6 +64,14 @@ Write a Rust function and add the following annotation `#[xl_func()]` like
         // This returns a 2d array to excel using a (vec,usize) tuple. Note that if v.len() / columns != 0 you will have missing values
         Ok((v.to_vec(), 2))
     }
+
+    use ndarray::Array2;
+    /// 2d arrays can now be accepted and returned opening up a lot more possibilities for interfacing with Excel
+    #[xl_func(category = "OptionPricing", prefix = "my", rename = "baz")]
+    fn add_f64_2(a: Array2<f64>) -> Result<Array2<f64>, Box<dyn std::error::Error>> {
+        Ok(Array2::from_elem([2, 2], 0.0f64))
+    }
+
 
 Right now there are a couple of restrictions which I hope to remove down the line
 
