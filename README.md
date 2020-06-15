@@ -36,11 +36,17 @@ Add
 
     [dependencies]
     xladd-derive= {"0.3.2" }
-    xladd = {git="https://github.com/ronniec95/xladd , features=["use_ndarray"] } # Needed to patch the old abandoned crate
+    xladd = {git="https://github.com/ronniec95/xladd" , features=["use_ndarray"] } # Needed to patch the old abandoned crate
 
 to your Cargo.toml
 
 Write a Rust function and add the following annotation `#[xl_func()]` like
+
+    // These imports are needed from xladd
+    use xladd::registrator::Reg;
+    use xladd::variant::Variant;
+    use xladd::xlcall::LPXLOPER12;
+    use xladd_derive::xl_func;
 
     #[xl_func()]
     fn add(arg1: f64, arg2: f64) -> Result<f64, Box<dyn std::error::Error>> {
@@ -115,6 +121,8 @@ If you want to control this aspect through an attribute, let me know.
 
 Excel calls this function in your .dll when it starts. The macro generates the register_* functions for you so follow this template. If someone knows how to automatically determine these from a proc-macro, please get in touch, or raise a PR
 
+    // For excel to register this XLL ensure `no_mangle` is specified 
+    #[no_mangle]
     pub extern "stdcall" fn xlAutoOpen() -> i32 {
         let reg = Reg::new();
         register_add(&reg);
