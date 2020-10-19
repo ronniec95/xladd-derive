@@ -1,6 +1,12 @@
 # xladd-derive
 Macros to help write Excel User defined functions easily in Rust
 
+# Version 0.4 release notes
+
+## New features
+* Previously, when calling a function from excel, if the user made a mistake with paramter entry it would return a generic "error". Now we get "missing parameter [name] for function [xxx]" which is a better use experience.
+* It also traps where a particular type was expected and it's not parseable.
+
 # Version 0.3 release notes
 
 ## New features
