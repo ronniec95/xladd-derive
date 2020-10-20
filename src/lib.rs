@@ -75,7 +75,7 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
                                 return Err(Box::new(xladd::variant::XLAddError::MissingArgument(stringify!(#func).to_string(),stringify!(#arg_name).to_string())));
                             }
                             let #arg_name = std::convert::TryInto::<#p_type>::try_into(&#arg_name)?; 
-                            trace!("{}:[{:?}]",stringify!(#arg_name),#arg_name);
+                            log::trace!("{}:[{:?}]",stringify!(#arg_name),#arg_name);
                         )
                     }
                     syn::Type::Reference(p) => {
@@ -93,7 +93,7 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
                                                     return Err(Box::new(xladd::variant::XLAddError::MissingArgument(stringify!(#func).to_string(),stringify!(#arg_name).to_string())));
                                                 }
                                                 let #arg_name = std::convert::TryInto::<Vec<#ident>>::try_into(&#arg_name)?;
-                                                trace!("{}:[{:?}]",stringify!(#arg_name),#arg_name);
+                                                log::trace!("{}:[{:?}]",stringify!(#arg_name),#arg_name);
                                                 let #arg_name = #arg_name.as_slice();
                                         )
                                     }
@@ -109,7 +109,7 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
                                                             }
                                                             let #arg_name = std::convert::TryInto::<Vec<String>>::try_into(&#arg_name)?;
                                                             let #arg_name = #arg_name.iter().map(AsRef::as_ref).collect::<Vec<_>>();
-                                                            trace!("{}:[{:?}]",stringify!(#arg_name),#arg_name);
+                                                            log::trace!("{}:[{:?}]",stringify!(#arg_name),#arg_name);
                                                             let #arg_name = #arg_name.as_slice();
                                                     )
                                                 } else {
@@ -131,7 +131,7 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
                                             return Err(Box::new(xladd::variant::XLAddError::MissingArgument(stringify!(#func).to_string(),stringify!(#arg_name).to_string())));
                                         }
                                         let #arg_name = std::convert::TryInto::<String>::try_into(&#arg_name)?;
-                                        trace!("{}:[{:?}]",stringify!(#arg_name),#arg_name);
+                                        log::trace!("{}:[{:?}]",stringify!(#arg_name),#arg_name);
                                         let #arg_name = #arg_name.as_str();)
                                 } else { 
                                     quote!(
@@ -139,7 +139,7 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
                                             return Err(Box::new(xladd::variant::XLAddError::MissingArgument(stringify!(#func).to_string(),stringify!(#arg_name).to_string())));
                                         }
                                         let #arg_name = std::convert::TryInto::<#ident>::try_into(&#arg_name)?;
-                                        trace!("{}:[{:?}]",stringify!(#arg_name),#arg_name);
+                                        log::trace!("{}:[{:?}]",stringify!(#arg_name),#arg_name);
                                         )
                                     }
                             }
@@ -326,12 +326,11 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
     let wrapper = quote! {
         // Error handler
         fn #error_handler_function(#(#variant_args),*) -> Result<Variant, Box<dyn std::error::Error>> {
-            use log::*;
-            trace!("{} called",stringify!(#xl_function));
+            log::trace!("{} called",stringify!(#xl_function));
 
             #(#convert_to_owned_rust_types)*;
             let res = #func(#(#caller_args),*)?;
-            trace!("Results [{:?}]",res);
+            log::trace!("Results [{:?}]",res);
             #output
         }
         // Excel function

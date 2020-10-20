@@ -1,6 +1,6 @@
 [package]
 name = "xladd-derive"
-version = "0.4.1"
+version = "0.4.2"
 authors = ["Ronnie Chowdhury <Ronnie.c995@gmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -15,6 +15,7 @@ syn={version="1", features=["full", "extra-traits"] }
 quote="1"
 proc-macro2="1"
 ndarray = {version="^0.13", optional=true}
+log = "^0.4"
 
 [lib]
 proc-macro=true
