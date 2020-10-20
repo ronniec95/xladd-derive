@@ -6,6 +6,8 @@ Macros to help write Excel User defined functions easily in Rust
 ## New features
 * Previously, when calling a function from excel, if the user made a mistake with paramter entry it would return a generic "error". Now we get "missing parameter [name] for function [xxx]" which is a better use experience.
 * It also traps where a particular type was expected and it's not parseable.
+* trace logging added. If logging is enabled and is set to LevelFilter::Trace then you can get a log of every function call, parameters passed and resulting values. This does have a small impact on performance that I've measured even when disabled. I would recommend having a Excel UDF created that you could call such as `enable_trace_logging` that outputs to a file that is called on demand in your testing spreadsheet
+* Nan values are converted to #N/A in excel. This I found useful when user inputs were out of bounds and produced NAN values in some mathematical functions. Rather than crashing or skipping we get a #NA in excel telling us that we need to look at the inputs.
 
 # Version 0.3 release notes
 

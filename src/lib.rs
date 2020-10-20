@@ -58,7 +58,6 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
                     _ => panic!("Type not covered"),
                 }
             };
-            
             // Owned type
             let owned_type = {
                 let ty = &typed_arg.ty;
@@ -75,7 +74,9 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
                             if #arg_name.is_missing_or_null() {
                                 return Err(Box::new(xladd::variant::XLAddError::MissingArgument(stringify!(#func).to_string(),stringify!(#arg_name).to_string())));
                             }
-                            let #arg_name = std::convert::TryInto::<#p_type>::try_into(&#arg_name)?; )
+                            let #arg_name = std::convert::TryInto::<#p_type>::try_into(&#arg_name)?; 
+                            trace!("{}:[{:?}]",stringify!(#arg_name),#arg_name);
+                        )
                     }
                     syn::Type::Reference(p) => {
                         let elem = &p.elem;
@@ -92,6 +93,7 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
                                                     return Err(Box::new(xladd::variant::XLAddError::MissingArgument(stringify!(#func).to_string(),stringify!(#arg_name).to_string())));
                                                 }
                                                 let #arg_name = std::convert::TryInto::<Vec<#ident>>::try_into(&#arg_name)?;
+                                                trace!("{}:[{:?}]",stringify!(#arg_name),#arg_name);
                                                 let #arg_name = #arg_name.as_slice();
                                         )
                                     }
@@ -107,6 +109,7 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
                                                             }
                                                             let #arg_name = std::convert::TryInto::<Vec<String>>::try_into(&#arg_name)?;
                                                             let #arg_name = #arg_name.iter().map(AsRef::as_ref).collect::<Vec<_>>();
+                                                            trace!("{}:[{:?}]",stringify!(#arg_name),#arg_name);
                                                             let #arg_name = #arg_name.as_slice();
                                                     )
                                                 } else {
@@ -128,14 +131,17 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
                                             return Err(Box::new(xladd::variant::XLAddError::MissingArgument(stringify!(#func).to_string(),stringify!(#arg_name).to_string())));
                                         }
                                         let #arg_name = std::convert::TryInto::<String>::try_into(&#arg_name)?;
+                                        trace!("{}:[{:?}]",stringify!(#arg_name),#arg_name);
                                         let #arg_name = #arg_name.as_str();)
                                 } else { 
                                     quote!(
                                         if #arg_name.is_missing_or_null() {
                                             return Err(Box::new(xladd::variant::XLAddError::MissingArgument(stringify!(#func).to_string(),stringify!(#arg_name).to_string())));
                                         }
-                                        let #arg_name = std::convert::TryInto::<#ident>::try_into(&#arg_name)?;)
-                                }
+                                        let #arg_name = std::convert::TryInto::<#ident>::try_into(&#arg_name)?;
+                                        trace!("{}:[{:?}]",stringify!(#arg_name),#arg_name);
+                                        )
+                                    }
                             }
                             _ => panic!("Type not covered"),
                         }
@@ -320,8 +326,12 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
     let wrapper = quote! {
         // Error handler
         fn #error_handler_function(#(#variant_args),*) -> Result<Variant, Box<dyn std::error::Error>> {
+            use log::*;
+            trace!("{} called",stringify!(#xl_function));
+
             #(#convert_to_owned_rust_types)*;
             let res = #func(#(#caller_args),*)?;
+            trace!("Results [{:?}]",res);
             #output
         }
         // Excel function
@@ -330,7 +340,10 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
             #(#to_variant)*
             match #error_handler_function(#(#caller_args),*) {
                 Ok(v) => LPXLOPER12::from(v),
-                Err(e) => LPXLOPER12::from(Variant::from(e.to_string().as_str())),
+                Err(e) => {
+                    error!("{}",e.to_string());
+                    LPXLOPER12::from(Variant::from(e.to_string().as_str()))
+                },
             }
         }
 
@@ -340,7 +353,7 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
         // User function
         #item
     };
-    println!("{}",wrapper);
+    //println!("{}",wrapper);
     
     wrapper.into()
 }
