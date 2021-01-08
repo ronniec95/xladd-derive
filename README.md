@@ -1,6 +1,14 @@
 # xladd-derive
 Macros to help write Excel User defined functions easily in Rust
 
+# Version 0.5 release notes
+
+* The main new feature is that arrays can now be 1078,576 rows in length which is the maximum that excel supports
+* To support that profiled the code as much as possible to reduce copying of arrays around. I'm sure there can be further improvements
+* Async UDFs are now supported. They are supported ok in Excel but it's not a great idea to have too many of them as they screw up Excel's dependency management. However functions are marked as threadsafe, and should be in Rust (no globals) so you should be ok. Watch out for overwrites though
+* make_row and make_col variant arrays are supported now to help return tables.
+* RTD and Ribbon Bar support coming soon
+
 # Version 0.4 release notes
 
 ## New features
