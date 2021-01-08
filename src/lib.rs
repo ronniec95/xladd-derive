@@ -25,6 +25,7 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
     let category = if let Some(v) = params.get("category") { v } else { "" };
     let prefix = if let Some(v) = params.get("prefix") { v } else { "xl" };
     let rename = if let Some(v) = params.get("rename") { v } else { name.as_str() };
+    let async_function = if let Some(v) = params.get("async") { v == "true" } else { false };
     // Use `quote` to convert the syntax tree back into tokens so we can return them. Note
     // that the tokens we're returning at this point are still just the input, we've simply
     // converted it between a few different forms.
@@ -94,7 +95,7 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
                                                 }
                                                 let #arg_name = std::convert::TryInto::<Vec<#ident>>::try_into(&#arg_name)?;
                                                 log::trace!("{}:[{:?}]",stringify!(#arg_name),#arg_name);
-                                                let #arg_name = #arg_name.as_slice();
+                                                //let #arg_name = #arg_name.as_slice();
                                         )
                                     }
                                     syn::Type::Reference(p) => {
@@ -110,7 +111,7 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
                                                             let #arg_name = std::convert::TryInto::<Vec<String>>::try_into(&#arg_name)?;
                                                             let #arg_name = #arg_name.iter().map(AsRef::as_ref).collect::<Vec<_>>();
                                                             log::trace!("{}:[{:?}]",stringify!(#arg_name),#arg_name);
-                                                            let #arg_name = #arg_name.as_slice();
+                                                            //let #arg_name = #arg_name.as_slice();
                                                     )
                                                 } else {
                                                     panic!("Only slices of &[&str] supported")
@@ -132,7 +133,8 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
                                         }
                                         let #arg_name = std::convert::TryInto::<String>::try_into(&#arg_name)?;
                                         log::trace!("{}:[{:?}]",stringify!(#arg_name),#arg_name);
-                                        let #arg_name = #arg_name.as_str();)
+                                       // let #arg_name = #arg_name.as_str();
+                                    )
                                 } else { 
                                     quote!(
                                         if #arg_name.is_missing_or_null() {
@@ -157,6 +159,75 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
         FnArg::Receiver(_) => panic!("Free functions only"),
     });
 
+
+    // Rerefence args
+    let reference_args = &item.sig.inputs.iter().map(|arg| match arg {
+        FnArg::Typed(typed_arg) => {
+            // Arg name
+            let arg_name = {
+                let pat = &typed_arg.pat;
+                match &**pat {
+                    syn::Pat::Ident(ident) => quote!(#ident),
+                    _ => panic!("Type not covered"),
+                }
+            };
+            // Owned type
+            let owned_type = {
+                let ty = &typed_arg.ty;
+                match &**ty {
+                    syn::Type::Path(_) => {
+                        quote!()
+                    }
+                    syn::Type::Reference(p) => {
+                        let elem = &p.elem;
+                        // Slice
+                        match &**elem {
+                            syn::Type::Slice(s) => {
+                                let elem = &s.elem;
+                                match &**elem {
+                                    syn::Type::Path(_) => {
+                                        quote!( let #arg_name = #arg_name.as_slice(); )
+                                    }
+                                    syn::Type::Reference(p) => {
+                                        let elem = &p.elem;
+                                        match &**elem {
+                                            syn::Type::Path(p) => {
+                                                let segment = &p.path.segments[0];
+                                                let ident = &segment.ident;
+                                                if ident == "str" {
+                                                    quote!( let #arg_name = #arg_name.as_slice(); )
+                                                } else {
+                                                    panic!("Only slices of &[&str] supported")
+                                                }
+                                            }
+                                            _ => panic!("Type not covered"),
+                                        }
+                                    }
+                                    _ => panic!("Type not covered"),
+                                }
+                            }
+                            syn::Type::Path(s) => {
+                                let segment = &s.path.segments[0];
+                                let ident = &segment.ident;
+                                if ident == "str" { 
+                                    quote!(let #arg_name = #arg_name.as_str(); )
+                                } else { 
+                                    quote!()
+                                    }
+                            }
+                            _ => panic!("Type not covered"),
+                        }
+
+                        // or Path
+                    }
+                    _ => panic!("Type not covered"),
+                }
+            };
+            // Slice converted for &[&str],&[f64]
+            (arg_name, owned_type)
+        }
+        FnArg::Receiver(_) => panic!("Free functions only"),
+    });
     // Parse the doc comments
 
     let comments = &item.attrs.iter().filter_map(|attr: &syn::Attribute| {
@@ -316,43 +387,109 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
         .map(|(_, _)| "Q")
         .collect::<Vec<_>>()
         .join("");
-    q_args.push('Q');
+    // Mark function as async
+    if async_function {
+        q_args.insert(0,'>');
+        q_args.push('X');
+    } else {
+        // Return type is a variant
+        q_args.push('Q');
+    }
+    // 
     q_args.push('$');
     let convert_to_owned_rust_types = typed_args
         .clone()
         .map(|(_, owned_type)| owned_type)
         .collect::<Vec<_>>();
-    let xl_function_str = xl_function.to_string();
-    let wrapper = quote! {
-        // Error handler
-        fn #error_handler_function(#(#variant_args),*) -> Result<Variant, Box<dyn std::error::Error>> {
-            log::trace!("{} called",stringify!(#xl_function));
 
-            #(#convert_to_owned_rust_types)*;
-            let res = #func(#(#caller_args),*)?;
-            log::trace!("Results [{:?}]",res);
-            #output
-        }
-        // Excel function
-        #[no_mangle]
-        pub extern "stdcall" fn #xl_function(#(#lpx_oper_args),*)  -> LPXLOPER12 {
-            #(#to_variant)*
-            match #error_handler_function(#(#caller_args),*) {
-                Ok(v) => LPXLOPER12::from(v),
-                Err(e) => {
-                    error!("{}",e.to_string());
-                    LPXLOPER12::from(Variant::from(e.to_string().as_str()))
-                },
+    let convert_to_ref_rust_types = reference_args
+        .clone()
+        .map(|(_, owned_type)| owned_type)
+        .collect::<Vec<_>>();
+
+        let xl_function_str = xl_function.to_string();
+    // Async function
+    if async_function {
+        let wrapper = quote! {
+             // Error handler
+             fn #error_handler_function(#(#variant_args),*, return_handle: LPXLOPER12) -> Result<Variant, Box<dyn std::error::Error>> {
+                log::trace!("{} called [*ASYNC*] ..waiting for results",stringify!(#xl_function));
+                #(#convert_to_owned_rust_types)*;
+                let raw_ptr = xladd::variant::XLOPERPtr(return_handle);
+                std::thread::spawn(move ||{
+                    #(#convert_to_ref_rust_types)*;
+                    match #func(#(#caller_args),*) {
+                        Ok(v) => {
+                            log::trace!("Results [{:?}]",v);
+                            xladd::entrypoint::excel12(
+                                                xladd::xlcall::xlAsyncReturn,
+                                                &mut [Variant::from(raw_ptr), v]);
+                        }
+                        Err(e) => {
+                            log::error!("Error {:?}",e.to_string());
+                            xladd::entrypoint::excel12(
+                                                xladd::xlcall::xlAsyncReturn,
+                                                &mut [Variant::from(raw_ptr), Variant::from(e.to_string())]);
+                        }
+                    }
+                });
+                Ok(Variant::default())
             }
-        }
+            // Excel function
+            #[no_mangle]
+            pub extern "stdcall" fn #xl_function(#(#lpx_oper_args),* ,return_handle: LPXLOPER12) {
+                #(#to_variant)*
+                match #error_handler_function(#(#caller_args),*, return_handle) {
+                    Ok(_) => (),
+                    Err(e) => {
+                        log::error!("{}",e.to_string());
+                        let raw_ptr = xladd::variant::XLOPERPtr(return_handle);
+                        xladd::entrypoint::excel12(
+                            xladd::xlcall::xlAsyncReturn,
+                            &mut [Variant::from(raw_ptr), Variant::from(e.to_string())],
+                        );
+                    },
+                }
+            }
 
-        pub (crate) fn #register_function(reg: &xladd::registrator::Reg) {
-            reg.add(#xl_function_str,#q_args,#caller_args_str,#category,#docs_ret,&[#(#args),*]);
-        }
-        // User function
-        #item
-    };
-    //println!("{}",wrapper);
-    
+            pub (crate) fn #register_function(reg: &xladd::registrator::Reg) {
+                reg.add(#xl_function_str,#q_args,#caller_args_str,#category,#docs_ret,&[#(#args),*]);
+            }
+            // User function
+            #item
+        };
+        wrapper.into()
+    } else {
+        let wrapper = quote! {
+            // Error handler
+            fn #error_handler_function(#(#variant_args),*) -> Result<Variant, Box<dyn std::error::Error>> {
+                log::trace!("{} called",stringify!(#xl_function));
+                #(#convert_to_owned_rust_types)*;
+                #(#convert_to_ref_rust_types)*;
+                let res = #func(#(#caller_args),*)?;
+                log::trace!("Results [{:?}]",res);
+                #output
+            }
+            // Excel function
+            #[no_mangle]
+            pub extern "stdcall" fn #xl_function(#(#lpx_oper_args),*)  -> LPXLOPER12 {
+                #(#to_variant)*
+                match #error_handler_function(#(#caller_args),*) {
+                    Ok(v) => LPXLOPER12::from(v),
+                    Err(e) => {
+                        error!("{}",e.to_string());
+                        LPXLOPER12::from(Variant::from(e.to_string().as_str()))
+                    },
+                }
+            }
+
+            pub (crate) fn #register_function(reg: &xladd::registrator::Reg) {
+                reg.add(#xl_function_str,#q_args,#caller_args_str,#category,#docs_ret,&[#(#args),*]);
+            }
+            // User function
+            #item
+        };
     wrapper.into()
+    }
+    
 }
