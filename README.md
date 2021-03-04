@@ -1,6 +1,11 @@
 # xladd-derive
 Macros to help write Excel User defined functions easily in Rust
 
+# Version 0.6 release notes
+Update to use ndarray 0.14
+Support for sref which allows use of index and offset ranges in excel
+Some minor bug fixes
+
 # Version 0.5 release notes
 
 * The main new feature is that arrays can now be 1078,576 rows in length which is the maximum that excel supports

@@ -1,25 +1,27 @@
 [package]
-name = "xladd-derive"
-version = "0.5.0"
 authors = ["Ronnie Chowdhury <Ronnie.c995@gmail.com>"]
+description = "A simple macro that helps write Excel UDF functions in Rust"
 edition = "2018"
+keywords = ["excel", "userdefined", "udf"]
 license = "MIT"
-description="A simple macro that helps write Excel UDF functions in Rust"
-readme="Readme.MD"
-repository="https://github.com/ronniec95/xladd-derive"
-keywords = ["excel","userdefined","udf"]
+name = "xladd-derive"
+readme = "Readme.MD"
+repository = "https://github.com/ronniec95/xladd-derive"
+version = "0.6.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-syn={version="1", features=["full", "extra-traits"] }
-quote="1"
-proc-macro2="1"
-ndarray = {version="^0.13", optional=true}
+com = {version = "0.3", features = ["production"]}
 log = "^0.4"
+ndarray = {version = "^0.14", optional = true}
+proc-macro2 = "1"
+quote = "1"
+syn = {version = "1", features = ["full", "extra-traits"]}
+widestring = "0.4"
+winapi = {version = "0.3", features = ["oaidl", "combaseapi", "oleauto"]}
 
 [lib]
-proc-macro=true
+proc-macro = true
 
 [patch.crates-io]
-xladd = { git ="https://github.com/ronniec95/xladd" , features=["use_ndarray"]  }
-
+xladd = {git = "https://github.com/ronniec95/xladd", features = ["use_ndarray"]}
