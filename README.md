@@ -1,7 +1,10 @@
 # xladd-derive
 Macros to help write Excel User defined functions easily in Rust
 
-# Version 0.61 release notes
+# Version 0.6.2 release notes
+xladd would return a null value if a xlTypeMulti was returned from a range cell.
+
+# Version 0.6.1 release notes
 Some minor bug fixes in xladd integrated in
 
 # Version 0.6 release notes
