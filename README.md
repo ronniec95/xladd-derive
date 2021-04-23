@@ -1,6 +1,9 @@
 # xladd-derive
 Macros to help write Excel User defined functions easily in Rust
 
+# Version 0.61 release notes
+Some minor bug fixes in xladd integrated in
+
 # Version 0.6 release notes
 Update to use ndarray 0.14
 Support for sref which allows use of index and offset ranges in excel
