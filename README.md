@@ -1,6 +1,9 @@
 # xladd-derive
 Macros to help write Excel User defined functions easily in Rust
 
+# Version 0.6.3 release notes
+Populate f64::NAN when range has #NA or #DIV/0. Might break code that assumes 0.0
+
 # Version 0.6.2 release notes
 xladd would return a null value if a xlTypeMulti was returned from a range cell.
 
