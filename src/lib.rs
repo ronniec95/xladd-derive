@@ -28,7 +28,8 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
     let category = if let Some(v) = params.get("category") { v } else { "" };
     let prefix = if let Some(v) = params.get("prefix") { v } else { "xl" };
     let rename = if let Some(v) = params.get("rename") { v } else { name.as_str() };
-    let async_function = if let Some(v) = params.get("async") { v == "true" } else { false };
+    let async_function = if let Some(_) = params.get("async") { true } else { false };
+    let single_threaded = if let Some(_) = params.get("single_threaded") { true } else { true };
     // Use `quote` to convert the syntax tree back into tokens so we can return them. Note
     // that the tokens we're returning at this point are still just the input, we've simply
     // converted it between a few different forms.
@@ -352,7 +353,7 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
                             syn::PathArguments::Parenthesized(_) => {
                                 quote! {Ok(Variant::from(true))}
                             }
-                            syn::PathArguments::None => panic!("XL functions must return a basic type of f64,i64,u32,i32,bool or a tuple of (Vec<f64>,Dimension(usize))")
+                            syn::PathArguments::None => quote! {} //panic!("XL functions must return a basic type of f64,i64,u32,i32,bool or a tuple of (Vec<f64>,Dimension(usize))")
 
                         }
                     } else {
@@ -370,11 +371,11 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
         .collect::<Vec<_>>();
     let variant_args = typed_args
         .clone()
-        .map(|(name, _)| quote!(#name: Variant))
+        .map(|(name, _)| quote!(#name: xladd::variant::Variant))
         .collect::<Vec<_>>();
     let to_variant = typed_args
         .clone()
-        .map(|(name, _)| quote!(let #name = Variant::from(#name);))
+        .map(|(name, _)| quote!(let #name = xladd::variant::Variant::from(#name);))
         .collect::<Vec<_>>();
     let caller_args = typed_args
         .clone()
@@ -398,8 +399,8 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
         // Return type is a variant
         q_args.push('Q');
     }
-    // 
-    q_args.push('$');
+    // not_thread_safe
+    if !(single_threaded || async_function) { q_args.push('$'); };
     let convert_to_owned_rust_types = typed_args
         .clone()
         .map(|(_, owned_type)| owned_type)
@@ -449,7 +450,7 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
                         let raw_ptr = xladd::variant::XLOPERPtr(return_handle);
                         xladd::entrypoint::excel12(
                             xladd::xlcall::xlAsyncReturn,
-                            &mut [Variant::from(raw_ptr), Variant::from(e.to_string())],
+                            &mut [xladd::variant::Variant::from(raw_ptr), xladd::variant::Variant::from(e.to_string())],
                         );
                     },
                 }
@@ -465,13 +466,22 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
     } else {
         let wrapper = quote! {
             // Error handler
-            fn #error_handler_function(#(#variant_args),*) -> Result<Variant, Box<dyn std::error::Error>> {
+            fn #error_handler_function(#(#variant_args),*) -> Result<xladd::variant::Variant, Box<dyn std::error::Error>> {
                 log::trace!("{} called",stringify!(#xl_function));
                 #(#convert_to_owned_rust_types)*;
                 #(#convert_to_ref_rust_types)*;
-                let res = #func(#(#caller_args),*)?;
-                log::trace!("Results [{:?}]",res);
-                #output
+                let res = std::panic::catch_unwind(|| #func(#(#caller_args),*));
+                match res {
+                    Ok(result) => {
+                        let res = result?;
+                        log::trace!("Results [{:?}]",res);
+                        #output        
+                    }
+                    Err(_) => {
+                        log::error!("Unexpected error while calling function"); 
+                        Err("Error when trying to execute function, check for invalid values, ranges, or #n/a".into())
+                    }
+                }
             }
             // Excel function
             #[no_mangle]
@@ -480,8 +490,8 @@ pub fn xl_func(attr: TokenStream, input: TokenStream) -> TokenStream {
                 match #error_handler_function(#(#caller_args),*) {
                     Ok(v) => LPXLOPER12::from(v),
                     Err(e) => {
-                        error!("{}",e.to_string());
-                        LPXLOPER12::from(Variant::from(e.to_string().as_str()))
+                        log::error!("{}",e.to_string());
+                        LPXLOPER12::from(xladd::variant::Variant::from(e.to_string().as_str()))
                     },
                 }
             }

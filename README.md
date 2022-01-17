@@ -1,6 +1,10 @@
 # xladd-derive
 Macros to help write Excel User defined functions easily in Rust
 
+
+# Version 0.7.0 release notes
+Fixed crash bug async function support and added support for single threaded functions
+
 # Version 0.6.3 release notes
 Populate f64::NAN when range has #NA or #DIV/0. Might break code that assumes 0.0
 
