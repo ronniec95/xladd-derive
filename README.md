@@ -2,24 +2,34 @@
 Macros to help write Excel User defined functions easily in Rust
 
 
-# Version 0.7.0 release notes
-Fixed crash bug async function support and added support for single threaded functions
+# Release notes
 
-# Version 0.6.3 release notes
-Populate f64::NAN when range has #NA or #DIV/0. Might break code that assumes 0.0
 
-# Version 0.6.2 release notes
-xladd would return a null value if a xlTypeMulti was returned from a range cell.
 
-# Version 0.6.1 release notes
-Some minor bug fixes in xladd integrated in
+Version 0.7.0
 
-# Version 0.6 release notes
-Update to use ndarray 0.14
-Support for sref which allows use of index and offset ranges in excel
-Some minor bug fixes
+* Fixed crash bug async function support and added support for single threaded functions
 
-# Version 0.5 release notes
+Version 0.6.3
+
+* Populate f64::NAN when range has #NA or #DIV/0. Might break code that assumes 0.0
+
+Version 0.6.2
+
+* xladd would return a null value if a xlTypeMulti was returned from a range cell.
+
+Version 0.6.1
+
+* Some minor bug fixes in xladd integrated in
+
+Version 0.6
+
+* Update to use ndarray 0.14
+* Support for sref which allows use of index and offset ranges in excel
+* Some minor bug fixes
+
+Version 0.5
+
 
 * The main new feature is that arrays can now be 1078,576 rows in length which is the maximum that excel supports
 * To support that profiled the code as much as possible to reduce copying of arrays around. I'm sure there can be further improvements
@@ -27,29 +37,25 @@ Some minor bug fixes
 * make_row and make_col variant arrays are supported now to help return tables.
 * RTD and Ribbon Bar support coming soon
 
-# Version 0.4 release notes
+Version 0.4
 
-## New features
 * Previously, when calling a function from excel, if the user made a mistake with paramter entry it would return a generic "error". Now we get "missing parameter [name] for function [xxx]" which is a better use experience.
 * It also traps where a particular type was expected and it's not parseable.
 * trace logging added. If logging is enabled and is set to LevelFilter::Trace then you can get a log of every function call, parameters passed and resulting values. This does have a small impact on performance that I've measured even when disabled. I would recommend having a Excel UDF created that you could call such as `enable_trace_logging` that outputs to a file that is called on demand in your testing spreadsheet
 * Nan values are converted to #N/A in excel. This I found useful when user inputs were out of bounds and produced NAN values in some mathematical functions. Rather than crashing or skipping we get a #NA in excel telling us that we need to look at the inputs.
 * Dependency on log::* crate added
 
-# Version 0.3 release notes
+Version 0.3
 
-## New features
 * Main new feature is the ability to have 2d arrays going in and out through using NDArray.
 * Added a feature flag "use_ndarray". But I cannot see how to pass it through to xladd automatically if the old version of the crate didn't have it as a feature? PR welcome
   This allows you to use Array2<f64> or Array2<String> types as input or output parameters. This fixes the problem of 2d arrays which was a hacky solution at best before
   Using &[f64] is still supported as before and still makes sense for single column or row data
   Using (Vec<f64>,usize) as a return type is still supported but I think it's ugly as it doesn't really show the intention of the developer
+* [FIX] If you specify an array (vec or array2) and you are dragging a range of values, the first cell is actually sent as a single f64 and not a range. I didn't handle this case before and could lead to a crash
 
-## Bugfixes
-
-* If you specify an array (vec or array2) and you are dragging a range of values, the first cell is actually sent as a single f64 and not a range. I didn't handle this case before and could lead to a crash
-
-# Version 0.2 release notes
+Version 0.2
+ 
 * Added a new feature: *prefix* which can be used to name your functions. Previously all the excel exported functions were called "xl_myfunction", now with `prefix = "project_"` your exports are renamed to `project_myfunction`. If it's not specified it defaults to "xl_".
 * Added *rename* which renames the Excel exposed function to whatever specified. The prefix still stands.
 
@@ -65,57 +71,60 @@ But it was still a pain and I wanted to learn about proc-macros so created this 
 ## Usage
 
 Add
+  
+```toml
+[lib]
+crate-type = ["cdylib"]
 
-    [lib]
-    crate-type = ["cdylib"]
-
-    [dependencies]
-    xladd-derive= {"^0.4" }
-    xladd = {git="https://github.com/ronniec95/xladd" , features=["use_ndarray"] } # Needed to patch the old abandoned crate
-
+[dependencies]
+xladd-derive= "^0.4"
+xladd = {git="https://github.com/ronniec95/xladd" , features=["use_ndarray"] } # Needed to patch the old abandoned crate
+```
+  
 to your Cargo.toml
 
 Write a Rust function and add the following annotation `#[xl_func()]` like
 
-    // These imports are needed from xladd
-    use xladd::registrator::Reg;
-    use xladd::variant::Variant;
-    use xladd::xlcall::LPXLOPER12;
-    use xladd_derive::xl_func;
-    use log::*; // Needed from 0.4.* onwards to give tracing
+```rust
+// These imports are needed from xladd
+use xladd::registrator::Reg;
+use xladd::variant::Variant;
+use xladd::xlcall::LPXLOPER12;
+use xladd_derive::xl_func;
+use log::*; // Needed from 0.4.* onwards to give tracing
 
-    #[xl_func()]
-    fn add(arg1: f64, arg2: f64) -> Result<f64, Box<dyn std::error::Error>> {
-        // No comments in this method, defaults will be allocated
-        Ok(arg1 + arg2)
-    }
+#[xl_func()]
+fn add(arg1: f64, arg2: f64) -> Result<f64, Box<dyn std::error::Error>> {
+    // No comments in this method, defaults will be allocated
+    Ok(arg1 + arg2)
+}
 
-    /// This function adds any number of values together
-    /// * v - array of f64
-    /// * ret - returns the sum0
-    #[xl_func()]
-    fn add_array(v: &[f64]) -> Result<f64, Box<dyn std::error::Error>> {
-        // Comments will be filled into the Excel function dialog box
-        Ok(v.iter().sum())
-    }
+/// This function adds any number of values together
+/// * v - array of f64
+/// * ret - returns the sum0
+#[xl_func()]
+fn add_array(v: &[f64]) -> Result<f64, Box<dyn std::error::Error>> {
+    // Comments will be filled into the Excel function dialog box
+    Ok(v.iter().sum())
+}
 
-    /// This function adds any number of values together
-    /// * v - array of f64
-    /// * ret - returns the sum
-    #[xl_func(category="MyCategory")] // Custom attribute to assign function to a particular category
-    fn add_array_v2(v: &[f64]) -> Result<(Vec<f64>, usize), Box<dyn std::error::Error>> {
-        // Comments will be filled into the Excel function dialog box
-        // This returns a 2d array to excel using a (vec,usize) tuple. Note that if v.len() / columns != 0 you will have missing values
-        Ok((v.to_vec(), 2))
-    }
+/// This function adds any number of values together
+/// * v - array of f64
+/// * ret - returns the sum
+#[xl_func(category="MyCategory")] // Custom attribute to assign function to a particular category
+fn add_array_v2(v: &[f64]) -> Result<(Vec<f64>, usize), Box<dyn std::error::Error>> {
+    // Comments will be filled into the Excel function dialog box
+    // This returns a 2d array to excel using a (vec,usize) tuple. Note that if v.len() / columns != 0 you will have missing values
+    Ok((v.to_vec(), 2))
+}
 
-    use ndarray::Array2;
-    /// 2d arrays can now be accepted and returned opening up a lot more possibilities for interfacing with Excel
-    #[xl_func(category = "OptionPricing", prefix = "my", rename = "baz")]
-    fn add_f64_2(a: Array2<f64>) -> Result<Array2<f64>, Box<dyn std::error::Error>> {
-        Ok(Array2::from_elem([2, 2], 0.0f64))
-    }
-
+use ndarray::Array2;
+/// 2d arrays can now be accepted and returned opening up a lot more possibilities for interfacing with Excel
+#[xl_func(category = "OptionPricing", prefix = "my", rename = "baz")]
+fn add_f64_2(a: Array2<f64>) -> Result<Array2<f64>, Box<dyn std::error::Error>> {
+    Ok(Array2::from_elem([2, 2], 0.0f64))
+}
+```
 
 Right now there are a couple of restrictions which I hope to remove down the line
 
