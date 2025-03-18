@@ -1,6 +1,12 @@
 # xladd-derive
 Macros to help write Excel User defined functions easily in Rust
+# Version 0.9.0 release notes
+Updated edition to 2024
+Fixed some ergonomics so the examples are simpler, you only need to add
+``` use xladd::Reg;
+    use xladd_derive::xl_func;```
 
+in order to use the proc macro
 
 # Version 0.7.0 release notes
 Fixed crash bug async function support and added support for single threaded functions
@@ -77,11 +83,8 @@ to your Cargo.toml
 
 Write a Rust function and add the following annotation `#[xl_func()]` like
 
-    // These imports are needed from xladd
-    use xladd::registrator::Reg;
-    use xladd::variant::Variant;
-    use xladd::xlcall::LPXLOPER12;
     use xladd_derive::xl_func;
+    use xladd::Reg;
     use log::*; // Needed from 0.4.* onwards to give tracing
 
     #[xl_func()]

@@ -1,9 +1,7 @@
-use xladd::registrator::Reg;
-use xladd::variant::Variant;
-use xladd::xlcall::LPXLOPER12;
+use xladd::Reg;
 use xladd_derive::xl_func;
 
-#[xl_func()]
+#[unsafe(xl_func())]
 fn add(arg1: f64, arg2: f64) -> Result<f64, Box<dyn std::error::Error>> {
     Ok(arg1 + arg2)
 }
@@ -27,7 +25,7 @@ fn add_array_v2(v: &[f64]) -> Result<(Vec<f64>, usize), Box<dyn std::error::Erro
 /// This function adds any number of values together
 /// * v - array of f64
 /// * ret - returns the sum
-#[xl_func()]
+#[unsafe(xl_func())]
 fn add_str(a: &str, b: &str) -> Result<String, Box<dyn std::error::Error>> {
     Ok([a, b].join("-"))
 }
@@ -53,7 +51,7 @@ fn add_f64_2(a: Array2<f64>) -> Result<Array2<f64>, Box<dyn std::error::Error>> 
 }
 
 // Don't forget to register your functions
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "stdcall" fn xlAutoOpen() -> i32 {
     let r = Reg::new();
     #[cfg(feature = "use_ndarray")]

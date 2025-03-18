@@ -1,22 +1,22 @@
 [package]
 authors = ["Ronnie Chowdhury <Ronnie.c995@gmail.com>"]
 description = "A simple macro that helps write Excel UDF functions in Rust"
-edition = "2018"
+edition = "2024"
 keywords = ["excel", "userdefined", "udf"]
 license = "MIT"
 name = "xladd-derive"
 readme = "Readme.MD"
 repository = "https://github.com/ronniec95/xladd-derive"
-version = "0.7.0"
+version = "0.9.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-com = {version = "0.3", features = ["production"]}
+com = { version = "0.3", features = ["production"] }
 log = "^0.4"
-ndarray = {version = "^0.14", optional = true}
+ndarray = { version = "^0.16.1", optional = true }
 proc-macro2 = "1"
 quote = "1"
-syn = {version = "1", features = ["full", "extra-traits"]}
+syn = { version = "1", features = ["full", "extra-traits"] }
 widestring = "0.4"
 winapi = {version = "0.3", features = ["oaidl", "combaseapi", "oleauto"]}
 #xladd = {path = "../xladd", features = ["use_ndarray"]}
